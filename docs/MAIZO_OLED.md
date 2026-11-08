@@ -53,6 +53,8 @@ não apaga seus favoritos. `maizo_animations` controla as animações persistent
   desenhada sobre páginas/transições e nos diálogos de configuração; diálogos
   críticos continuam com prioridade.
 - Até cinco capas, seleção central maior, título, plataforma, fonte e posição.
+  O carrossel agora continua circularmente na primeira/última capa; bibliotecas
+  com 1 a 4 itens não repetem capas e mantêm a seleção no centro.
   Imagens ajustadas dentro do cartão sem distorção ou recorte. A largura segue a
   correção de 16:9 do OPL; coordenadas virtuais usam os modos/overscan existentes.
 - Deslocamento discreto dos vizinhos, escala do foco e indicador animado de aba.
@@ -62,6 +64,8 @@ não apaga seus favoritos. `maizo_animations` controla as animações persistent
   HDD, rede, Bluetooth, controles, vídeo, áudio, informação, busca, biblioteca,
   voltar e confirmar, desenhados com linhas do GS. Nenhum SVG em execução,
   textura adicional ou recurso proprietário do Aurora.
+- Falhas de alocação dos índices ART não derrubam o dashboard: o item mantém a
+  capacidade de inicialização e recebe a capa substituta.
 - Cache ART COV compartilhado, dez entradas e leitura assíncrona já existente.
   A seleção tem prioridade; texturas não usadas no quadro são descartadas quando
   o cache excede 8 MiB de dados decodificados. Texturas usadas no quadro são
@@ -94,6 +98,7 @@ Verificações locais realizadas:
 
 - Testes HID e Twin com `-Wall -Wextra -Werror`.
 - `tests/maizo_library_test.c`: deduplicação, origem de execução, todas as abas,
+  carrossel circular sem duplicatas nas bibliotecas de 0 a 7 jogos,
   favoritos, posição por aba, limpeza/hotplug e 12 mil itens, com ASan/UBSan.
 - `tests/texture_host_test.py`: decodificador real PNG/libpng com armazenamento GS
   substituído apenas no teste, pixels RGBA/paletas, truncamento, CRC inválido,

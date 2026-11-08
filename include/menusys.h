@@ -83,6 +83,7 @@ typedef struct menu_list
 } menu_list_t;
 
 maizo_entry_t *menuDashboardSlot(int offset);
+maizo_entry_t *menuDashboardCarouselSlot(int offset);
 int menuDashboardTab(void);
 int menuDashboardCount(void);
 int menuDashboardPosition(void);

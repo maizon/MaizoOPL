@@ -545,7 +545,9 @@ static void initStaticImage(const char *themePath, config_set_t *themeConfig, th
 
 static GSTEXTURE *getGameImageTexture(image_cache_t *cache, void *support, struct submenu_item *item)
 {
-    if (gEnableArt) {
+    /* A failed cache-index allocation must not crash the whole dashboard. */
+    if (gEnableArt && cache && support && item && item->cache_id && item->cache_uid &&
+        cache->userId >= 0 && cache->userId < gTheme->gameCacheCount) {
         item_list_t *list = (item_list_t *)support;
         char *startup = list->itemGetStartup(list, item->id);
         return cacheGetTexture(cache, list, &item->cache_id[cache->userId], &item->cache_uid[cache->userId], startup);
@@ -602,7 +604,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     const int priority[5] = {2, 1, 3, 0, 4};
     for (slot = 0; slot < 5; slot++) {
         int i = priority[slot];
-        maizo_entry_t *entry = menuDashboardSlot(i - 2);
+        maizo_entry_t *entry = menuDashboardCarouselSlot(i - 2);
         visible[i] = entry ? entry->item : NULL;
         if (entry) {
             menu_list_t *source = entry->owner;
@@ -622,6 +624,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
             cx += (int)(w * 19 / 100 * menuDashboardSlide());
         int cy = h * 49 / 100;
         GSTEXTURE *tex = textures[i];
+        if (i == 2)
+            rmDrawRect(cx - cw / 2 - 7, cy - ch / 2 - 7, cw + 14, ch + 14, MAIZO_SURFACE);
         rmDrawRect(cx - cw / 2 - 3, cy - ch / 2 - 3, cw + 6, ch + 6,
                    i == 2 ? MAIZO_ACCENT : MAIZO_DIVIDER);
         rmDrawRect(cx - cw / 2, cy - ch / 2, cw, ch, MAIZO_CARD);
@@ -646,6 +650,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     const char *platform = current && current->platform == MAIZO_PS1 ? "PS1" : current && current->platform == MAIZO_APP ? "ELF" :
                                                                                                                            "PS2";
     snprintf(status, sizeof(status), "%s  |  %s", platform, menuItemGetText(menu->item));
+    rmDrawRect(w / 2 - 24, h * 78 / 100, 48, 2, MAIZO_ACCENT);
     fntRenderString(elem->font, w / 2, h * 81 / 100, ALIGN_CENTER, w - 64, 28,
                     submenuItemGetText(&item->item), MAIZO_TEXT);
     fntRenderString(elem->font, w / 2, h * 87 / 100, ALIGN_CENTER, w - 64, 24, status, MAIZO_MUTED);

@@ -120,6 +120,7 @@ int menuDashboardTab(void) { return dashboard.tab; }
 int menuDashboardCount(void) { return dashboard.view_count; }
 int menuDashboardPosition(void) { return dashboard.view_count ? dashboard.position + 1 : 0; }
 maizo_entry_t *menuDashboardSlot(int offset) { return maizoLibrarySlot(&dashboard, offset); }
+maizo_entry_t *menuDashboardCarouselSlot(int offset) { return maizoLibraryCarouselSlot(&dashboard, offset); }
 
 static int dashboardPlatform(menu_list_t *source)
 {
@@ -651,11 +652,20 @@ void submenuRebuildCache(submenu_list_t *submenu)
         if (submenu->item.cache_uid)
             free(submenu->item.cache_uid);
 
-        int size = gTheme->gameCacheCount * sizeof(int);
-        submenu->item.cache_id = malloc(size);
-        memset(submenu->item.cache_id, -1, size);
-        submenu->item.cache_uid = malloc(size);
-        memset(submenu->item.cache_uid, -1, size);
+        /* Low-memory fallback: an item without ART indices can still launch.
+         * The renderer will use its placeholder instead of dereferencing NULL. */
+        size_t size = gTheme->gameCacheCount > 0 ? (size_t)gTheme->gameCacheCount * sizeof(int) : 0;
+        submenu->item.cache_id = size ? malloc(size) : NULL;
+        submenu->item.cache_uid = size ? malloc(size) : NULL;
+        if (submenu->item.cache_id && submenu->item.cache_uid) {
+            memset(submenu->item.cache_id, -1, size);
+            memset(submenu->item.cache_uid, -1, size);
+        } else {
+            free(submenu->item.cache_id);
+            free(submenu->item.cache_uid);
+            submenu->item.cache_id = NULL;
+            submenu->item.cache_uid = NULL;
+        }
 
         submenu = submenu->next;
     }
