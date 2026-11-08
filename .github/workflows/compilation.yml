@@ -7,6 +7,17 @@ on:
   repository_dispatch:
     types: [run_build]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: maizo-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,13 +25,33 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
-        git fetch --prune --unshallow
+        git fetch --prune
 
-    - name: Compile -> make clean release
-      run: make --trace clean release
+    - name: Check build dependencies
+      run: |
+        test -n "$PS2SDK"
+        test -n "$GSKIT"
+        test -f "$PS2SDK/samples/Makefile.eeglobal"
+        command -v mips64r5900el-ps2-elf-gcc
+        python3 -m pip install --break-system-packages -r requirements.txt
+        python3 -c 'import yaml'
+    - name: Compile release
+      run: |
+        set -o pipefail
+        make clean
+        make --trace release 2>&1 | tee build.log
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: MAIZO-build-log
+        path: build.log
+        if-no-files-found: warn
 
     - name: Create detailed changelog
       run: sh ./make_changelog.sh
@@ -30,6 +61,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: OPNPS2LD
+        if-no-files-found: error
         path: |
           OPNPS2LD-*.ELF
 
@@ -55,10 +87,15 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
-        git fetch --prune --unshallow
+        git fetch --prune
+
+    - name: Python dependencies
+      run: python3 -m pip install --break-system-packages -r requirements.txt
 
     - name: Get version
       run: |
@@ -95,10 +132,15 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
-        git fetch --prune --unshallow
+        git fetch --prune
+
+    - name: Python dependencies
+      run: python3 -m pip install --break-system-packages -r requirements.txt
 
     - name: Compile -> make download_lng languages
       run: make --trace download_lng languages
@@ -126,10 +168,15 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
-        git fetch --prune --unshallow
+        git fetch --prune
+
+    - name: Python dependencies
+      run: python3 -m pip install --break-system-packages -r requirements.txt
 
     - name: Get version
       run: |
@@ -171,8 +218,13 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-    - run: git fetch --prune --unshallow
+    - run: git fetch --prune
+
+    - name: Python dependencies
+      run: python3 -m pip install --break-system-packages -r requirements.txt
 
     - name: Get version
       run: |
