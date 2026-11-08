@@ -68,7 +68,9 @@ não apaga seus favoritos. `maizo_animations` controla as animações persistent
   protegidas; esse orçamento pode ser excedido temporariamente por elas.
 - PNG externos têm leitura limitada ao tamanho do arquivo, limite comprimido de
   8 MiB e validação de dimensões/tamanho GS. Erros libpng e falhas de alocação
-  liberam pixels, paletas e buffers temporários; imagens ausentes/inválidas usam
+  liberam pixels, paletas e buffers temporários. PNG de paleta de 4 bits com
+  largura ímpar são expandidos para 8 bits para preservar a última coluna;
+  imagens ausentes/inválidas usam
   a capa substituta. Isso não equivale a carregar todas as capas na VRAM.
 
 ## Configurações existentes

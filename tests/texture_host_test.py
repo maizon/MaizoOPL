@@ -92,6 +92,12 @@ u32 gsKit_texture_size(int w, int h, int psm) {
             corrupted = bytearray(palette)
             corrupted[-13] ^= 1
             (work / f"palette_bad{depth}.png").write_bytes(corrupted)
+        odd = (b"\x89PNG\r\n\x1a\n"
+               + chunk(b"IHDR", struct.pack(">IIBBBBB", 3, 2, 4, 3, 0, 0, 0))
+               + chunk(b"PLTE", bytes([255, 0, 0, 0, 255, 0]))
+               + chunk(b"IDAT", zlib.compress(b"\0\x01\0" * 2))
+               + chunk(b"IEND", b""))
+        (work / "odd_palette.png").write_bytes(odd)
         with (work / "compressed_limit.png").open("wb") as image:
             image.truncate(8 * 1024 * 1024 + 1)
         for i in range(len(valid)):
@@ -111,6 +117,11 @@ int main(void) {
     texFree(&texture);
     assert(texDiscoverLoad(&texture, "valid", TEXTURES_COUNT) < 0);
     assert(texDiscoverLoad(&texture, "compressed_limit", -1) < 0);
+    assert(texDiscoverLoad(&texture, "odd_palette", -1) == 0);
+    assert(texture.Width == 3 && texture.Height == 2 && texture.PSM == GS_PSM_T8);
+    pixels = texture.Mem;
+    assert(pixels[0] == 0 && pixels[1] == 1 && pixels[2] == 0);
+    texFree(&texture);
     for (int depth = 4; depth <= 8; depth += 4) {
         char name[64];
         snprintf(name, sizeof(name), "palette%d", depth);

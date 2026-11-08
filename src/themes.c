@@ -654,6 +654,10 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     int icon = support->mode == APP_MODE ? MAIZO_ICON_APPS : support->mode == PS1_MODE ? MAIZO_ICON_PS1 :
                                                                                          MAIZO_ICON_PS2;
     maizoDrawIcon(icon, 32, 398, 22, MAIZO_ACCENT);
+    int sourceIcon = support->mode == ETH_MODE ? MAIZO_ICON_NETWORK : support->mode == HDD_MODE ? MAIZO_ICON_HDD :
+                                                                  support->mode == APP_MODE     ? MAIZO_ICON_APPS :
+                                                                                                  MAIZO_ICON_USB;
+    maizoDrawIcon(sourceIcon, 60, 398, 22, MAIZO_MUTED);
     if (current && current->favorite)
         maizoDrawIcon(MAIZO_ICON_STAR, w - 56, 398, 22, MAIZO_ACCENT);
     if (current && current->platform == MAIZO_APP)

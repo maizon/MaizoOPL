@@ -519,8 +519,12 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
             png_set_tRNS_to_alpha(pngPtr);
     }
 
+    /* GS T4 rows cannot represent an odd pixel stride without truncation. */
+    if (colorType == PNG_COLOR_TYPE_PALETTE && bitDepth == 4 && (pngWidth & 1))
+        png_set_packing(pngPtr);
     png_set_filler(pngPtr, 0xff, PNG_FILLER_AFTER);
     png_read_update_info(pngPtr, infoPtr);
+    bitDepth = png_get_bit_depth(pngPtr, infoPtr);
 
     void (*texPngReadPixels)(GSTEXTURE *texture, png_bytep *rowPointers, size_t size);
     switch (png_get_color_type(pngPtr, infoPtr)) {
@@ -541,6 +545,10 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
             png_get_PLTE(pngPtr, infoPtr, &pngTexture.palette, &pngTexture.numPalette);
             png_get_tRNS(pngPtr, infoPtr, &pngTexture.trans, &pngTexture.numTrans, NULL);
             texture->ClutPSM = GS_PSM_CT32;
+            if (!pngTexture.palette || pngTexture.numPalette <= 0 ||
+                pngTexture.numPalette > (bitDepth == 4 ? 16 : 256) ||
+                pngTexture.numTrans > pngTexture.numPalette)
+                png_error(pngPtr, "Invalid PNG palette");
 
             if (bitDepth == 4) {
                 texture->PSM = GS_PSM_T4;
