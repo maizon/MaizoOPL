@@ -2,6 +2,7 @@
 #define __MENUSYS_H
 
 #include "include/config.h"
+#include "include/maizo_library.h"
 #include "include/dia.h"
 
 /// a single submenu item
@@ -81,6 +82,13 @@ typedef struct menu_list
     struct menu_list *prev, *next;
 } menu_list_t;
 
+maizo_entry_t *menuDashboardSlot(int offset);
+int menuDashboardTab(void);
+int menuDashboardCount(void);
+int menuDashboardPosition(void);
+float menuDashboardFocus(void);
+float menuDashboardSlide(void);
+void menuDashboardInvalidate(void);
 void menuInit();
 void menuEnd();
 void menuReinitMainMenu(void);

@@ -8,6 +8,8 @@
 #include "include/opl.h"
 #include "include/gui.h"
 #include "include/renderman.h"
+#include "include/maizo_oled.h"
+#include "include/maizo_ui.h"
 #include "include/menusys.h"
 #include "include/fntsys.h"
 #include "include/ioman.h"
@@ -507,7 +509,7 @@ int guiIoModeToDeviceType(int ioMode)
     }
 }
 
-void guiShowConfig()
+static void guiShowConfigWithFocus(int focusId)
 {
     // configure the enumerations
     const char *deviceNames[] = {_l(_STR_BDM_GAMES), _l(_STR_NET_GAMES), _l(_STR_HDD_GAMES), _l(_STR_APPS), _l(_STR_PS1_GAMES), NULL};
@@ -547,7 +549,7 @@ void guiShowConfig()
     diaSetInt(diaConfig, CFG_APPMODE, gAPPStartMode);
     diaSetInt(diaConfig, CFG_PS1MODE, gPS1StartMode);
 
-    int ret = diaExecuteDialog(diaConfig, -1, 1, &guiUpdater);
+    int ret = diaExecuteDialog(diaConfig, focusId, 1, &guiUpdater);
     if (ret) {
         diaGetInt(diaConfig, CFG_DEBUG, &gEnableDebug);
         diaGetInt(diaConfig, CFG_PS2LOGO, &gPS2Logo);
@@ -579,6 +581,21 @@ void guiShowConfig()
 }
 
 static int curTheme = -1;
+
+void guiShowConfig(void)
+{
+    guiShowConfigWithFocus(-1);
+}
+
+void guiShowStorageConfig(void)
+{
+    guiShowConfigWithFocus(CFG_BDMMODE);
+}
+
+void guiShowPS1Config(void)
+{
+    guiShowConfigWithFocus(CFG_PS1MODE);
+}
 
 static int guiUIUpdater(int modified)
 {
@@ -1276,6 +1293,11 @@ static int cdirection(unsigned char a, unsigned char b)
 
 void guiDrawBGPlasma()
 {
+    if (thmGetGuiValue() == 0) {
+        rmDrawRect(0, 0, screenWidth, screenHeight, GS_SETREG_RGBA(gTheme->bgColor[0], gTheme->bgColor[1], gTheme->bgColor[2], 0x80));
+        return;
+    }
+
     int x, y;
 
     // transition the colors
@@ -1522,6 +1544,9 @@ static void guiShow()
     } else
         // render with the set screen handler
         screenHandler->renderScreen();
+
+    /* Above page content and transitions; modal dialogs render afterwards. */
+    maizoDrawBrand();
 }
 
 void guiIntroLoop(void)

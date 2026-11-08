@@ -209,6 +209,8 @@ jobs:
           delete-merged: true
 
   release:
+    permissions:
+      contents: write
     needs: [build, build-variants, build-lang]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master'

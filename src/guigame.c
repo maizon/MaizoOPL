@@ -603,7 +603,7 @@ static void maizoBtRefresh(void)
                              "Pressione Buscar");
 }
 
-static void maizoBtShowManager(void)
+void guiGameShowBluetoothManager(void)
 {
     int result = -1, selected = 0;
     maizoBtRefresh();
@@ -929,7 +929,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
             maizoTwinShowDiag();
 
         if (result == PADCFG_BT_MANAGER)
-            maizoBtShowManager();
+            guiGameShowBluetoothManager();
 
         if (result == PADCFG_BTINFO) {
             for (i = PADCFG_FEAT_START; i < PADCFG_FEAT_END + 1; i++)

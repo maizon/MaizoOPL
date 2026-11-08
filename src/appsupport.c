@@ -279,6 +279,7 @@ static int appUpdateItemList(item_list_t *itemList)
 static void appFreeList(void)
 {
     if (appsList != NULL) {
+        free(appsList);
         appsList = NULL;
         appItemCount = 0;
     }
@@ -309,6 +310,21 @@ static char *appGetItemStartup(item_list_t *itemList, int id)
     } else {
         return appsList[id].boot;
     }
+}
+
+/* Full launch identity for the dashboard; ART still uses itemGetStartup. */
+int appGetItemPath(int id, char *path, int size)
+{
+    if (id < 0 || id >= appItemCount || !appsList || size <= 0)
+        return 0;
+    int length;
+    if (appsList[id].legacy) {
+        struct config_value_t *value = appGetConfigValue(id);
+        length = snprintf(path, size, "%s", value->val);
+    } else {
+        length = snprintf(path, size, "%s/%s", appsList[id].path, appsList[id].boot);
+    }
+    return length >= 0 && length < size;
 }
 
 static void appDeleteItem(item_list_t *itemList, int id)

@@ -268,9 +268,15 @@ static void itemExecSelect(struct menu_item *curMenu)
     if (support) {
         if (support->enabled) {
             if (curMenu->current) {
+                int launchId = curMenu->current->item.id;
+                char launchIdentity[256];
+                snprintf(launchIdentity, sizeof(launchIdentity), "%s", support->itemGetStartup(support, launchId));
                 config_set_t *configSet = menuLoadConfig();
-                if (menuCheckGameParentalLock(configSet) == 0)
-                    support->itemLaunch(support, curMenu->current->item.id, configSet);
+                /* A hotplug/refresh may invalidate the selection during I/O. */
+                if (configSet && support->enabled && curMenu->current && curMenu->current->item.id == launchId &&
+                    strcmp(launchIdentity, support->itemGetStartup(support, launchId)) == 0 &&
+                    menuCheckGameParentalLock(configSet) == 0)
+                    support->itemLaunch(support, launchId, configSet);
             }
         } else {
             // If we're trying to enable BDM support we need to enable it for all BDM menu slots.
@@ -1678,21 +1684,21 @@ void deinit(int exception, int modeSelected)
 
 void setDefaultColors(void)
 {
-    gDefaultBgColor[0] = 0x28;
-    gDefaultBgColor[1] = 0xC5;
-    gDefaultBgColor[2] = 0xF9;
+    gDefaultBgColor[0] = 0x00;
+    gDefaultBgColor[1] = 0x00;
+    gDefaultBgColor[2] = 0x00;
 
     gDefaultTextColor[0] = 0xFF;
     gDefaultTextColor[1] = 0xFF;
     gDefaultTextColor[2] = 0xFF;
 
-    gDefaultSelTextColor[0] = 0x00;
-    gDefaultSelTextColor[1] = 0xAE;
+    gDefaultSelTextColor[0] = 0x4A;
+    gDefaultSelTextColor[1] = 0x9E;
     gDefaultSelTextColor[2] = 0xFF;
 
-    gDefaultUITextColor[0] = 0x58;
-    gDefaultUITextColor[1] = 0x68;
-    gDefaultUITextColor[2] = 0xB4;
+    gDefaultUITextColor[0] = 0xA0;
+    gDefaultUITextColor[1] = 0xA0;
+    gDefaultUITextColor[2] = 0xA0;
 }
 
 static void setDefaults(void)
@@ -1756,7 +1762,7 @@ static void setDefaults(void)
     gBDMPrefix[0] = '\0';
     gETHPrefix[0] = '\0';
     gEnableNotifications = 0;
-    gEnableArt = 0;
+    gEnableArt = 1;
     gWideScreen = 0;
     gEnableSFX = 0;
     gEnableBootSND = 0;

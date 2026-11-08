@@ -14,6 +14,7 @@
 #include "include/themes.h"
 #include "include/util.h"
 #include "include/sound.h"
+#include "include/maizo_ui.h"
 
 // UI spacing of the dialogues (pixels between consecutive items)
 #define UI_SPACING_H      10
@@ -40,6 +41,10 @@ static int screenHeight;
 
 static void diaDrawBoundingBox(int x, int y, int w, int h, int focus)
 {
+    if (thmGetGuiValue() == 0) {
+        rmDrawLine(x - 4, y + h + 3, x + w + 4, y + h + 3, focus ? MAIZO_ACCENT : MAIZO_MUTED);
+        return;
+    }
     u64 color = focus ? gTheme->selTextColor : gTheme->textColor;
 
     color |= GS_SETREG_RGBA(0, 0, 0, 0xFF);
@@ -405,9 +410,16 @@ static void diaDrawHint(int text_id)
     fntRenderString(gTheme->fonts[0], x + 5, y + 5, ALIGN_NONE, 0, 0, text, gTheme->textColor);
 }
 
+static int diaItemText(int x, int y, const char *text, u64 color, int measure)
+{
+    if (measure)
+        return x + rmUnScaleX(fntCalcDimensions(gTheme->fonts[0], text));
+    return fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, text, color);
+}
+
 /// renders an ui item (either selected or not)
 /// sets width and height of the render into the parameters
-static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int haveFocus, int *w, int *h)
+static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int haveFocus, int *w, int *h, int measure)
 {
     // Don't draw controllable items that are not visible.
     if (!item->visible && item->type >= UI_LABEL)
@@ -433,9 +445,9 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
             // width is text length in pixels...
             const char *txt = diaGetLocalisedText(item->label.text, item->label.stringId);
             if (txt && strlen(txt))
-                *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, txt, txtcol) - x;
+                *w = diaItemText(x, y, txt, txtcol, measure) - x;
             else
-                *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, _l(_STR_NOT_SET), txtcol) - x;
+                *w = diaItemText(x, y, _l(_STR_NOT_SET), txtcol, measure) - x;
 
             break;
         }
@@ -448,7 +460,8 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
             // to ODD lines
             ypos &= ~1;
 
-            rmDrawLine(x, ypos, x + UI_BREAK_LEN, ypos, gColWhite);
+            if (!measure)
+                rmDrawLine(x, ypos, x + UI_BREAK_LEN, ypos, gColWhite);
             break;
         }
 
@@ -471,7 +484,7 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
 
         case UI_OK: {
             const char *txt = _l(_STR_OK);
-            *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, txt, txtcol) - x;
+            *w = diaItemText(x, y, txt, txtcol, measure) - x;
             break;
         }
 
@@ -479,15 +492,15 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
             char tmp[10];
 
             snprintf(tmp, sizeof(tmp), "%d", item->intvalue.current);
-            *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, tmp, txtcol) - x;
+            *w = diaItemText(x, y, tmp, txtcol, measure) - x;
             break;
         }
 
         case UI_STRING: {
             if (strlen(item->stringvalue.text))
-                *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, item->stringvalue.text, txtcol) - x;
+                *w = diaItemText(x, y, item->stringvalue.text, txtcol, measure) - x;
             else
-                *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, _l(_STR_NOT_SET), txtcol) - x;
+                *w = diaItemText(x, y, _l(_STR_NOT_SET), txtcol, measure) - x;
             break;
         }
 
@@ -502,15 +515,15 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
                     stars[i] = '*';
 
                 stars[i] = '\0';
-                *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, stars, txtcol) - x;
+                *w = diaItemText(x, y, stars, txtcol, measure) - x;
             } else
-                *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, _l(_STR_NOT_SET), txtcol) - x;
+                *w = diaItemText(x, y, _l(_STR_NOT_SET), txtcol, measure) - x;
             break;
         }
 
         case UI_BOOL: {
             const char *txtval = _l((item->intvalue.current) ? _STR_ON : _STR_OFF);
-            *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, txtval, txtcol) - x;
+            *w = diaItemText(x, y, txtval, txtcol, measure) - x;
             break;
         }
 
@@ -520,7 +533,7 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
             if (!tv)
                 tv = _l(_STR_NO_ITEMS);
 
-            *w = fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, 0, 0, tv, txtcol) - x;
+            *w = diaItemText(x, y, tv, txtcol, measure) - x;
             break;
         }
 
@@ -531,15 +544,17 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
             // Align to the right
             x -= *w;
 
-            rmDrawRect(x, y + 3, *w, *h, txtcol);
+            if (!measure)
+                rmDrawRect(x, y + 3, *w, *h, txtcol);
             u64 dcol = GS_SETREG_RGBA(item->colourvalue.r, item->colourvalue.g, item->colourvalue.b, 0x80);
-            rmDrawRect(x + 2, y + 5, *w - 4, *h - 4, dcol);
+            if (!measure)
+                rmDrawRect(x + 2, y + 5, *w - 4, *h - 4, dcol);
 
             break;
         }
     }
 
-    if (selected)
+    if (selected && !measure)
         diaDrawBoundingBox(x, y, *w, *h, haveFocus);
 
     if (item->fixedWidth != 0) {
@@ -563,47 +578,73 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
     }
 }
 
+/* Layout and rendering share the same measurements. Offscreen rows are only
+ * measured, so long configuration pages retain their real controls and focus. */
+static int diaLayout(struct UIItem *ui, struct UIItem *cur, int haveFocus, int measure, int scroll, int *focusY)
+{
+    int oled = thmGetGuiValue() == 0;
+    int x0 = oled ? 32 : 20;
+    int x = x0, y = (oled ? 72 : 20) - scroll, hmax = 0;
+    struct UIItem *item;
+    for (item = ui; item->type != UI_TERMINATOR; item++) {
+        int w = 0, h = 0;
+        if (diaShouldBreakLine(item)) {
+            x = x0;
+            if (hmax > 0)
+                y += hmax + UI_SPACING_H;
+            hmax = 0;
+        }
+        if (item == cur)
+            *focusY = y + scroll;
+        int hidden = measure || (oled && (y < 66 || y > gTheme->usedHeight - 100));
+        diaRenderItem(x, y, item, item == cur, haveFocus, &w, &h, hidden);
+        if (w > 0)
+            x += w + UI_SPACING_V;
+        hmax = h > hmax ? h : hmax;
+        if (diaShouldBreakLineAfter(item)) {
+            x = x0;
+            if (hmax > 0)
+                y += hmax + UI_SPACING_H;
+            hmax = 0;
+        }
+    }
+    return y + scroll + hmax;
+}
+
 /// renders whole ui screen (for given dialog setup)
 void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFocus)
 {
     guiDrawBGPlasma();
 
-    int x0 = 20;
-    int y0 = 20;
-
-    // render all items
-    struct UIItem *rc = ui;
-    int x = x0, y = y0, hmax = 0;
-
-    while (rc->type != UI_TERMINATOR) {
-        int w = 0, h = 0;
-
-        if (diaShouldBreakLine(rc)) {
-            x = x0;
-
-            if (hmax > 0)
-                y += hmax + UI_SPACING_H;
-
-            hmax = 0;
+    static struct UIItem *lastUI;
+    static int scroll;
+    int focusY = 0;
+    if (thmGetGuiValue() == 0) {
+        if (lastUI != ui) {
+            scroll = 0;
+            lastUI = ui;
         }
-
-        diaRenderItem(x, y, rc, rc == cur, haveFocus, &w, &h);
-
-        if (w > 0)
-            x += w + UI_SPACING_V;
-
-        hmax = (h > hmax) ? h : hmax;
-
-        if (diaShouldBreakLineAfter(rc)) {
-            x = x0;
-
-            if (hmax > 0)
-                y += hmax + UI_SPACING_H;
-
-            hmax = 0;
+        int total = diaLayout(ui, cur, haveFocus, 1, 0, &focusY);
+        int bottom = gTheme->usedHeight - 100;
+        if (cur && focusY - scroll < 72)
+            scroll = focusY - 72;
+        if (cur && focusY - scroll > bottom)
+            scroll = focusY - bottom;
+        if (scroll < 0)
+            scroll = 0;
+        maizoDrawPanel(24, 60, 592, gTheme->usedHeight - 140, 0);
+        diaLayout(ui, cur, haveFocus, 0, scroll, &focusY);
+        if (total > bottom) {
+            int track = gTheme->usedHeight - 180;
+            int thumb = track * (bottom - 72) / total;
+            if (thumb < 12)
+                thumb = 12;
+            rmDrawRect(610, 72, 2, track, MAIZO_DIVIDER);
+            rmDrawRect(610, 72 + scroll * (track - thumb) / (total - bottom + 72), 2, thumb, MAIZO_ACCENT);
         }
-
-        rc++;
+        maizoDrawBrand();
+    } else {
+        diaLayout(ui, cur, haveFocus, 0, 0, &focusY);
     }
 
     if ((cur != NULL) && (!haveFocus) && (cur->hintId != -1)) {

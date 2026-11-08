@@ -20,3 +20,14 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iinclude -Imodules/pademu \
             tests/maizotwin_test.c -o /tmp/maizotwin_test
           /tmp/maizotwin_test
+      - name: Test dashboard library and hotplug selection
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude \
+            src/maizo_library.c tests/maizo_library_test.c -o /tmp/maizo_library_test
+          /tmp/maizo_library_test
+      - name: Install PNG test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpng-dev pkg-config
+      - name: Test real PNG decoder with malformed artwork
+        run: python3 tests/texture_host_test.py

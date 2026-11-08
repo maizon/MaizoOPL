@@ -16,6 +16,35 @@ typedef struct
     char *value;
 } load_image_request_t;
 
+static void cacheClearItem(cache_entry_t *item, int freeTxt);
+
+/* Keep decoded ART bounded while retaining every texture used this frame.
+ * Called under the GUI lock after an asynchronous image read completes. */
+static void cacheTrim(image_cache_t *cache, cache_entry_t *loaded)
+{
+    const size_t budget = 8 * 1024 * 1024;
+    size_t bytes = 0;
+    int i;
+    for (i = 0; i < cache->count; i++) {
+        GSTEXTURE *texture = &cache->content[i].texture;
+        if (texture->Mem)
+            bytes += gsKit_texture_size_ee(texture->Width, texture->Height, texture->PSM) + (texture->Clut ? 1024 : 0);
+    }
+    while (bytes > budget) {
+        cache_entry_t *oldest = NULL;
+        for (i = 0; i < cache->count; i++) {
+            cache_entry_t *entry = &cache->content[i];
+            if (entry != loaded && !entry->qr && entry->texture.Mem && entry->lastUsed < guiFrameId &&
+                (!oldest || entry->lastUsed < oldest->lastUsed))
+                oldest = entry;
+        }
+        if (!oldest)
+            break;
+        bytes -= gsKit_texture_size_ee(oldest->texture.Width, oldest->texture.Height, oldest->texture.PSM) + (oldest->texture.Clut ? 1024 : 0);
+        cacheClearItem(oldest, 1);
+    }
+}
+
 // Io handled action...
 static void cacheLoadImage(void *data)
 {
@@ -42,7 +71,10 @@ static void cacheLoadImage(void *data)
     else
         req->entry->lastUsed = guiFrameId;
 
+    guiLock();
+    cacheTrim(req->cache, req->entry);
     req->entry->qr = NULL;
+    guiUnlock();
 
     free(req);
 }
@@ -59,11 +91,11 @@ void cacheEnd()
 
 static void cacheClearItem(cache_entry_t *item, int freeTxt)
 {
-    if (freeTxt && item->texture.Mem) {
-        rmUnloadTexture(&item->texture);
+    if (freeTxt) {
+        if (item->texture.Mem)
+            rmUnloadTexture(&item->texture);
         free(item->texture.Mem);
-        if (item->texture.Clut)
-            free(item->texture.Clut);
+        free(item->texture.Clut);
     }
 
     memset(item, 0, sizeof(cache_entry_t));
@@ -79,7 +111,11 @@ static void cacheClearItem(cache_entry_t *item, int freeTxt)
 
 image_cache_t *cacheInitCache(int userId, const char *prefix, int isPrefixRelative, const char *suffix, int count)
 {
-    image_cache_t *cache = (image_cache_t *)malloc(sizeof(image_cache_t));
+    if (count <= 0 || !suffix)
+        return NULL;
+    image_cache_t *cache = calloc(1, sizeof(*cache));
+    if (!cache)
+        return NULL;
     cache->userId = userId;
     cache->count = count;
     cache->prefix = NULL;
@@ -87,14 +123,29 @@ image_cache_t *cacheInitCache(int userId, const char *prefix, int isPrefixRelati
     if (prefix) {
         length = strlen(prefix) + 1;
         cache->prefix = (char *)malloc(length * sizeof(char));
+        if (!cache->prefix) {
+            free(cache);
+            return NULL;
+        }
         memcpy(cache->prefix, prefix, length);
     }
     cache->isPrefixRelative = isPrefixRelative;
     length = strlen(suffix) + 1;
     cache->suffix = (char *)malloc(length * sizeof(char));
+    if (!cache->suffix) {
+        free(cache->prefix);
+        free(cache);
+        return NULL;
+    }
     memcpy(cache->suffix, suffix, length);
     cache->nextUID = 1;
     cache->content = (cache_entry_t *)malloc(count * sizeof(cache_entry_t));
+    if (!cache->content) {
+        free(cache->prefix);
+        free(cache->suffix);
+        free(cache);
+        return NULL;
+    }
 
     int i;
     for (i = 0; i < count; ++i)
@@ -155,6 +206,10 @@ GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId
 
     if (oldestEntry) {
         load_image_request_t *req = malloc(sizeof(load_image_request_t) + strlen(value) + 1);
+        if (!req) {
+            *cacheId = -1;
+            return NULL;
+        }
         req->cache = cache;
         req->entry = oldestEntry;
         req->list = list;

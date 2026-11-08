@@ -9,6 +9,8 @@
 #include "include/lang.h"
 #include "include/pad.h"
 #include "include/sound.h"
+#include "include/maizo_oled.h"
+#include "include/maizo_ui.h"
 
 #define MENU_POS_V     50
 #define HINT_HEIGHT    32
@@ -582,6 +584,82 @@ static void drawGameImage(struct menu_list *menu, struct submenu_list *item, con
     }
 }
 
+/* Draw only the five visible covers through the existing asynchronous ART
+ * cache. No additional texture ownership or launch metadata is introduced. */
+static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
+{
+    mutable_image_t *image = elem->extended;
+    int w, h, slot;
+    submenu_list_t *visible[5] = {NULL, NULL, item, NULL, NULL};
+    rmGetScreenExtents(&w, &h);
+    maizoDrawHeader(menuDashboardTab());
+    if (!item) {
+        fntRenderString(elem->font, w / 2, h / 2, ALIGN_CENTER, w - 64, 24,
+                        "MAIZO", MAIZO_MUTED);
+        return;
+    }
+    GSTEXTURE *textures[5] = {NULL, NULL, NULL, NULL, NULL};
+    const int priority[5] = {2, 1, 3, 0, 4};
+    for (slot = 0; slot < 5; slot++) {
+        int i = priority[slot];
+        maizo_entry_t *entry = menuDashboardSlot(i - 2);
+        visible[i] = entry ? entry->item : NULL;
+        if (entry) {
+            menu_list_t *source = entry->owner;
+            textures[i] = getGameImageTexture(image->cache, source->item->userdata, &visible[i]->item);
+        }
+    }
+    /* Paint back to front so neighbours never obscure the selected cover. */
+    const int order[5] = {0, 4, 1, 3, 2};
+    for (slot = 0; slot < 5; slot++) {
+        int i = order[slot];
+        if (!visible[i])
+            continue;
+        int ch = h * (i == 2 ? 43 + (int)(11 * menuDashboardFocus()) : (i == 0 || i == 4 ? 34 : 43)) / 100;
+        int cw = rmWideScale(ch * 2 / 3);
+        int cx = w / 2 + (i - 2) * w * 19 / 100;
+        if (i != 2)
+            cx += (int)(w * 19 / 100 * menuDashboardSlide());
+        int cy = h * 49 / 100;
+        GSTEXTURE *tex = textures[i];
+        rmDrawRect(cx - cw / 2 - 3, cy - ch / 2 - 3, cw + 6, ch + 6,
+                   i == 2 ? MAIZO_ACCENT : MAIZO_DIVIDER);
+        rmDrawRect(cx - cw / 2, cy - ch / 2, cw, ch, MAIZO_CARD);
+        if (!tex || !tex->Mem)
+            tex = image->defaultTexture ? &image->defaultTexture->source : NULL;
+        if (tex && tex->Mem && tex->Width && tex->Height) {
+            /* Fit inside the card without cropping or stretching. */
+            int tw = cw, th = (ch * 2 / 3) * tex->Height / tex->Width;
+            if (th > ch) {
+                th = ch;
+                tw = rmWideScale(ch * tex->Width / tex->Height);
+            }
+            rmDrawPixmap(tex, cx, cy, ALIGN_CENTER, tw, th, SCALING_NONE, gDefaultCol);
+        } else {
+            fntRenderString(elem->font, cx, cy, ALIGN_CENTER, cw - 8, 48,
+                            "MAIZO", MAIZO_MUTED);
+        }
+    }
+    maizo_entry_t *current = menuDashboardSlot(0);
+    item_list_t *support = menu->item->userdata;
+    char status[96];
+    const char *platform = current && current->platform == MAIZO_PS1 ? "PS1" : current && current->platform == MAIZO_APP ? "ELF" :
+                                                                                                                           "PS2";
+    snprintf(status, sizeof(status), "%s  |  %s", platform, menuItemGetText(menu->item));
+    fntRenderString(elem->font, w / 2, h * 81 / 100, ALIGN_CENTER, w - 64, 28,
+                    submenuItemGetText(&item->item), MAIZO_TEXT);
+    fntRenderString(elem->font, w / 2, h * 87 / 100, ALIGN_CENTER, w - 64, 24, status, MAIZO_MUTED);
+    snprintf(status, sizeof(status), "%d / %d", menuDashboardPosition(), menuDashboardCount());
+    fntRenderString(elem->font, w - 32, 26, ALIGN_RIGHT, 180, 24, status, MAIZO_MUTED);
+    int icon = support->mode == APP_MODE ? MAIZO_ICON_APPS : support->mode == PS1_MODE ? MAIZO_ICON_PS1 :
+                                                                                         MAIZO_ICON_PS2;
+    maizoDrawIcon(icon, 32, 398, 22, MAIZO_ACCENT);
+    if (current && current->favorite)
+        maizoDrawIcon(MAIZO_ICON_STAR, w - 56, 398, 22, MAIZO_ACCENT);
+    if (current && current->platform == MAIZO_APP)
+        fntRenderString(elem->font, w / 2, 435, ALIGN_CENTER, w - 64, 18, current->identity, MAIZO_MUTED);
+}
+
 static void initGameImage(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name, const char *pattern, int count, const char *texture, const char *overlay)
 {
     mutable_image_t *mutableImage = initMutableImage(themePath, themeConfig, theme, name, elem->type, pattern, count, texture, overlay);
@@ -797,6 +875,8 @@ static int findMenuPrev(struct menu_list *menu)
 
 static void drawMenuText(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
 {
+    if (thmGetGuiValue() == 0)
+        return;
     GSTEXTURE *leftIconTex = NULL, *rightIconTex = NULL;
     if (findMenuPrev(menu) != 0)
         leftIconTex = thmGetTexture(LEFT_ICON);
@@ -839,6 +919,8 @@ static void drawBDMIndex(struct menu_list *menu, struct submenu_list *item, conf
 
 static void drawItemsList(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
 {
+    if (elem->width == 0)
+        return; /* Navigation metadata retained for the carousel. */
     if (item) {
         items_list_t *itemsList = (items_list_t *)elem->extended;
 
@@ -914,6 +996,15 @@ static void drawItemText(struct menu_list *menu, struct submenu_list *item, conf
 
 static void drawHintText(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
 {
+    if (thmGetGuiValue() == 0) {
+        int y = 456, x = 32;
+        x = guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_RUN, elem->font, x, y, MAIZO_TEXT) + 14;
+        x = guiDrawIconAndText(TRIANGLE_ICON, _STR_OPTIONS, elem->font, x, y, MAIZO_MUTED) + 14;
+        maizoDrawIcon(MAIZO_ICON_STAR, x, y - 1, 18, MAIZO_ACCENT);
+        fntRenderString(elem->font, x + 22, y, ALIGN_NONE, 0, 0, "Quadrado", MAIZO_MUTED);
+        fntRenderString(elem->font, 608, y, ALIGN_RIGHT, 160, 24, "Start: menu", MAIZO_MUTED);
+        return;
+    }
     menu_hint_item_t *hint = menu->item->hints;
     if (hint) {
         int x = elem->posX;
@@ -1065,6 +1156,8 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t 
             } else if (!strcmp(elementsType[ELEM_TYPE_ITEM_COVER], type)) {
                 elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_GAME_IMAGE, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
                 initGameImage(themePath, themeConfig, theme, elem, name, "COV", 10, NULL, NULL);
+                if (!themePath && ((mutable_image_t *)elem->extended)->cache)
+                    elem->drawElem = &drawMaizoCarousel;
             } else if (!strcmp(elementsType[ELEM_TYPE_ITEM_TEXT], type)) {
                 elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_ITEM_TEXT, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, theme->textColor, theme->fonts[0]);
                 elem->drawElem = &drawItemText;
