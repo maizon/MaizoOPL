@@ -623,7 +623,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         if (!entries[i])
             continue;
         ch = distance == 0 ? 220 + (int)(5 * menuDashboardFocus()) :
-             distance == 1 ? 188 : 148;
+             distance == 1 ? 188 :
+                             148;
         cw = rmWideScale(ch * 7 / 11);
         cx = w / 2 + (i - 2) * 121;
         if (i != 2)
@@ -653,7 +654,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     {
         menu_list_t *source = current->owner;
         const char *platform = current->platform == MAIZO_PS1 ? "PS1" :
-                               current->platform == MAIZO_APP ? "ELF" : "PS2";
+                               current->platform == MAIZO_APP ? "ELF" :
+                                                                "PS2";
         char info[100];
         snprintf(info, sizeof(info), "%s  |  %s", platform, menuItemGetText(source->item));
         fntRenderString(elem->font, w / 2, 400, ALIGN_CENTER, w - 96, 24,

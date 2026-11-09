@@ -612,12 +612,12 @@ static void maizoBtRefresh(void)
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conectando... aguarde ou pressione PS no DS4");
     } else {
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS,
-                    state == 1 ? "Procurando controles Bluetooth..." :
-                    state == 2 ? "Identificando dispositivos..." :
+                    state == 1                 ? "Procurando controles Bluetooth..." :
+                    state == 2                 ? "Identificando dispositivos..." :
                     state == 3 && maizoBtCount ? "Selecione o controle e pressione Conectar" :
-                    state == 3 ? "Nenhum controle. Use Buscar novamente" :
-                    state == 4 ? "Busca falhou. Use Buscar novamente" :
-                                 "Preparando busca...");
+                    state == 3                 ? "Nenhum controle. Use Buscar novamente" :
+                    state == 4                 ? "Busca falhou. Use Buscar novamente" :
+                                                 "Preparando busca...");
     }
 }
 
