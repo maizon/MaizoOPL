@@ -542,10 +542,19 @@ static void maizo_reconnect_gamepad(void)
     int pad;
     static const u8 options[7] = {0x18, 0xCC, 0x01, 0x00, 0x00, 0x00, 0x01};
 
-    if (!maizo_target_valid || maizo_reconnect_tries >= 3)
+    if (!maizo_target_valid || maizo_reconnect_tries >= 3 ||
+        !(bt_dev.status & DS34BT_STATE_USB_CONFIGURED))
         return;
+    /* An ACL connection may still be completing its HID negotiation. Do
+     * not clear that slot just to start another outgoing connection. */
     for (pad = 0; pad < MAX_PADS; pad++)
-        if (ds34pad[pad].enabled)
+        if (ds34pad[pad].enabled &&
+            (ds34pad[pad].status & (DS34BT_STATE_CONNECTED | DS34BT_STATE_RUNNING)) &&
+            memcmp(ds34pad[pad].bdaddr, maizo_target, 6) == 0)
+            return;
+    for (pad = 0; pad < MAX_PADS; pad++)
+        if (ds34pad[pad].enabled &&
+            !(ds34pad[pad].status & (DS34BT_STATE_CONNECTED | DS34BT_STATE_RUNNING)))
             break;
     if (pad >= MAX_PADS)
         return;
@@ -627,7 +636,8 @@ static void HCI_event_task(int result)
                         break;
                     }
                     pad_status_set(DS34BT_STATE_CONNECTED, i);
-                    maizo_reconnect_tries = 0;
+                    /* The ACL link alone is not proof that HID is ready.
+                     * Reset the retry budget only when HID is RUNNING. */
                     /* The clone may never reply to Remote Name. Start HID L2CAP
                      * directly for the address selected/persisted by Maizo. */
                     if (maizo_target_valid && memcmp(maizo_target, ds34pad[i].bdaddr, 6) == 0) {
@@ -673,8 +683,17 @@ static void HCI_event_task(int result)
                         break;
                     }
                 }
-                if (i < MAX_PADS)
+                if (i < MAX_PADS) {
+                    /* A controller may drop during a game, not only at
+                     * startup. Preserve its MAC before clearing the slot. */
+                    int was_target = maizo_target_valid &&
+                        memcmp(ds34pad[i].bdaddr, maizo_target, 6) == 0;
+                    int local_close = ds34pad[i].status &
+                        (DS34BT_STATE_DISCONNECT_REQUEST | DS34BT_STATE_DISCONNECTING);
                     ds34pad_clear(i);
+                    if (was_target && !local_close)
+                        maizo_reconnect_gamepad();
+                }
                 break;
 
             case HCI_EVENT_AUTHENTICATION_COMPLETE:
@@ -1144,6 +1163,9 @@ static int L2CAP_event_task(int result, int bytes)
                             DelayThread(CMD_DELAY);
                             hid_LEDRumbleCommand(ds34pad[pad].oldled, 0, 0, pad);
                             pad_status_set(DS34BT_STATE_RUNNING, pad);
+                            if (maizo_target_valid &&
+                                memcmp(ds34pad[pad].bdaddr, maizo_target, 6) == 0)
+                                maizo_reconnect_tries = 0;
                         }
                         ds34pad[pad].btn_delay = 0xFF;
                         break;
@@ -1311,14 +1333,16 @@ static int hid_LEDRumbleCommand(u8 *led, u8 lrum, u8 rrum, int pad)
 
         size += OUTPUT_01_REPORT_SIZE;
     } else if (ds34pad[pad].type == DS4) {
-        mips_memset(led_buf, 0, PS3_01_REPORT_LEN + 2);
+        /* DS4 report 0x11 is longer than the DS3 report. A partially
+         * initialized output packet can send garbage to clone firmware. */
+        mips_memset(led_buf, 0, sizeof(led_buf));
 
         led_buf[0] = HID_THDR_SET_REPORT_OUTPUT; // THdr
         led_buf[1] = PS4_11_REPORT_ID;           // Report ID
         led_buf[2] = 0x80;                       // update rate 1000Hz
         led_buf[4] = 0xFF;
 
-        led_buf[7] = rrum * 255;
+        led_buf[7] = rrum;
         led_buf[8] = lrum;
 
         led_buf[9] = led[0];  // r

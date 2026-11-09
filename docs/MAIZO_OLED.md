@@ -179,3 +179,19 @@ desses repositórios foi incorporado. Os símbolos de botões permanecem os do O
 - O PS2 reinicia o IOP ao abrir jogos, entao a conexao Bluetooth pode cair.
   O novo driver tenta reconectar. Teste REAL no PS2 e com o dongle e necessario:
   nenhum software consegue religar fisicamente um DS4 que desligou.
+
+## DS4 Bluetooth: correcoes de estabilidade e logo MaizoWii
+
+- A logo MAIZO do PS2 agora replica a placa arredondada (16,13,102x38),
+  os glifos bitmap 8x8 de MaizoWii em escala 2x, as cores do tema OLED
+  padrao do Wii e a linha inferior; o papel de parede do OPL segue intacto.
+- Os drivers BT do menu e dos jogos zeram o **relatorio DS4 inteiro** antes
+  de enviar LED/vibracao. Anteriormente zeravam apenas o comprimento DS3,
+  deixando bytes do relatorio DS4 nao inicializados.
+- O PadEmu em jogos evita apagar uma conexao ACL enquanto o HID ainda negocia,
+  so reinicia a contagem de tentativas apos HID pronto e tenta reconectar
+  tambem ao receber um evento de queda de link nao solicitada.
+- Continua impossivel garantir que um DS4 paralelo aceite conexao iniciada
+  pelo dongle ou que religue sozinho apos reset do IOP. Testar em PS2 real:
+  conexao no menu, inicio do jogo, 15 minutos de uso, queda, botao PS e
+  reinicio do titulo. A compilacao isolada nao valida compatibilidade fisica.

@@ -109,12 +109,39 @@ void maizoDrawIcon(int icon, int x, int y, int size, u64 color)
                    x + rmWideScale(lines[i].x2 * size / 24), y + lines[i].y2 * size / 24, color);
 }
 
+/* Exact 8x8 glyph rows from MaizoWii/source/font8x8.h (public domain).
+ * Keeping only the five glyphs avoids inheriting an OPL theme font or a
+ * dynamically loaded texture. This is the same 2x pixel wordmark as Wii. */
+static const u8 maizoWiiWordmark[5][8] = {
+    {0x63, 0x77, 0x7F, 0x7F, 0x6B, 0x63, 0x63, 0x00}, /* M */
+    {0x0C, 0x1E, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x00}, /* A */
+    {0x1E, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x1E, 0x00}, /* I */
+    {0x7F, 0x63, 0x31, 0x18, 0x4C, 0x66, 0x7F, 0x00}, /* Z */
+    {0x1C, 0x36, 0x63, 0x63, 0x63, 0x36, 0x1C, 0x00}, /* O */
+};
+
 void maizoDrawBrand(void)
 {
-    /* Retain the original OPL wallpaper: only a small quiet brand plaque. */
-    rmDrawRect(24, 16, 111, 30, MAIZO_SURFACE);
-    rmDrawRect(24, 16, 3, 30, MAIZO_ACCENT);
-    fntRenderString(gTheme->fonts[0], 34, 20, ALIGN_NONE, 95, 24, "MAIZO", MAIZO_TEXT);
+    /* Match MaizoWii/source/ui.c:brand_overlay exactly on 640x480:
+     * rounded(16,13,102,38), accent at 19,23, label 25,23 (2x),
+     * underline 25,46 (74x2). Draw late, above the wallpaper/HUD. */
+    const u64 bg = GS_SETREG_RGBA(16, 23, 30, 0x80);
+    const u64 accent = GS_SETREG_RGBA(177, 183, 198, 0x80); /* default Wii OLED */
+    const u64 ink = GS_SETREG_RGBA(247, 248, 250, 0x80);
+    const u64 underline = GS_SETREG_RGBA(85, 92, 100, 0x80);
+    int letter, row, col;
+
+    rmDrawRect(22, 13, 90, 38, bg);
+    rmDrawRect(16, 19, 6, 26, bg);
+    rmDrawRect(112, 19, 6, 26, bg);
+    rmDrawRect(19, 23, 2, 17, accent);
+    for (letter = 0; letter < 5; letter++)
+        for (row = 0; row < 8; row++)
+            for (col = 0; col < 8; col++)
+                if (maizoWiiWordmark[letter][row] & (1u << col))
+                    rmDrawRect(25 + (letter * 8 + col) * 2,
+                               23 + row * 2, 2, 2, ink);
+    rmDrawRect(25, 46, 74, 2, underline);
 }
 
 void maizoDrawPanel(int x, int y, int width, int height, int focused)

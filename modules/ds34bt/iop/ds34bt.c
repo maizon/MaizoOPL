@@ -1506,7 +1506,9 @@ static int hid_LEDRumble(u8 *led, u8 lrum, u8 rrum, int pad)
 
         size += sizeof(output_01_report);
     } else if (ds34pad[pad].type == DS4) {
-        mips_memset(led_buf, 0, PS3_01_REPORT_LEN + 2);
+        /* Always clear the full DS4 Bluetooth output report, not just
+         * the shorter DS3 length. */
+        mips_memset(led_buf, 0, sizeof(led_buf));
 
         led_buf[0] = HID_THDR_SET_REPORT_OUTPUT; // THdr
         led_buf[1] = PS4_11_REPORT_ID;           // Report ID
