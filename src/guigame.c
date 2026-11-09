@@ -599,7 +599,9 @@ static void maizoBtRefresh(void)
                  name[0] ? name : "Controle Bluetooth",
                  addr[0], addr[1], addr[2], addr[3], addr[4], addr[5],
                  havePair && (paired[0] & 2) && memcmp(addr, paired + 1, 6) == 0 &&
-                    ((p1 | p2) & DS34BT_STATE_RUNNING) ? "  CONECTADO" : "");
+                         ((p1 | p2) & DS34BT_STATE_RUNNING) ?
+                     "  CONECTADO" :
+                     "");
         diaSetLabel(diaBTManager, PADCFG_BT_RESULT_0 + i, maizoBtLabels[i]);
     }
     maizoBtCount = count > 8 ? 8 : count;
@@ -611,9 +613,7 @@ static void maizoBtRefresh(void)
     }
     if (p1 & DS34BT_STATE_RUNNING || p2 & DS34BT_STATE_RUNNING) {
         maizoBtConnecting = 0;
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, p1 & DS34BT_STATE_RUNNING ?
-                    "CONECTADO  |  Controle P1 pronto para jogar" :
-                    "CONECTADO  |  Controle P2 pronto para jogar");
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, p1 & DS34BT_STATE_RUNNING ? "CONECTADO  |  Controle P1 pronto para jogar" : "CONECTADO  |  Controle P2 pronto para jogar");
     } else if ((p1 | p2) & DS34BT_STATE_CONNECTED) {
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth ligado. Preparando controle HID...");
     } else if (maizoBtConnecting || state == 5) {

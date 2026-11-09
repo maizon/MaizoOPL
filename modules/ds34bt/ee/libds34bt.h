@@ -39,5 +39,5 @@ int ds34bt_get_pair_key(u8 *dst);
 // Extended MAIZO IOP RPC; preserves the original 1..14 ABI.
 #define MAIZO_BT_PAD_DS3 0
 #define MAIZO_BT_PAD_DS4 1
-int ds34bt_set_pair_key(const u8 *pair); /* 23 bytes: flags, MAC, link key */
+int ds34bt_set_pair_key(const u8 *pair);              /* 23 bytes: flags, MAC, link key */
 int ds34bt_get_pad_info(int port, u8 *type, u8 *mac); /* running pad only */

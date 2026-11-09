@@ -4,8 +4,8 @@
 #include <string.h>
 
 #define MAIZO_BT_PAIR_CONFIG_KEY "maizo_bt_pair"
-#define MAIZO_BT_PAIR_SIZE 23
-#define MAIZO_BT_PAIR_HEX_SIZE 47
+#define MAIZO_BT_PAIR_SIZE       23
+#define MAIZO_BT_PAIR_HEX_SIZE   47
 
 static inline int maizoBtNibble(char c)
 {

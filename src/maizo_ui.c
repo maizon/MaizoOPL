@@ -160,7 +160,8 @@ static void maizoDrawBluetoothStatus(void)
         fntRenderString(gTheme->fonts[0], w - 160, h - 64, ALIGN_NONE, 144, 21,
                         maizoBtPortType[ready] == MAIZO_BT_PAD_DS4 ?
                             (ready == 0 ? "DUALSHOCK 4  P1" : "DUALSHOCK 4  P2") :
-                            (ready == 0 ? "CONTROLE BT  P1" : "CONTROLE BT  P2"), MAIZO_TEXT);
+                            (ready == 0 ? "CONTROLE BT  P1" : "CONTROLE BT  P2"),
+                        MAIZO_TEXT);
     } else if (linking >= 0) {
         maizoDrawIcon(MAIZO_ICON_BLUETOOTH, w - 183, h - 65, 19, MAIZO_MUTED);
         fntRenderString(gTheme->fonts[0], w - 160, h - 64, ALIGN_NONE, 144, 21,
