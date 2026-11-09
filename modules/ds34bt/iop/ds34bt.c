@@ -892,6 +892,12 @@ static void HCI_event_task(int result, int bytes)
                         (maizo_pair_target_valid && memcmp(maizo_pair_target, ds34pad[i].bdaddr, 6) == 0)) {
                         ds34pad[i].type = DS4;
                         ds34pad[i].isfake = 0;
+                        /* Legacy PadEmu can accept an incoming DS4 without the
+                         * discovery manager. Remember its MAC for game handoff. */
+                        if (!maizo_pair_target_valid) {
+                            mips_memcpy(maizo_pair_target, ds34pad[i].bdaddr, 6);
+                            maizo_pair_target_valid = 1;
+                        }
                         DPRINTF("\t Type: Dualshock 4 \n");
                     } else {
                         ds34pad[i].type = DS3;
@@ -996,10 +1002,18 @@ static void HCI_event_task(int result, int bytes)
                     maizo_hci_address_cmd(HCI_OCF_USER_CONFIRM_REPLY, hci_buf + 2, NULL, 0);
                 break;
             case HCI_EVENT_LINK_KEY_NOTIFICATION:
-                if (maizo_pairing_allowed(hci_buf + 2)) {
+                /* Accept the key of the user-connected controller even when
+                 * the classic PadEmu path was used instead of inquiry UI. */
+                for (i = 0; i < MAX_PADS; i++)
+                    if (ds34pad[i].enabled &&
+                        memcmp(ds34pad[i].bdaddr, hci_buf + 2, 6) == 0)
+                        break;
+                if (maizo_pairing_allowed(hci_buf + 2) || i < MAX_PADS) {
                     mips_memcpy(maizo_key_address, hci_buf + 2, 6);
                     mips_memcpy(maizo_key, hci_buf + 8, 16);
                     maizo_key_valid = 1;
+                    mips_memcpy(maizo_pair_target, hci_buf + 2, 6);
+                    maizo_pair_target_valid = 1;
                 }
                 break;
             case HCI_EVENT_SIMPLE_PAIRING_COMPLETE:
@@ -1327,6 +1341,13 @@ static int L2CAP_event_task(int result, int bytes)
                             DelayThread(CMD_DELAY);
                             hid_LEDRumble(ds34pad[pad].oldled, 0, 0, pad);
                             pad_status_set(DS34BT_STATE_RUNNING, pad);
+                            /* Also recognize DS4s connected through the older
+                             * PadEmu dialog, which does not call scan_connect. */
+                            if (ds34pad[pad].type == DS4 &&
+                                !maizo_pair_target_valid) {
+                                mips_memcpy(maizo_pair_target, ds34pad[pad].bdaddr, 6);
+                                maizo_pair_target_valid = 1;
+                            }
                         }
                         break;
 
