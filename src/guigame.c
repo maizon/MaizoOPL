@@ -551,82 +551,76 @@ static int ver_set = 0, feat_set = 0;
 
 static int forceGlobalPadEmu;
 static char maizoBtLabels[8][84];
-static const char *maizoBtChoices[9];
-static int maizoBtCount, maizoBtState, maizoBtConnecting;
+static int maizoBtCount, maizoBtState, maizoBtConnecting, maizoBtAutoScan;
 static unsigned int maizoBtPollFrames;
 
-/* Keep the highlighted address when Inquiry appends another gamepad. */
+/* The IOP owns the Bluetooth inquiry list. UI never fabricates a connection. */
 static void maizoBtRefresh(void)
 {
-    u8 addr[6], selectedAddr[6] = {0}, paired[23] = {0};
+    u8 addr[6], paired[23] = {0};
     char name[32];
-    int i, j, previous = 0, count = 0, state = 0, selectedPresent = 0;
-    int ready0 = ds34bt_get_status(0) & DS34BT_STATE_RUNNING;
-    int ready1 = ds34bt_get_status(1) & DS34BT_STATE_RUNNING;
-    int hasPair = ds34bt_get_pair_key(paired);
+    int i, count = 0, state = 0;
+    int p1 = ds34bt_get_status(0);
+    int p2 = ds34bt_get_status(1);
+    int havePair = ds34bt_get_pair_key(paired);
 
-    diaGetInt(diaBTManager, PADCFG_BT_DEVICE, &previous);
-    if (previous >= 0 && previous < maizoBtCount) {
-        for (j = 0; j < 6; j++) {
-            unsigned int b;
-            if (sscanf(maizoBtLabels[previous] + 3 * j, "%02X", &b) == 1)
-                selectedAddr[j] = (u8)b;
-        }
-        selectedPresent = 1;
-    }
     for (i = 0; i < 8; i++) {
-        int linked;
-        if (!ds34bt_scan_get(i, addr, name, &state, &count)) {
-            maizoBtCount = 0;
-            diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Adaptador Bluetooth indisponivel");
-            return;
+        int ok = ds34bt_scan_get(i, addr, name, &state, &count);
+        if (!ok) {
+            state = 0;
+            count = 0;
+            break;
         }
         if (i >= count)
             break;
-        linked = hasPair && memcmp(addr, paired + 1, 6) == 0 && (ready0 || ready1);
         snprintf(maizoBtLabels[i], sizeof(maizoBtLabels[i]),
-                 "%02X:%02X:%02X:%02X:%02X:%02X  %s%s",
-                 addr[0], addr[1], addr[2], addr[3], addr[4], addr[5],
+                 "%s  [%02X:%02X:%02X:%02X:%02X:%02X]%s",
                  name[0] ? name : "Controle Bluetooth",
-                 linked ? " [CONECTADO]" : "");
-        maizoBtChoices[i] = maizoBtLabels[i];
-        if (selectedPresent && memcmp(addr, selectedAddr, 6) == 0)
-            previous = i;
+                 addr[0], addr[1], addr[2], addr[3], addr[4], addr[5],
+                 havePair && (paired[0] & 2) && memcmp(addr, paired + 1, 6) == 0 &&
+                    ((p1 | p2) & DS34BT_STATE_RUNNING) ? "  CONECTADO" : "");
+        diaSetLabel(diaBTManager, PADCFG_BT_RESULT_0 + i, maizoBtLabels[i]);
     }
     maizoBtCount = count > 8 ? 8 : count;
     maizoBtState = state;
-    if (!maizoBtCount)
-        maizoBtChoices[0] = "(nenhum dispositivo)";
-    maizoBtChoices[maizoBtCount ? maizoBtCount : 1] = NULL;
-    diaSetEnum(diaBTManager, PADCFG_BT_DEVICE, maizoBtChoices);
-    if (previous < 0 || previous >= maizoBtCount)
-        previous = 0;
-    diaSetInt(diaBTManager, PADCFG_BT_DEVICE, previous);
-    if (ready0 || ready1) {
+    for (i = 0; i < 8; i++) {
+        diaSetVisible(diaBTManager, PADCFG_BT_RESULT_0 + i, i < maizoBtCount);
+        diaSetEnabled(diaBTManager, PADCFG_BT_RESULT_0 + i, i < maizoBtCount);
+    }
+    if (p1 & DS34BT_STATE_RUNNING || p2 & DS34BT_STATE_RUNNING) {
         maizoBtConnecting = 0;
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS,
-                    ready0 ? "DS4 P1 CONECTADO - HID pronto" : "DS4 P2 CONECTADO - HID pronto");
-    } else if ((ds34bt_get_status(0) | ds34bt_get_status(1)) & DS34BT_STATE_CONNECTED) {
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth conectado - iniciando controle HID");
-    } else if (maizoBtConnecting) {
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conectando... aguarde ou pressione PS no DS4");
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, p1 & DS34BT_STATE_RUNNING ?
+                    "CONECTADO  |  Controle P1 pronto para jogar" :
+                    "CONECTADO  |  Controle P2 pronto para jogar");
+    } else if ((p1 | p2) & DS34BT_STATE_CONNECTED) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth ligado. Preparando controle HID...");
+    } else if (maizoBtConnecting || state == 5) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conectando... espere o controle ficar pronto");
+    } else if (state == 1 || state == 2) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Procurando controles...  (SHARE + PS no DS4)");
+    } else if (state == 3 && maizoBtCount) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aperte X no controle desejado para conectar");
+    } else if (state == 3) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Nenhum dispositivo. Ative SHARE + PS e tente novamente");
+    } else if (state == 4 || state == 6) {
+        maizoBtConnecting = 0;
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Busca/conexao falhou. Tente Buscar novamente");
+    } else if (!(p1 & DS34BT_STATE_USB_CONFIGURED)) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aguardando adaptador Bluetooth USB...");
     } else {
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS,
-                    state == 1                 ? "Procurando controles Bluetooth..." :
-                    state == 2                 ? "Identificando dispositivos..." :
-                    state == 3 && maizoBtCount ? "Selecione o controle e pressione Conectar" :
-                    state == 3                 ? "Nenhum controle. Use Buscar novamente" :
-                    state == 4                 ? "Busca falhou. Use Buscar novamente" :
-                                                 "Preparando busca...");
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth pronto. Iniciando busca...");
     }
 }
 
-/* Dialog runs its own render loop, so poll the IOP without user Refresh. */
-static int maizoBtUpdater(int changed)
+static int maizoBtUpdater(int modified)
 {
-    (void)changed;
-    if (++maizoBtPollFrames >= 25) {
+    (void)modified;
+    if (++maizoBtPollFrames >= 24) {
         maizoBtPollFrames = 0;
+        if (!maizoBtAutoScan && (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED)) {
+            if (ds34bt_scan_start())
+                maizoBtAutoScan = 1;
+        }
         maizoBtRefresh();
     }
     return 0;
@@ -637,56 +631,48 @@ static void maizoBtEnableForGames(void)
     config_set_t *games = configGetByType(CONFIG_GAME);
     int settings = 0;
     configGetInt(games, CONFIG_ITEM_PADEMUSETTINGS, &settings);
-    /* Bluetooth backend = 1, virtual port P1 enabled at bit 8. Retain
-     * the other ports, multitap, vibration and user preferences. */
     settings = (settings & ~0xFF) | 1 | (1 << 8);
     configSetInt(games, CONFIG_ITEM_ENABLEPADEMU, 1);
     configSetInt(games, CONFIG_ITEM_PADEMUSETTINGS, settings);
     EnablePadEmu = 1;
     PadEmuSettings = settings;
-    saveConfig(CONFIG_GAME, 1);
+    saveConfig(CONFIG_GAME, 0);
 }
 
 void guiGameShowBluetoothManager(void)
 {
-    int result = -1, selected = 0;
+    int result = -1;
     maizoBtConnecting = 0;
+    maizoBtAutoScan = 0;
     maizoBtPollFrames = 0;
     maizoBtRefresh();
-    /* No manual Search button required when opening the manager. */
     if (ds34bt_scan_start())
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Procurando controles Bluetooth...");
-    else
-        maizoBtRefresh();
+        maizoBtAutoScan = 1;
     do {
         result = diaExecuteDialog(diaBTManager, result, 1, &maizoBtUpdater);
-        if (result == PADCFG_BT_SCAN) {
-            maizoBtConnecting = 0;
-            if (ds34bt_scan_start())
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Procurando controles Bluetooth...");
-            else
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Adaptador ocupado ou indisponivel");
-        } else if (result == PADCFG_BT_REFRESH) {
+        if (result >= PADCFG_BT_RESULT_0 && result <= PADCFG_BT_RESULT_7) {
+            int selected = result - PADCFG_BT_RESULT_0;
             maizoBtRefresh();
-        } else if (result == PADCFG_BT_CONNECT) {
-            diaGetInt(diaBTManager, PADCFG_BT_DEVICE, &selected);
-            maizoBtRefresh();
-            if (maizoBtState == 1 || maizoBtState == 2)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Busca em andamento. Aguarde...");
-            else if (!maizoBtCount)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Nenhum controle detectado");
-            else if (maizoBtState != 3 || selected < 0 || selected >= maizoBtCount)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Selecione um controle valido");
-            else if (guiMsgBox("Conectar ao controle Bluetooth selecionado?", 1, NULL)) {
+            if (selected >= maizoBtCount)
+                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Dispositivo nao esta mais disponivel");
+            else if (maizoBtState != 3)
+                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aguarde o fim da busca Bluetooth");
+            else if (guiMsgBox("Conectar a este controle Bluetooth?", 1, NULL)) {
                 if (ds34bt_scan_connect(selected)) {
                     maizoBtConnecting = 1;
-                    diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conectando... aguarde a inicializacao HID");
-                    if (guiMsgBox("Ativar controle Bluetooth P1 nos jogos PS2?", 1, NULL))
+                    maizoBtRefresh();
+                    if (guiMsgBox("Ativar DualShock 4 no PS2 (PadEmu Bluetooth P1)?", 1, NULL))
                         maizoBtEnableForGames();
                 } else {
-                    diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Falha ao iniciar conexao; tente novamente");
+                    diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Falha de conexao. Verifique o DS4");
                 }
             }
+        } else if (result == PADCFG_BT_SCAN) {
+            maizoBtConnecting = 0;
+            if (ds34bt_scan_start())
+                maizoBtAutoScan = 1;
+            else
+                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Adaptador ocupado. Aguarde");
         }
     } while (result != 0 && result != UIID_BTN_OK && result != UIID_BTN_CANCEL);
 }

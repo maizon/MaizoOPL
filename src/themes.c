@@ -661,7 +661,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         fntRenderString(elem->font, w / 2, 400, ALIGN_CENTER, w - 96, 24,
                         info, MAIZO_MUTED);
         snprintf(info, sizeof(info), "%d / %d", menuDashboardPosition(), menuDashboardCount());
-        fntRenderString(elem->font, w - 32, 422, ALIGN_RIGHT, 100, 22,
+        fntRenderString(elem->font, 30, 422, ALIGN_NONE, 95, 22,
                         info, MAIZO_MUTED);
     }
     if (current->favorite)
