@@ -666,9 +666,7 @@ static int maizo_pair_restore(const u8 *pair)
     }
     /* A stored address does not imply a connected controller. */
     if (bt_dev.status & DS34BT_STATE_USB_CONFIGURED) {
-        if (ds34bt_get_status(0) & DS34BT_STATE_RUNNING)
-            return 1;
-        if (ds34bt_get_status(1) & DS34BT_STATE_RUNNING)
+        if ((ds34pad[0].status | ds34pad[1].status) & DS34BT_STATE_RUNNING)
             return 1;
         if (maizo_scan_state != 5)
             maizo_connect_address(maizo_pair_target);
