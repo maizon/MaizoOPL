@@ -634,12 +634,13 @@ static void maizo_bt_worker(void *arg)
             }
             if (pad_status_check(DS34BT_STATE_CONNECTED, i)) {
                 connected = 1;
-                /* Recover stalled ACL/HID negotiation after 12 seconds. */
-                if (++maizo_hid_ticks >= 6 &&
-                    ds34pad[i].hci_handle != 0x0FFF) {
-                    maizo_hid_ticks = 0;
-                    hci_disconnect(ds34pad[i].hci_handle);
-                }
+                /* Never tear down an established ACL connection solely
+                 * because HID negotiation has not reached RUNNING yet.
+                 * Clone DS4 controllers can negotiate slowly, and the old
+                 * 12-second watchdog explicitly disconnected them. The
+                 * Bluetooth controller itself reports real link loss via
+                 * HCI_EVENT_DISCONN_COMPLETE, which enables recovery. */
+                maizo_hid_ticks = 0;
                 break;
             }
         }
