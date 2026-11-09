@@ -840,6 +840,9 @@ static void HCI_event_task(int result, int bytes)
                         break;
                     }
                 }
+                if (i < MAX_PADS && maizo_pair_target_valid &&
+                    memcmp(ds34pad[i].bdaddr, maizo_pair_target, 6) == 0)
+                    maizo_scan_state = 6;
                 ds34pad_clear(i);
                 break;
 

@@ -616,6 +616,9 @@ static void maizoBtRefresh(void)
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, p1 & DS34BT_STATE_RUNNING ? "CONECTADO  |  Controle P1 pronto para jogar" : "CONECTADO  |  Controle P2 pronto para jogar");
     } else if ((p1 | p2) & DS34BT_STATE_CONNECTED) {
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth ligado. Preparando controle HID...");
+    } else if (state == 4 || state == 6) {
+        maizoBtConnecting = 0;
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conexao falhou. Tente novamente");
     } else if (maizoBtConnecting || state == 5) {
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conectando... espere o controle ficar pronto");
     } else if (state == 1 || state == 2) {
@@ -624,9 +627,6 @@ static void maizoBtRefresh(void)
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aperte X no controle desejado para conectar");
     } else if (state == 3) {
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Nenhum dispositivo. Ative SHARE + PS e tente novamente");
-    } else if (state == 4 || state == 6) {
-        maizoBtConnecting = 0;
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Busca/conexao falhou. Tente Buscar novamente");
     } else if (!(p1 & DS34BT_STATE_USB_CONFIGURED)) {
         diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aguardando adaptador Bluetooth USB...");
     } else {
@@ -639,7 +639,9 @@ static int maizoBtUpdater(int modified)
     (void)modified;
     if (++maizoBtPollFrames >= 24) {
         maizoBtPollFrames = 0;
-        if (!maizoBtAutoScan && (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED)) {
+        if (!maizoBtAutoScan &&
+            (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED) &&
+            !((ds34bt_get_status(0) | ds34bt_get_status(1)) & DS34BT_STATE_RUNNING)) {
             if (ds34bt_scan_start())
                 maizoBtAutoScan = 1;
         }
@@ -670,7 +672,8 @@ void guiGameShowBluetoothManager(void)
     maizoBtAutoScan = 0;
     maizoBtPollFrames = 0;
     maizoBtRefresh();
-    if (ds34bt_scan_start())
+    if (!((ds34bt_get_status(0) | ds34bt_get_status(1)) & DS34BT_STATE_RUNNING) &&
+        ds34bt_scan_start())
         maizoBtAutoScan = 1;
     do {
         result = diaExecuteDialog(diaBTManager, result, 1, &maizoBtUpdater);
