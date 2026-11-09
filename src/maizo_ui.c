@@ -128,7 +128,7 @@ void maizoDrawBrand(void)
     const u64 bg = GS_SETREG_RGBA(16, 23, 30, 0x80);
     const u64 accent = GS_SETREG_RGBA(177, 183, 198, 0x80); /* default Wii OLED */
     const u64 ink = GS_SETREG_RGBA(247, 248, 250, 0x80);
-    const u64 underline = GS_SETREG_RGBA(85, 92, 100, 0x80);
+    const u64 underline = GS_SETREG_RGBA(85, 91, 102, 0x80);
     int letter, row, col;
 
     rmDrawRect(22, 13, 90, 38, bg);
