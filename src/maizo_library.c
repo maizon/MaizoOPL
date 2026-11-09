@@ -171,3 +171,30 @@ maizo_entry_t *maizoLibrarySlot(maizo_library_t *library, int offset)
         return NULL;
     return &library->entries[library->view[position]];
 }
+
+/*
+ * Keep the selected game centered, even at the first/last item. Wrap cover
+ * neighbours without showing any game twice when a tab has fewer than five
+ * entries. On even-sized tabs the opposite item is drawn on the right.
+ * Ordinary maizoLibrarySlot() intentionally remains non-wrapping.
+ */
+maizo_entry_t *maizoLibraryCarouselSlot(maizo_library_t *library, int offset)
+{
+    size_t distance, index;
+    if (!library || !library->view_count || offset < -2 || offset > 2)
+        return NULL;
+    if (!offset)
+        return maizoLibrarySlot(library, 0);
+
+    distance = (size_t)(offset < 0 ? -offset : offset);
+    if (offset < 0) {
+        if (distance > (library->view_count - 1) / 2)
+            return NULL;
+        index = (library->position + library->view_count - distance) % library->view_count;
+    } else {
+        if (distance > library->view_count / 2)
+            return NULL;
+        index = (library->position + distance) % library->view_count;
+    }
+    return &library->entries[library->view[index]];
+}

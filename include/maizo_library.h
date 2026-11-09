@@ -43,6 +43,8 @@ void maizoLibrarySort(maizo_library_t *library);
 int maizoLibraryFilter(maizo_library_t *library, int tab);
 void maizoLibraryMove(maizo_library_t *library, int direction);
 maizo_entry_t *maizoLibrarySlot(maizo_library_t *library, int offset);
+/* Unique, circular neighbours for the five-cover dashboard carousel. */
+maizo_entry_t *maizoLibraryCarouselSlot(maizo_library_t *library, int offset);
 void maizoFavoriteKey(int platform, const char *identity, char key[32]);
 
 #endif

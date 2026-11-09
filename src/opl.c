@@ -1016,6 +1016,10 @@ static void _loadConfig()
     }
 
     applyConfig(themeID, langID, 0);
+#ifdef PADEMU
+    if (result & CONFIG_GAME)
+        sysBtRestorePairFromConfig();
+#endif
 
     lscret = result;
     lscstatus = 0;
@@ -1666,7 +1670,10 @@ void deinit(int exception, int modeSelected)
 
 #ifdef PADEMU
     ds34usb_reset();
-    ds34bt_reset();
+    /* Game loader resets the IOP: avoid explicitly switching off the DS4
+     * before bt_pademu.irx can attempt the connection handoff. */
+    if (!sysBtGameHandoffReady())
+        ds34bt_reset();
 #endif
     unloadPads();
 
@@ -1684,9 +1691,10 @@ void deinit(int exception, int modeSelected)
 
 void setDefaultColors(void)
 {
-    gDefaultBgColor[0] = 0x00;
-    gDefaultBgColor[1] = 0x00;
-    gDefaultBgColor[2] = 0x00;
+    /* Neutral graphite grey: readable with white Maizo branding. */
+    gDefaultBgColor[0] = 0x46;
+    gDefaultBgColor[1] = 0x4A;
+    gDefaultBgColor[2] = 0x4E;
 
     gDefaultTextColor[0] = 0xFF;
     gDefaultTextColor[1] = 0xFF;

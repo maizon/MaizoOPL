@@ -8,12 +8,18 @@
 #include "include/maizo_library.h"
 #include "include/maizo_ui.h"
 #include <stdlib.h>
+#ifdef PADEMU
+#include <libds34bt.h>
+#endif
 
 typedef struct
 {
     signed char x1, y1, x2, y2;
 } stroke_t;
-#define S(a, b, c, d) {a, b, c, d}
+#define S(a, b, c, d) \
+    {                 \
+        a, b, c, d    \
+    }
 static const stroke_t disc[] = {S(5, 2, 19, 2), S(19, 2, 22, 12), S(22, 12, 19, 22), S(19, 22, 5, 22), S(5, 22, 2, 12), S(2, 12, 5, 2), S(10, 10, 14, 10), S(14, 10, 14, 14), S(14, 14, 10, 14), S(10, 14, 10, 10)};
 static const stroke_t app[] = {S(3, 3, 21, 3), S(21, 3, 21, 21), S(21, 21, 3, 21), S(3, 21, 3, 3), S(3, 8, 21, 8), S(7, 12, 11, 16), S(11, 16, 7, 19), S(14, 18, 18, 18)};
 static const stroke_t star[] = {S(12, 2, 15, 8), S(15, 8, 22, 9), S(22, 9, 17, 14), S(17, 14, 18, 22), S(18, 22, 12, 18), S(12, 18, 6, 22), S(6, 22, 7, 14), S(7, 14, 2, 9), S(2, 9, 9, 8), S(9, 8, 12, 2)};
@@ -103,10 +109,30 @@ void maizoDrawIcon(int icon, int x, int y, int size, u64 color)
                    x + rmWideScale(lines[i].x2 * size / 24), y + lines[i].y2 * size / 24, color);
 }
 
+/* Exact 8x8 glyph rows from MaizoWii/source/font8x8.h (public domain).
+ * Keeping only the five glyphs avoids inheriting an OPL theme font or a
+ * dynamically loaded texture. This is the same 2x pixel wordmark as Wii. */
+static const u8 maizoWiiWordmark[5][8] = {
+    {0x63, 0x77, 0x7F, 0x7F, 0x6B, 0x63, 0x63, 0x00}, /* M */
+    {0x0C, 0x1E, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x00}, /* A */
+    {0x1E, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x1E, 0x00}, /* I */
+    {0x7F, 0x63, 0x31, 0x18, 0x4C, 0x66, 0x7F, 0x00}, /* Z */
+    {0x1C, 0x36, 0x63, 0x63, 0x63, 0x36, 0x1C, 0x00}, /* O */
+};
+
 void maizoDrawBrand(void)
 {
-    rmDrawRect(24, 16, 120, 30, MAIZO_BLACK);
-    fntRenderString(gTheme->fonts[0], 32, 20, ALIGN_NONE, 112, 24, "MAIZO", MAIZO_TEXT);
+    /* Identical MaizoWii wordmark pixels, transparent background: no
+     * decorative plaque, opaque rectangle or coloured highlight. */
+    const u64 ink = GS_SETREG_RGBA(247, 248, 250, 0x80);
+    int letter, row, col;
+
+    for (letter = 0; letter < 5; letter++)
+        for (row = 0; row < 8; row++)
+            for (col = 0; col < 8; col++)
+                if (maizoWiiWordmark[letter][row] & (1u << col))
+                    rmDrawRect(25 + (letter * 8 + col) * 2,
+                               23 + row * 2, 2, 2, ink);
 }
 
 void maizoDrawPanel(int x, int y, int width, int height, int focused)
@@ -116,23 +142,65 @@ void maizoDrawPanel(int x, int y, int width, int height, int focused)
         rmDrawRect(x, y, 3, height, MAIZO_ACCENT);
 }
 
+#ifdef PADEMU
+static unsigned int maizoBtStatusFrame;
+static int maizoBtPortStatus[2];
+static int maizoBtPortType[2];
+
+static void maizoDrawBluetoothStatus(void)
+{
+    int i, ready = -1, linking = -1, w, h;
+    rmGetScreenExtents(&w, &h);
+    /* Read the actual IOP HID state, not the last clicked address. */
+    if (!maizoBtStatusFrame || guiFrameId - maizoBtStatusFrame >= 60) {
+        maizoBtStatusFrame = guiFrameId ? guiFrameId : 1;
+        for (i = 0; i < 2; i++) {
+            u8 type = 0, addr[6];
+            maizoBtPortStatus[i] = ds34bt_get_status(i);
+            maizoBtPortType[i] = 0;
+            if (maizoBtPortStatus[i] & DS34BT_STATE_RUNNING) {
+                if (ds34bt_get_pad_info(i, &type, addr))
+                    maizoBtPortType[i] = type;
+            }
+        }
+    }
+    for (i = 0; i < 2; i++) {
+        if (maizoBtPortStatus[i] & DS34BT_STATE_RUNNING) {
+            ready = i;
+            break;
+        }
+        if (maizoBtPortStatus[i] & DS34BT_STATE_CONNECTED)
+            linking = i;
+    }
+    /* Bottom-right, above the button hints. Omit it when no pad is present. */
+    if (ready >= 0) {
+        maizoDrawIcon(MAIZO_ICON_PAD, w - 183, h - 65, 19, MAIZO_ACCENT);
+        fntRenderString(gTheme->fonts[0], w - 160, h - 64, ALIGN_NONE, 144, 21,
+                        maizoBtPortType[ready] == MAIZO_BT_PAD_DS4 ?
+                            (ready == 0 ? "DUALSHOCK 4  P1" : "DUALSHOCK 4  P2") :
+                            (ready == 0 ? "CONTROLE BT  P1" : "CONTROLE BT  P2"),
+                        MAIZO_TEXT);
+    } else if (linking >= 0) {
+        maizoDrawIcon(MAIZO_ICON_BLUETOOTH, w - 183, h - 65, 19, MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], w - 160, h - 64, ALIGN_NONE, 144, 21,
+                        "CONECTANDO BT...", MAIZO_MUTED);
+    }
+}
+#endif
+
 void maizoDrawHeader(int tab)
 {
-    static int underline = 32;
-    static const int positions[] = {60, 148, 228, 310, 414, 548};
-    static const char *names[] = {"TODOS", "PS2", "PS1", "APPS", "FAVORITOS", "CONFIGURACOES"};
-    int i, target;
+    static const char *page[] = {"TODOS", "PLAYSTATION 2", "PLAYSTATION 1", "APLICATIVOS",
+                                 "FAVORITOS", "CONFIGURACOES"};
+    int w, h;
     if (tab < 0 || tab >= MAIZO_TAB_COUNT)
         return;
-    rmDrawRect(24, 48, 592, 45, MAIZO_SURFACE);
-    fntRenderString(gTheme->fonts[0], 190, 24, ALIGN_NONE, 0, 0, "L1  /  R1", MAIZO_MUTED);
-    for (i = 0; i < MAIZO_TAB_COUNT; i++)
-        fntRenderString(gTheme->fonts[0], positions[i], 62, ALIGN_CENTER, i == MAIZO_SETTINGS ? 130 : 100, 24, names[i], i == tab ? MAIZO_TEXT : MAIZO_MUTED);
-    target = positions[tab] - 24;
-    if (!maizoAnimations() || abs(target - underline) < 4)
-        underline = target;
-    else
-        underline += (target - underline) / 3;
-    rmDrawRect(underline, 88, 48, 2, MAIZO_ACCENT);
+    rmGetScreenExtents(&w, &h);
+    /* No navigation bar: the full wallpaper and ART stay visible. */
+    fntRenderString(gTheme->fonts[0], w - 28, 25, ALIGN_RIGHT, 186, 24,
+                    page[tab], MAIZO_TEXT);
     maizoDrawBrand();
+#ifdef PADEMU
+    maizoDrawBluetoothStatus();
+#endif
 }

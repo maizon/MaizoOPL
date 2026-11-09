@@ -98,6 +98,75 @@ enum {
 };
 static u8 twin_stage, twin_class, twin_endpoints, twin_report_counts[2];
 
+/* Observe every enumerated device presented to this probe without claiming
+ * unsupported USB classes or interfering with other PS2 USB drivers.
+ * A device rejected by PadEmu may not deliver its disconnect callback here:
+ * the record is then only the latest observation, not live presence. */
+#define MAIZO_USB_DIAG_MAX 8
+typedef struct
+{
+    int devId;
+    u16 vid, pid;
+    u8 state, dev_class, iface_class, iface_subclass, iface_protocol;
+    u8 endpoints, interfaces;
+} maizo_usb_diag_item;
+static maizo_usb_diag_item usb_diag[MAIZO_USB_DIAG_MAX];
+static u8 usb_diag_count;
+
+static void usb_diag_set_state(int devId, u8 state)
+{
+    int i;
+    for (i = 0; i < usb_diag_count; i++)
+        if (usb_diag[i].devId == devId) {
+            usb_diag[i].state = state;
+            break;
+        }
+}
+
+static void usb_diag_observe(int devId, UsbDeviceDescriptor *device)
+{
+    int i;
+    UsbConfigDescriptor *config;
+    UsbInterfaceDescriptor *interface;
+    maizo_usb_diag_item *item;
+
+    for (i = 0; i < usb_diag_count; i++)
+        if (usb_diag[i].devId == devId)
+            break;
+    if (i == usb_diag_count) {
+        if (usb_diag_count >= MAIZO_USB_DIAG_MAX)
+            return;
+        usb_diag_count++;
+    }
+
+    item = &usb_diag[i];
+    mips_memset(item, 0, sizeof(*item));
+    item->devId = devId;
+    item->vid = device->idVendor;
+    item->pid = device->idProduct;
+    item->dev_class = device->bDeviceClass;
+    /* 1=seen, 2=accepted by PadEmu, 3=configuring, 4=ready,
+     * 5=driver error, 6=disconnected. */
+    item->state = 1;
+    if ((device->idVendor == MAIZOHID_VID && device->idProduct == MAIZOHID_PID) ||
+        (device->idVendor == MAIZOTWIN_VID && device->idProduct == MAIZOTWIN_PID) ||
+        (device->idVendor == DS34_VID &&
+         (device->idProduct == DS3_PID || device->idProduct == DS4_PID ||
+          device->idProduct == DS4_PID_SLIM)))
+        item->state = 2;
+
+    config = (UsbConfigDescriptor *)UsbGetDeviceStaticDescriptor(devId, device, USB_DT_CONFIG);
+    if (!config || config->bLength < sizeof(UsbConfigDescriptor) ||
+        config->wTotalLength < sizeof(UsbConfigDescriptor) + sizeof(UsbInterfaceDescriptor))
+        return;
+    item->interfaces = config->bNumInterfaces;
+    interface = (UsbInterfaceDescriptor *)((char *)config + config->bLength);
+    item->iface_class = interface->bInterfaceClass;
+    item->iface_subclass = interface->bInterfaceSubClass;
+    item->iface_protocol = interface->bInterfaceProtocol;
+    item->endpoints = interface->bNumEndpoints;
+}
+
 
 
 int usb_probe(int devId)
@@ -111,6 +180,8 @@ int usb_probe(int devId)
         DPRINTF("DS34USB: Error - Couldn't get device descriptor\n");
         return 0;
     }
+
+    usb_diag_observe(devId, device);
 
     if (device->idVendor == MAIZOHID_VID && device->idProduct == MAIZOHID_PID)
         return 1;
@@ -134,6 +205,7 @@ int usb_connect(int devId)
     UsbEndpointDescriptor *endpoint;
 
     DPRINTF("DS34USB: connect: devId=%i\n", devId);
+    usb_diag_set_state(devId, 3);
 
     for (pad = 0; pad < MAX_PADS; pad++) {
         if (ds34pad[pad].devId == -1 && ds34pad[pad].enabled)
@@ -281,6 +353,7 @@ int usb_disconnect(int devId)
         if (ds34pad[pad].type == TWINHID)
             twin_stage = TWIN_STAGE_DISCONNECTED;
         usb_release(pad);
+        usb_diag_set_state(devId, 6);
     }
 
     return 0;
@@ -288,6 +361,7 @@ int usb_disconnect(int devId)
 
 static void usb_release(int pad)
 {
+    usb_diag_set_state(ds34pad[pad].devId, 5);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
         twin_root = -1;
@@ -351,6 +425,7 @@ static void usb_config_set(int result, int count, void *arg)
         return;
     }
     ds34pad[pad].status |= DS34USB_STATE_CONFIGURED;
+    usb_diag_set_state(ds34pad[pad].devId, 4);
 
     if (ds34pad[pad].type == TWINHID) {
         twin_stage = TWIN_STAGE_READY;
@@ -892,6 +967,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34USB_RESET      8
 
 #define DS34USB_TWIN_DIAG   9
+#define DS34USB_DEVICE_DIAG 10
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)
@@ -929,6 +1005,31 @@ void *rpc_sf(int cmd, void *data, int size)
         case DS34USB_RESET:
             ds34usb_reset();
             break;
+        case DS34USB_DEVICE_DIAG: {
+            u8 index = ((u8 *)data)[0];
+            u8 *bytes = (u8 *)data;
+            maizo_usb_diag_item *item = NULL;
+            mips_memset(data, 0, 16);
+            bytes[0] = usb_diag_count;
+            bytes[1] = 0xFF;
+            if (index < usb_diag_count) {
+                item = &usb_diag[index];
+                bytes[1] = index;
+                bytes[2] = item->state;
+                bytes[3] = (u8)item->devId;
+                bytes[4] = (u8)item->vid;
+                bytes[5] = (u8)(item->vid >> 8);
+                bytes[6] = (u8)item->pid;
+                bytes[7] = (u8)(item->pid >> 8);
+                bytes[8] = item->dev_class;
+                bytes[9] = item->iface_class;
+                bytes[10] = item->iface_subclass;
+                bytes[11] = item->iface_protocol;
+                bytes[12] = item->endpoints;
+                bytes[13] = item->interfaces;
+            }
+            break;
+        }
         case DS34USB_TWIN_DIAG:
             mips_memset(data, 0, 8);
             ((u8 *)data)[0] = twin_stage;

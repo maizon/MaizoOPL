@@ -526,7 +526,7 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
     png_read_update_info(pngPtr, infoPtr);
     bitDepth = png_get_bit_depth(pngPtr, infoPtr);
 
-    void (*texPngReadPixels)(GSTEXTURE *texture, png_bytep *rowPointers, size_t size);
+    void (*texPngReadPixels)(GSTEXTURE * texture, png_bytep * rowPointers, size_t size);
     switch (png_get_color_type(pngPtr, infoPtr)) {
         case PNG_COLOR_TYPE_RGB_ALPHA:
             texture->PSM = GS_PSM_CT32;

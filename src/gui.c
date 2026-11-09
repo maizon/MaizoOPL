@@ -1294,7 +1294,9 @@ static int cdirection(unsigned char a, unsigned char b)
 void guiDrawBGPlasma()
 {
     if (thmGetGuiValue() == 0) {
-        rmDrawRect(0, 0, screenWidth, screenHeight, GS_SETREG_RGBA(gTheme->bgColor[0], gTheme->bgColor[1], gTheme->bgColor[2], 0x80));
+        /* Flat graphite-grey Maizo background; no animated plasma. */
+        rmDrawRect(0, 0, screenWidth, screenHeight,
+                   GS_SETREG_RGBA(0x46, 0x4A, 0x4E, 0x80));
         return;
     }
 

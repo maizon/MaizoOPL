@@ -20,6 +20,10 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iinclude -Imodules/pademu \
             tests/maizotwin_test.c -o /tmp/maizotwin_test
           /tmp/maizotwin_test
+      - name: Test Bluetooth MAC/link-key persistence
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -I. tests/maizo_bt_pair_test.c -o /tmp/maizo_bt_pair_test
+          /tmp/maizo_bt_pair_test
       - name: Test dashboard library and hotplug selection
         run: |
           cc -std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude \

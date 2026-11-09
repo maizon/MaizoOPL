@@ -16,6 +16,7 @@
 #include "include/guigame.h"
 #include "include/ds34common.h"
 #include "include/vmc_groups.h"
+#include "include/maizo_bt_pair.h"
 
 #ifdef PADEMU
 #include <libds34bt.h>
@@ -550,126 +551,263 @@ static int dg_discon = 0;
 static int ver_set = 0, feat_set = 0;
 
 static int forceGlobalPadEmu;
-static char maizoBtLabels[8][72];
-static const char *maizoBtChoices[9];
-static int maizoBtCount, maizoBtState;
+static int maizoBtPairDirty;
 
+static void maizoBtRecordBond(void)
+{
+    u8 key[MAIZO_BT_PAIR_SIZE];
+    char encoded[MAIZO_BT_PAIR_HEX_SIZE];
+    const char *previous = NULL;
+    config_set_t *games = configGetByType(CONFIG_GAME);
+    if (!ds34bt_get_pair_key(key) || !maizoBtPairValid(key))
+        return;
+    maizoBtPairEncode(key, encoded);
+    if (!configGetStr(games, MAIZO_BT_PAIR_CONFIG_KEY, &previous) ||
+        strcmp(previous, encoded) != 0) {
+        configSetStr(games, MAIZO_BT_PAIR_CONFIG_KEY, encoded);
+        maizoBtPairDirty = 1;
+    }
+}
+
+static char maizoBtLabels[8][84];
+static int maizoBtCount, maizoBtState, maizoBtConnecting, maizoBtAutoScan;
+static unsigned int maizoBtPollFrames;
+
+/* The IOP owns the Bluetooth inquiry list. UI never fabricates a connection. */
 static void maizoBtRefresh(void)
 {
-    u8 addr[6];
+    u8 addr[6], paired[23] = {0};
     char name[32];
-    int i, previous = 0, count = 0, state = 0;
-    /* Refresh must not silently deselect a device already highlighted. */
-    diaGetInt(diaBTManager, PADCFG_BT_DEVICE, &previous);
+    int i, count = 0, state = 0;
+    int p1 = ds34bt_get_status(0);
+    int p2 = ds34bt_get_status(1);
+    int havePair = ds34bt_get_pair_key(paired);
+    if ((p1 | p2) & DS34BT_STATE_CONNECTED)
+        maizoBtRecordBond();
+
     for (i = 0; i < 8; i++) {
-        if (!ds34bt_scan_get(i, addr, name, &state, &count)) {
-            diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Dongle indisponivel");
-            return;
+        int ok = ds34bt_scan_get(i, addr, name, &state, &count);
+        if (!ok) {
+            state = 0;
+            count = 0;
+            break;
         }
         if (i >= count)
             break;
         snprintf(maizoBtLabels[i], sizeof(maizoBtLabels[i]),
-                 "%02X:%02X:%02X:%02X:%02X:%02X  %s",
+                 "%s  [%02X:%02X:%02X:%02X:%02X:%02X]%s",
+                 name[0] ? name : "Controle Bluetooth",
                  addr[0], addr[1], addr[2], addr[3], addr[4], addr[5],
-                 name[0] ? name : "(sem nome)");
-        maizoBtChoices[i] = maizoBtLabels[i];
+                 havePair && (paired[0] & 2) && memcmp(addr, paired + 1, 6) == 0 &&
+                         ((p1 | p2) & DS34BT_STATE_RUNNING) ?
+                     "  CONECTADO" :
+                     "");
+        diaSetLabel(diaBTManager, PADCFG_BT_RESULT_0 + i, maizoBtLabels[i]);
     }
-    maizoBtCount = count;
+    maizoBtCount = count > 8 ? 8 : count;
     maizoBtState = state;
-    if (!count)
-        maizoBtChoices[0] = "(nenhum dispositivo)";
-    maizoBtChoices[count ? count : 1] = NULL;
-    diaSetEnum(diaBTManager, PADCFG_BT_DEVICE, maizoBtChoices);
-    if (previous < 0 || previous >= count)
-        previous = 0;
-    diaSetInt(diaBTManager, PADCFG_BT_DEVICE, previous);
-    if (ds34bt_get_status(0) & DS34BT_STATE_RUNNING) {
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Controle 1 pronto (Bluetooth + HID)");
-        return;
+    for (i = 0; i < 8; i++) {
+        diaSetVisible(diaBTManager, PADCFG_BT_RESULT_0 + i, i < maizoBtCount);
+        diaSetEnabled(diaBTManager, PADCFG_BT_RESULT_0 + i, i < maizoBtCount);
+        diaSetVisible(diaBTManager, PADCFG_BT_BREAK_0 + i, i < maizoBtCount);
     }
-    if (ds34bt_get_status(1) & DS34BT_STATE_RUNNING) {
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Controle 2 pronto (Bluetooth + HID)");
-        return;
+    if (p1 & DS34BT_STATE_RUNNING || p2 & DS34BT_STATE_RUNNING) {
+        maizoBtConnecting = 0;
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, p1 & DS34BT_STATE_RUNNING ? "CONECTADO  |  Controle P1 pronto para jogar" : "CONECTADO  |  Controle P2 pronto para jogar");
+    } else if ((p1 | p2) & DS34BT_STATE_CONNECTED) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth ligado. Preparando controle HID...");
+    } else if (state == 4 || state == 6) {
+        maizoBtConnecting = 0;
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conexao falhou. Tente novamente");
+    } else if (maizoBtConnecting || state == 5) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conectando... espere o controle ficar pronto");
+    } else if (state == 1 || state == 2) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Procurando controles...  (SHARE + PS no DS4)");
+    } else if (state == 3 && maizoBtCount) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aperte X no controle desejado para conectar");
+    } else if (state == 3) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Nenhum dispositivo. Ative SHARE + PS e tente novamente");
+    } else if (!(p1 & DS34BT_STATE_USB_CONFIGURED)) {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aguardando adaptador Bluetooth USB...");
+    } else {
+        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth pronto. Iniciando busca...");
     }
-    if ((ds34bt_get_status(0) | ds34bt_get_status(1)) & DS34BT_STATE_CONNECTED) {
-        diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Bluetooth conectado - preparando HID");
-        return;
+}
+
+static int maizoBtUpdater(int modified)
+{
+    (void)modified;
+    if (++maizoBtPollFrames >= 24) {
+        maizoBtPollFrames = 0;
+        if (!maizoBtAutoScan &&
+            (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED) &&
+            !((ds34bt_get_status(0) | ds34bt_get_status(1)) & DS34BT_STATE_RUNNING)) {
+            if (ds34bt_scan_start())
+                maizoBtAutoScan = 1;
+        }
+        maizoBtRefresh();
     }
-    diaSetLabel(diaBTManager, PADCFG_BT_STATUS,
-                state == 1 ? "Buscando... atualize em alguns segundos" :
-                state == 2 ? "Identificando dispositivos... atualize" :
-                state == 3 ? "Selecione um controle e conecte" :
-                state == 4 ? "Erro na busca Bluetooth" :
-                             "Pressione Buscar");
+    return 0;
+}
+
+static void maizoBtEnableForGames(void)
+{
+    config_set_t *games = configGetByType(CONFIG_GAME);
+    int settings = 0;
+    configGetInt(games, CONFIG_ITEM_PADEMUSETTINGS, &settings);
+    settings = (settings & ~0xFF) | 1 | (1 << 8);
+    configSetInt(games, CONFIG_ITEM_ENABLEPADEMU, 1);
+    configSetInt(games, CONFIG_ITEM_PADEMUSETTINGS, settings);
+    EnablePadEmu = 1;
+    PadEmuSettings = settings;
+    saveConfig(CONFIG_GAME, 0);
 }
 
 void guiGameShowBluetoothManager(void)
 {
-    int result = -1, selected = 0;
+    int result = -1;
+    maizoBtPairDirty = 0;
+    sysBtRestorePairFromConfig();
+    maizoBtConnecting = 0;
+    maizoBtAutoScan = 0;
+    maizoBtPollFrames = 0;
     maizoBtRefresh();
+    if (!((ds34bt_get_status(0) | ds34bt_get_status(1)) & DS34BT_STATE_RUNNING) &&
+        ds34bt_scan_start())
+        maizoBtAutoScan = 1;
     do {
-        result = diaExecuteDialog(diaBTManager, result, 1, NULL);
-        if (result == PADCFG_BT_SCAN) {
-            if (ds34bt_scan_start())
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Buscando por cerca de 10 segundos...");
-            else
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Dongle ocupado ou indisponivel");
-        } else if (result == PADCFG_BT_REFRESH) {
+        result = diaExecuteDialog(diaBTManager, result, 1, &maizoBtUpdater);
+        if (result >= PADCFG_BT_RESULT_0 && result <= PADCFG_BT_RESULT_7) {
+            int selected = result - PADCFG_BT_RESULT_0;
             maizoBtRefresh();
-        } else if (result == PADCFG_BT_CONNECT) {
-            diaGetInt(diaBTManager, PADCFG_BT_DEVICE, &selected);
-            maizoBtRefresh();
-            if (maizoBtState == 1 || maizoBtState == 2)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Busca em andamento. Aguarde e atualize");
-            else if (maizoBtCount == 0)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Nenhum controle encontrado. Tente Buscar");
+            if (selected >= maizoBtCount)
+                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Dispositivo nao esta mais disponivel");
             else if (maizoBtState != 3)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Busca falhou. Tente Buscar novamente");
-            else if (selected < 0 || selected >= maizoBtCount)
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Escolha um endereco Bluetooth valido");
-            else if (ds34bt_scan_connect(selected))
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Conexao iniciada. Aguarde e atualize");
+                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aguarde o fim da busca Bluetooth");
+            else if (guiMsgBox("Conectar a este controle Bluetooth?", 1, NULL)) {
+                if (ds34bt_scan_connect(selected)) {
+                    /* Persist selected MAC immediately: clone pads do not
+                     * necessarily send a link key or reach HID RUNNING. */
+                    maizoBtRecordBond();
+                    if (maizoBtPairDirty) {
+                        saveConfig(CONFIG_GAME, 0);
+                        maizoBtPairDirty = 0;
+                    }
+                    maizoBtConnecting = 1;
+                    maizoBtRefresh();
+                    if (guiMsgBox("Ativar DualShock 4 no PS2 (PadEmu Bluetooth P1)?", 1, NULL))
+                        maizoBtEnableForGames();
+                } else {
+                    diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Falha de conexao. Verifique o DS4");
+                }
+            }
+        } else if (result == PADCFG_BT_SCAN) {
+            maizoBtConnecting = 0;
+            if (ds34bt_scan_start())
+                maizoBtAutoScan = 1;
             else
-                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Nao iniciou: verifique PadEmu e porta P1");
+                diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Adaptador ocupado. Aguarde");
         }
-    } while (result != 0 && result != UIID_BTN_OK);
+    } while (result != 0 && result != UIID_BTN_OK && result != UIID_BTN_CANCEL);
+    maizoBtRecordBond();
+    if (maizoBtPairDirty)
+        saveConfig(CONFIG_GAME, 0);
 }
 
 
-static char twinDataLine[96];
+static u8 maizoUsbDiagIndex;
+static u8 maizoUsbDiagCount;
+static char maizoUsbStatus[112], maizoUsbInfo[112];
 
-static void maizoTwinRefresh(void)
+static void maizoUsbDiagRefresh(void)
 {
-    u8 d[8] = {0};
-    static const char *const status[] = {
-        "Nao enumerado: PS2 nao viu o receptor",
-        "VID/PID 0810:0001 detectado (USB probe)",
-        "Detectado; abrindo endpoint USB",
-        "Rejeitado: interface/configuracao incompativel",
-        "Detectado mas endpoint IN nao abriu",
-        "Falha em configurar dispositivo USB",
-        "USB pronto; teste botoes de P1 e P2",
-        "O receptor USB foi desconectado"};
-    if (!ds34usb_get_twin_diag(d)) {
-        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS, "Driver DS34USB inativo");
-        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, "Ative USB no OPL e reinicie");
+    u8 d[16] = {0};
+    u16 vid, pid;
+    const char *kind, *state;
+    if (!ds34usb_get_device_diag(maizoUsbDiagIndex, d)) {
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    "Detector indisponivel: driver USB inativo");
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA,
+                    "Ative PadEmu USB para observar os dispositivos");
         return;
     }
-    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
-                status[d[0] <= 7 ? d[0] : 0]);
-    snprintf(twinDataLine, sizeof(twinDataLine),
-             "Classe: %02X  Endpoints: %u  Pacotes P1/P2: %u / %u  Estado: %02X",
-             d[1], d[2], d[3], d[4], d[5]);
-    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, twinDataLine);
+    maizoUsbDiagCount = d[0];
+    if (d[0] == 0) {
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    "Nenhum dispositivo observado pelo driver USB");
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA,
+                    "Conecte um dispositivo e pressione Atualizar");
+        return;
+    }
+    if (d[1] == 0xFF) {
+        maizoUsbDiagIndex = 0;
+        if (!ds34usb_get_device_diag(0, d))
+            return;
+    }
+    vid = (u16)d[4] | ((u16)d[5] << 8);
+    pid = (u16)d[6] | ((u16)d[7] << 8);
+    switch (d[9] ? d[9] : d[8]) {
+        case 0x03:
+            kind = d[11] == 1 ? "Teclado HID" :
+                   d[11] == 2 ? "Mouse HID" :
+                                "Dispositivo HID";
+            break;
+        case 0x08:
+            kind = "Armazenamento USB";
+            break;
+        case 0x09:
+            kind = "Hub USB";
+            break;
+        case 0xE0:
+            kind = "Controle wireless/BT";
+            break;
+        default:
+            kind = "Dispositivo USB";
+            break;
+    }
+    switch (d[2]) {
+        case 1:
+            state = "Visto (nao assumido pelo PadEmu)";
+            break;
+        case 2:
+            state = "Reconhecido pelo PadEmu";
+            break;
+        case 3:
+            state = "Abrindo / configurando";
+            break;
+        case 4:
+            state = "Configurado pelo driver";
+            break;
+        case 5:
+            state = "Falha no driver";
+            break;
+        case 6:
+            state = "Desconectado";
+            break;
+        default:
+            state = "Estado desconhecido";
+            break;
+    }
+    snprintf(maizoUsbStatus, sizeof(maizoUsbStatus),
+             "USB %u/%u | %s | %s",
+             (unsigned)d[1] + 1, (unsigned)d[0], kind, state);
+    snprintf(maizoUsbInfo, sizeof(maizoUsbInfo),
+             "VID:%04X PID:%04X | classe:%02X IF:%02X/%02X/%02X EP:%u",
+             vid, pid, d[8], d[9], d[10], d[11], d[12]);
+    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS, maizoUsbStatus);
+    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, maizoUsbInfo);
 }
 
-static void maizoTwinShowDiag(void)
+static void maizoUsbShowDiag(void)
 {
     int result = -1;
+    maizoUsbDiagIndex = 0;
     do {
-        maizoTwinRefresh();
+        maizoUsbDiagRefresh();
         result = diaExecuteDialog(diaTwinDiag, result, 1, NULL);
-    } while (result == PADCFG_TWIN_DIAG_REFRESH);
+        if (result == PADCFG_USB_DIAG_NEXT && maizoUsbDiagCount)
+            maizoUsbDiagIndex = (maizoUsbDiagIndex + 1) % maizoUsbDiagCount;
+    } while (result == PADCFG_TWIN_DIAG_REFRESH || result == PADCFG_USB_DIAG_NEXT);
 }
 
 static int forceGlobalPadMacro;
@@ -745,7 +883,7 @@ static int guiGamePadEmuUpdater(int modified)
 
     diaSetVisible(diaPadEmuConfig, PADCFG_BTINFO, (PadEmuMode == 1) & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_BT_MANAGER, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, (PadEmuMode == 0) & EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, (PadEmuMode == 1) & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, (PadEmuMode == 1) & EnablePadEmu);
 
@@ -797,17 +935,17 @@ static int guiGamePadEmuUpdater(int modified)
             diaSetLabel(diaPadEmuConfig, PADCFG_USBDG_MAC, _l(_STR_NOT_CONNECTED));
         }
 
-        if (ds34usb_get_status(0) & DS34USB_STATE_RUNNING) {
-            if (!ds3macset) {
-                if (ds34usb_get_bdaddr(0, ds3_mac)) {
-                    ds3macset = 1;
-                    diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, bdaddr_to_str(ds3_mac, ds3_str));
-                } else {
-                    ds3macset = 0;
-                }
-            }
-        } else {
-            diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, _l(_STR_NOT_CONNECTED));
+        {
+            u8 pair[MAIZO_BT_PAIR_SIZE];
+            const char *saved = NULL;
+            int haveBond = ds34bt_get_pair_key(pair) && maizoBtPairValid(pair);
+            if (!haveBond && configGetStr(configGetByType(CONFIG_GAME),
+                                          MAIZO_BT_PAIR_CONFIG_KEY, &saved))
+                haveBond = maizoBtPairDecode(saved, pair);
+            if (haveBond)
+                diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, bdaddr_to_str(pair + 1, ds3_str));
+            else
+                diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, _l(_STR_NOT_CONNECTED));
             ds3macset = 0;
         }
     }
@@ -899,7 +1037,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
 
     diaSetVisible(diaPadEmuConfig, PADCFG_BTINFO, PadEmuSettings & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_BT_MANAGER, PadEmuSettings & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, !(PadEmuSettings & 0xFF) && EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, PadEmuSettings & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, PadEmuSettings & EnablePadEmu);
 
@@ -926,7 +1064,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
         }
 
         if (result == PADCFG_TWIN_DIAG)
-            maizoTwinShowDiag();
+            maizoUsbShowDiag();
 
         if (result == PADCFG_BT_MANAGER)
             guiGameShowBluetoothManager();

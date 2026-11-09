@@ -388,7 +388,7 @@ static void bt_config_set(int result, int count, void *arg)
 
     ds34pad_init();
     maizo_scan_count = maizo_scan_state = 0;
-    maizo_pair_target_valid = 0;
+    /* Do not discard an already restored bond when the dongle configures. */
     hci_reset();
     SignalSema(bt_dev.hid_sema);
 }
@@ -598,31 +598,36 @@ static int maizo_scan_start(void)
     hci_cmd_buf[5] = 0x9E;
     hci_cmd_buf[6] = 0x08;
     hci_cmd_buf[7] = 0;
-    HCI_Command(8, hci_cmd_buf);
+    if (HCI_Command(8, hci_cmd_buf) < 0) {
+        maizo_scan_state = 4;
+        return 0;
+    }
     return 1;
 }
 
-static int maizo_scan_connect(u8 index)
+/* Connect by address, shared by discovery selection and saved-pair restore. */
+static int maizo_connect_address(const u8 *address)
 {
     int pad;
-    if (!(bt_dev.status & DS34BT_STATE_USB_CONFIGURED) ||
-        index >= maizo_scan_count || maizo_scan_state != 3)
+    if (!(bt_dev.status & DS34BT_STATE_USB_CONFIGURED))
         return 0;
-    for (pad = 0; pad < MAX_PADS; pad++) {
+    for (pad = 0; pad < MAX_PADS; pad++)
         if (ds34pad[pad].enabled && !pad_status_check(DS34BT_STATE_RUNNING, pad) &&
             !pad_status_check(DS34BT_STATE_CONNECTED, pad))
             break;
-    }
-    if (pad == MAX_PADS)
+    if (pad >= MAX_PADS)
         return 0;
     ds34pad_clear(pad);
-    mips_memcpy(ds34pad[pad].bdaddr, maizo_scan_addr[index], 6);
-    mips_memcpy(maizo_pair_target, maizo_scan_addr[index], 6);
+    /* Do not reuse the previous controller's link key after selection. */
+    if (!maizo_pair_target_valid || memcmp(maizo_pair_target, address, 6) != 0)
+        maizo_key_valid = 0;
+    mips_memcpy(ds34pad[pad].bdaddr, address, 6);
+    mips_memcpy(maizo_pair_target, address, 6);
     maizo_pair_target_valid = 1;
     hci_cmd_buf[0] = HCI_OCF_CREATE_CONNECTION;
     hci_cmd_buf[1] = HCI_OGF_LINK_CNTRL;
     hci_cmd_buf[2] = 13;
-    mips_memcpy(hci_cmd_buf + 3, maizo_pair_target, 6);
+    mips_memcpy(hci_cmd_buf + 3, address, 6);
     hci_cmd_buf[9] = 0x18;
     hci_cmd_buf[10] = 0xCC;
     hci_cmd_buf[11] = 0x01;
@@ -631,9 +636,43 @@ static int maizo_scan_connect(u8 index)
     hci_cmd_buf[14] = 0;
     hci_cmd_buf[15] = 1;
     if (HCI_Command(16, hci_cmd_buf) < 0) {
-        maizo_pair_target_valid = 0;
         ds34pad_clear(pad);
+        maizo_scan_state = 6;
         return 0;
+    }
+    maizo_scan_state = 5;
+    return 1;
+}
+
+static int maizo_scan_connect(u8 index)
+{
+    if (index >= maizo_scan_count || maizo_scan_state != 3)
+        return 0;
+    return maizo_connect_address(maizo_scan_addr[index]);
+}
+
+static int maizo_pair_restore(const u8 *pair)
+{
+    int i, nonzero = 0;
+    if (!(pair[0] & 2))
+        return 0;
+    for (i = 1; i < 7; i++)
+        nonzero |= pair[i];
+    if (!nonzero)
+        return 0;
+    mips_memcpy(maizo_pair_target, pair + 1, 6);
+    maizo_pair_target_valid = 1;
+    maizo_key_valid = (pair[0] & 1) != 0;
+    if (maizo_key_valid) {
+        mips_memcpy(maizo_key_address, pair + 1, 6);
+        mips_memcpy(maizo_key, pair + 7, 16);
+    }
+    /* A stored address does not imply a connected controller. */
+    if (bt_dev.status & DS34BT_STATE_USB_CONFIGURED) {
+        if ((ds34pad[0].status | ds34pad[1].status) & DS34BT_STATE_RUNNING)
+            return 1;
+        if (maizo_scan_state != 5)
+            maizo_connect_address(maizo_pair_target);
     }
     return 1;
 }
@@ -711,6 +750,8 @@ static void HCI_event_task(int result, int bytes)
                 } else if ((hci_buf[3] == HCI_OCF_WRITE_SCAN_ENABLE) && (hci_buf[4] == HCI_OGF_CTRL_BBAND)) {
                     if (hci_buf[5] == 0) {
                         bt_dev.status |= DS34BT_STATE_USB_CONFIGURED;
+                        if (maizo_pair_target_valid && maizo_scan_state == 0)
+                            maizo_connect_address(maizo_pair_target);
                     } else {
                         DelayThread(500);
                         hci_reset();
@@ -719,9 +760,12 @@ static void HCI_event_task(int result, int bytes)
                 break;
 
             case HCI_EVENT_COMMAND_STATUS:
-                if (maizo_scan_state == 1 &&
-                    hci_buf[2] != 0 && hci_buf[4] == HCI_OCF_INQUIRY)
-                    maizo_scan_state = 4;
+                if (hci_buf[2] != 0) {
+                    if (maizo_scan_state == 1 && hci_buf[4] == HCI_OCF_INQUIRY)
+                        maizo_scan_state = 4;
+                    if (maizo_scan_state == 5 && hci_buf[4] == HCI_OCF_CREATE_CONNECTION)
+                        maizo_scan_state = 6;
+                }
                 if (hci_buf[2]) // show status on serial if not OK
                 {
                     DPRINTF("HCI Command Failed: \n");
@@ -754,6 +798,8 @@ static void HCI_event_task(int result, int bytes)
                         break;
                     }
                     pad_status_set(DS34BT_STATE_CONNECTED, i);
+                    if (maizo_scan_state == 5)
+                        maizo_scan_state = 3;
                     /* The clone may never reply to Remote Name. Start HID L2CAP
                      * directly for the address selected/persisted by Maizo. */
                     if (maizo_pair_target_valid && memcmp(maizo_pair_target, ds34pad[i].bdaddr, 6) == 0) {
@@ -771,6 +817,8 @@ static void HCI_event_task(int result, int bytes)
                     }
                 } else {
                     DPRINTF("\t Error 0x%02X \n", hci_buf[2]);
+                    if (maizo_scan_state == 5)
+                        maizo_scan_state = 6;
                 }
                 break;
 
@@ -795,6 +843,9 @@ static void HCI_event_task(int result, int bytes)
                         break;
                     }
                 }
+                if (i < MAX_PADS && maizo_pair_target_valid &&
+                    memcmp(ds34pad[i].bdaddr, maizo_pair_target, 6) == 0)
+                    maizo_scan_state = 6;
                 ds34pad_clear(i);
                 break;
 
@@ -844,6 +895,12 @@ static void HCI_event_task(int result, int bytes)
                         (maizo_pair_target_valid && memcmp(maizo_pair_target, ds34pad[i].bdaddr, 6) == 0)) {
                         ds34pad[i].type = DS4;
                         ds34pad[i].isfake = 0;
+                        /* Legacy PadEmu can accept an incoming DS4 without the
+                         * discovery manager. Remember its MAC for game handoff. */
+                        if (!maizo_pair_target_valid) {
+                            mips_memcpy(maizo_pair_target, ds34pad[i].bdaddr, 6);
+                            maizo_pair_target_valid = 1;
+                        }
                         DPRINTF("\t Type: Dualshock 4 \n");
                     } else {
                         ds34pad[i].type = DS3;
@@ -948,10 +1005,18 @@ static void HCI_event_task(int result, int bytes)
                     maizo_hci_address_cmd(HCI_OCF_USER_CONFIRM_REPLY, hci_buf + 2, NULL, 0);
                 break;
             case HCI_EVENT_LINK_KEY_NOTIFICATION:
-                if (maizo_pairing_allowed(hci_buf + 2)) {
+                /* Accept the key of the user-connected controller even when
+                 * the classic PadEmu path was used instead of inquiry UI. */
+                for (i = 0; i < MAX_PADS; i++)
+                    if (ds34pad[i].enabled &&
+                        memcmp(ds34pad[i].bdaddr, hci_buf + 2, 6) == 0)
+                        break;
+                if (maizo_pairing_allowed(hci_buf + 2) || i < MAX_PADS) {
                     mips_memcpy(maizo_key_address, hci_buf + 2, 6);
                     mips_memcpy(maizo_key, hci_buf + 8, 16);
                     maizo_key_valid = 1;
+                    mips_memcpy(maizo_pair_target, hci_buf + 2, 6);
+                    maizo_pair_target_valid = 1;
                 }
                 break;
             case HCI_EVENT_SIMPLE_PAIRING_COMPLETE:
@@ -1279,6 +1344,13 @@ static int L2CAP_event_task(int result, int bytes)
                             DelayThread(CMD_DELAY);
                             hid_LEDRumble(ds34pad[pad].oldled, 0, 0, pad);
                             pad_status_set(DS34BT_STATE_RUNNING, pad);
+                            /* Also recognize DS4s connected through the older
+                             * PadEmu dialog, which does not call scan_connect. */
+                            if (ds34pad[pad].type == DS4 &&
+                                !maizo_pair_target_valid) {
+                                mips_memcpy(maizo_pair_target, ds34pad[pad].bdaddr, 6);
+                                maizo_pair_target_valid = 1;
+                            }
                         }
                         break;
 
@@ -1437,7 +1509,9 @@ static int hid_LEDRumble(u8 *led, u8 lrum, u8 rrum, int pad)
 
         size += sizeof(output_01_report);
     } else if (ds34pad[pad].type == DS4) {
-        mips_memset(led_buf, 0, PS3_01_REPORT_LEN + 2);
+        /* Always clear the full DS4 Bluetooth output report, not just
+         * the shorter DS3 length. */
+        mips_memset(led_buf, 0, sizeof(led_buf));
 
         led_buf[0] = HID_THDR_SET_REPORT_OUTPUT; // THdr
         led_buf[1] = PS4_11_REPORT_ID;           // Report ID
@@ -1854,6 +1928,8 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34BT_SCAN_CONNECT 13
 
 #define DS34BT_PAIR_GET    14
+#define DS34BT_PAIR_SET    15
+#define DS34BT_PAD_INFO    16
 #define DS34BT_BIND_RPC_ID 0x18E3878F
 
 void rpc_thread(void *data)
@@ -1914,6 +1990,24 @@ void *rpc_sf(int cmd, void *data, int size)
         case DS34BT_SCAN_CONNECT:
             *(u8 *)data = maizo_scan_connect(*(u8 *)data);
             break;
+        case DS34BT_PAIR_SET: {
+            u8 pair[23];
+            mips_memcpy(pair, data, sizeof(pair));
+            *(u8 *)data = maizo_pair_restore(pair);
+            break;
+        }
+        case DS34BT_PAD_INFO: {
+            u8 port = *(u8 *)data;
+            mips_memset(data, 0, 8);
+            if (port < MAX_PADS) {
+                WaitSema(bt_dev.hid_sema);
+                ((u8 *)data)[0] = ds34pad[port].status;
+                ((u8 *)data)[1] = ds34pad[port].type;
+                mips_memcpy((u8 *)data + 2, ds34pad[port].bdaddr, 6);
+                SignalSema(bt_dev.hid_sema);
+            }
+            break;
+        }
         case DS34BT_PAIR_GET:
             mips_memset(data, 0, 64);
             /* Flags: bit 0 = learned link key; bit 1 = chosen BD_ADDR.

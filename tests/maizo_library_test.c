@@ -84,10 +84,50 @@ static void testLargeRefresh(void)
     maizoLibraryClear(&library);
 }
 
+
+/* The carousel is circular but never draws duplicate covers on short lists. */
+static void testCarouselNeighbours(void)
+{
+    int count, i, step, offset, previous;
+    char identity[32];
+    for (count = 0; count <= 7; count++) {
+        maizo_library_t library = {0};
+        for (i = 0; i < count; i++) {
+            snprintf(identity, sizeof(identity), "COVER_%02d", i);
+            assert(maizoLibraryAdd(&library, NULL, NULL, MAIZO_PS2, identity, identity, 0));
+        }
+        maizoLibrarySort(&library);
+        assert(maizoLibraryFilter(&library, MAIZO_ALL));
+        if (!count) {
+            assert(maizoLibraryCarouselSlot(&library, 0) == NULL);
+        } else {
+            for (step = 0; step < count; step++) {
+                if (step)
+                    maizoLibraryMove(&library, 1);
+                assert(maizoLibraryCarouselSlot(&library, 0) == maizoLibrarySlot(&library, 0));
+                assert(maizoLibraryCarouselSlot(&library, -3) == NULL);
+                assert(maizoLibraryCarouselSlot(&library, 3) == NULL);
+                for (offset = -2; offset <= 2; offset++) {
+                    maizo_entry_t *entry = maizoLibraryCarouselSlot(&library, offset);
+                    if (!entry)
+                        continue;
+                    for (previous = -2; previous < offset; previous++)
+                        assert(entry != maizoLibraryCarouselSlot(&library, previous));
+                }
+                if (count >= 5)
+                    for (offset = -2; offset <= 2; offset++)
+                        assert(maizoLibraryCarouselSlot(&library, offset));
+            }
+        }
+        maizoLibraryClear(&library);
+    }
+}
+
 int main(void)
 {
     testLibrary();
     testLargeRefresh();
+    testCarouselNeighbours();
     puts("MAIZO library: deduplication, origin, tabs, favorites, hotplug and 12000-item navigation passed");
     return 0;
 }

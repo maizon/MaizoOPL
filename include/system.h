@@ -12,6 +12,11 @@ int sysGetDiscID(char *discID);
 void sysInitDev9(void);
 void sysShutdownDev9(void);
 void sysReset(int modload_mask);
+#ifdef PADEMU
+void sysBtRestorePairFromConfig(void);
+void sysBtCapturePairForGame(void);
+int sysBtGameHandoffReady(void);
+#endif
 void sysExecExit(void);
 void sysPowerOff(void);
 #ifdef __DECI2_DEBUG
