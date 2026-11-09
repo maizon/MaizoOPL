@@ -686,6 +686,13 @@ void guiGameShowBluetoothManager(void)
                 diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Aguarde o fim da busca Bluetooth");
             else if (guiMsgBox("Conectar a este controle Bluetooth?", 1, NULL)) {
                 if (ds34bt_scan_connect(selected)) {
+                    /* Persist selected MAC immediately: clone pads do not
+                     * necessarily send a link key or reach HID RUNNING. */
+                    maizoBtRecordBond();
+                    if (maizoBtPairDirty) {
+                        saveConfig(CONFIG_GAME, 0);
+                        maizoBtPairDirty = 0;
+                    }
                     maizoBtConnecting = 1;
                     maizoBtRefresh();
                     if (guiMsgBox("Ativar DualShock 4 no PS2 (PadEmu Bluetooth P1)?", 1, NULL))

@@ -122,26 +122,17 @@ static const u8 maizoWiiWordmark[5][8] = {
 
 void maizoDrawBrand(void)
 {
-    /* Match MaizoWii/source/ui.c:brand_overlay exactly on 640x480:
-     * rounded(16,13,102,38), accent at 19,23, label 25,23 (2x),
-     * underline 25,46 (74x2). Draw late, above the wallpaper/HUD. */
-    const u64 bg = GS_SETREG_RGBA(16, 23, 30, 0x80);
-    const u64 accent = GS_SETREG_RGBA(177, 183, 198, 0x80); /* default Wii OLED */
+    /* Identical MaizoWii wordmark pixels, transparent background: no
+     * decorative plaque, opaque rectangle or coloured highlight. */
     const u64 ink = GS_SETREG_RGBA(247, 248, 250, 0x80);
-    const u64 underline = GS_SETREG_RGBA(85, 91, 102, 0x80);
     int letter, row, col;
 
-    rmDrawRect(22, 13, 90, 38, bg);
-    rmDrawRect(16, 19, 6, 26, bg);
-    rmDrawRect(112, 19, 6, 26, bg);
-    rmDrawRect(19, 23, 2, 17, accent);
     for (letter = 0; letter < 5; letter++)
         for (row = 0; row < 8; row++)
             for (col = 0; col < 8; col++)
                 if (maizoWiiWordmark[letter][row] & (1u << col))
                     rmDrawRect(25 + (letter * 8 + col) * 2,
                                23 + row * 2, 2, 2, ink);
-    rmDrawRect(25, 46, 74, 2, underline);
 }
 
 void maizoDrawPanel(int x, int y, int width, int height, int focused)

@@ -1691,9 +1691,10 @@ void deinit(int exception, int modeSelected)
 
 void setDefaultColors(void)
 {
-    gDefaultBgColor[0] = 0x00;
-    gDefaultBgColor[1] = 0x00;
-    gDefaultBgColor[2] = 0x00;
+    /* Neutral graphite grey: readable with white Maizo branding. */
+    gDefaultBgColor[0] = 0x46;
+    gDefaultBgColor[1] = 0x4A;
+    gDefaultBgColor[2] = 0x4E;
 
     gDefaultTextColor[0] = 0xFF;
     gDefaultTextColor[1] = 0xFF;

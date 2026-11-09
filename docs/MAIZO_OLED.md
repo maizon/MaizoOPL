@@ -195,3 +195,24 @@ desses repositórios foi incorporado. Os símbolos de botões permanecem os do O
   pelo dongle ou que religue sozinho apos reset do IOP. Testar em PS2 real:
   conexao no menu, inicio do jogo, 15 minutos de uso, queda, botao PS e
   reinicio do titulo. A compilacao isolada nao valida compatibilidade fisica.
+
+## Atualizacao DS4: handoff, MAC selecionado e reconexao em jogos
+
+- Ao selecionar um DS4 no gerenciador, salvar imediatamente MAC e chave
+  (quando existir) no conf_game.cfg. Controles sem link-key tambem salvam.
+- O endereco escolhido e copiado ao bloco de parametros do PadEmu antes
+  do reset do IOP. Nao solicitar desconexao HCI redundante durante o handoff;
+  o reset real do IOP/USB continua e pode derrubar fisicamente o enlace.
+- Apos iniciar o jogo, o driver PadEmu tenta conectar diretamente ao MAC
+  persistido. Aceita conexao de entrada quando o proprio controle inicia
+  o enlace (botao PS). Em caso de quedas, tenta novamente com backoff.
+- Apos tres tentativas diretas, o jogo inicia uma busca HCI Inquiry
+  Bluetooth Classic, valida o MAC descoberto e repete a conexao. Nunca
+  muda automaticamente para outro controle encontrado.
+- Uma thread IOP de baixa prioridade faz a recuperacao mesmo se nenhum
+  evento de novo pacote for recebido, com limite para conexoes travadas.
+- A logo conserva os cinco glifos bitmap MAIZO do MaizoWii e ocupa o canto
+  esquerdo superior, sem fundo, sem placa e sem qualquer painel opaco.
+- Fundo padrao neutro em cinza grafite RGB(70,74,78).
+- Nao confundir compilacao ou testes host com compatibilidade BT do hardware:
+  reconexao de DS4 paralelo depende tambem do firmware do controle e dongle.

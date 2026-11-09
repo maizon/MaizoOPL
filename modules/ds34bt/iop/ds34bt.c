@@ -618,6 +618,9 @@ static int maizo_connect_address(const u8 *address)
     if (pad >= MAX_PADS)
         return 0;
     ds34pad_clear(pad);
+    /* Do not reuse the previous controller's link key after selection. */
+    if (!maizo_pair_target_valid || memcmp(maizo_pair_target, address, 6) != 0)
+        maizo_key_valid = 0;
     mips_memcpy(ds34pad[pad].bdaddr, address, 6);
     mips_memcpy(maizo_pair_target, address, 6);
     maizo_pair_target_valid = 1;

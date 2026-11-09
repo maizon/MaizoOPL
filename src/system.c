@@ -234,7 +234,11 @@ void sysReset(int modload_mask)
 {
 #ifdef PADEMU
     ds34usb_reset();
-    ds34bt_reset();
+    /* A PS2 game must reinitialize IOP/USB anyway. Do not additionally
+     * request a Bluetooth link disconnect while handing off the selected
+     * DS4 to the game's PadEmu module. */
+    if (!sysBtGameHandoffReady())
+        ds34bt_reset();
 #endif
     fileXioExit();
     SifExitIopHeap();

@@ -523,10 +523,12 @@ static int maizo_pairing_allowed(const u8 *addr)
 
 void ds34bt_seed_pair_key(const u8 *key)
 {
-    /* BD_ADDR is useful even without a link key (e.g., Just Works clones).
-     * Old one-bit key records remain valid for compatibility. */
-    maizo_key_valid = (key[0] & 1) != 0;
-    maizo_target_valid = (key[0] & 2) != 0 || maizo_key_valid;
+    int i, nonzero = 0;
+    /* An all-zero MAC must never be used as a reconnect target. */
+    for (i = 1; i < 7; i++)
+        nonzero |= key[i];
+    maizo_key_valid = nonzero && (key[0] & 1) != 0;
+    maizo_target_valid = nonzero && ((key[0] & 2) != 0 || maizo_key_valid);
     if (maizo_target_valid)
         mips_memcpy(maizo_target, key + 1, 6);
     if (maizo_key_valid) {
@@ -535,42 +537,151 @@ void ds34bt_seed_pair_key(const u8 *key)
     }
 }
 
-static u8 maizo_reconnect_tries;
+/* Game-side discovery/connection manager for the MAC saved in conf_game.cfg.
+ * The IOP USB reset is unavoidable; recover the DS4 without a menu UI. */
+#define MAIZO_BT_MAX_DIRECT_TRIES 3
+#define MAIZO_BT_TICK_US          2000000
 
-static void maizo_reconnect_gamepad(void)
+static u8 maizo_reconnect_tries;
+static u8 maizo_link_pending, maizo_pending_ticks, maizo_hid_ticks;
+static u8 maizo_scanning, maizo_scan_ticks, maizo_scan_seen, maizo_cooldown;
+static int maizo_worker_thread_id = -1;
+static u8 maizo_worker_running;
+
+static int maizo_reconnect_gamepad(void)
 {
     int pad;
     static const u8 options[7] = {0x18, 0xCC, 0x01, 0x00, 0x00, 0x00, 0x01};
 
-    if (!maizo_target_valid || maizo_reconnect_tries >= 3 ||
-        !(bt_dev.status & DS34BT_STATE_USB_CONFIGURED))
-        return;
-    /* An ACL connection may still be completing its HID negotiation. Do
-     * not clear that slot just to start another outgoing connection. */
+    if (!maizo_target_valid || maizo_reconnect_tries >= MAIZO_BT_MAX_DIRECT_TRIES ||
+        !(bt_dev.status & DS34BT_STATE_USB_CONFIGURED) ||
+        maizo_link_pending || maizo_scanning)
+        return 0;
+    /* Do not clear an ACL link still negotiating L2CAP/HID. */
     for (pad = 0; pad < MAX_PADS; pad++)
         if (ds34pad[pad].enabled &&
             (ds34pad[pad].status & (DS34BT_STATE_CONNECTED | DS34BT_STATE_RUNNING)) &&
             memcmp(ds34pad[pad].bdaddr, maizo_target, 6) == 0)
-            return;
+            return 0;
     for (pad = 0; pad < MAX_PADS; pad++)
         if (ds34pad[pad].enabled &&
             !(ds34pad[pad].status & (DS34BT_STATE_CONNECTED | DS34BT_STATE_RUNNING)))
             break;
     if (pad >= MAX_PADS)
-        return;
+        return 0;
 
     ds34pad_clear(pad);
     mips_memcpy(ds34pad[pad].bdaddr, maizo_target, 6);
     ds34pad[pad].type = DS4;
     ds34pad[pad].isfake = 0;
     maizo_reconnect_tries++;
-    /* The game resets the IOP and therefore breaks the menu Bluetooth link.
-     * Create a new HCI connection to the saved controller on game startup. */
-    maizo_hci_address_cmd(HCI_OCF_CREATE_CONNECTION, maizo_target, options,
-                          sizeof(options));
+    if (maizo_hci_address_cmd(HCI_OCF_CREATE_CONNECTION, maizo_target, options,
+                              sizeof(options)) < 0) {
+        ds34pad_clear(pad);
+        maizo_cooldown = 1;
+        return 0;
+    }
+    maizo_link_pending = 1;
+    maizo_pending_ticks = 0;
+    return 1;
 }
 
-static void HCI_event_task(int result)
+static void maizo_discover_selected_pad(void)
+{
+    if (maizo_scanning || maizo_link_pending)
+        return;
+    hci_cmd_buf[0] = HCI_OCF_INQUIRY;
+    hci_cmd_buf[1] = HCI_OGF_LINK_CNTRL;
+    hci_cmd_buf[2] = 5;
+    hci_cmd_buf[3] = 0x33;
+    hci_cmd_buf[4] = 0x8B;
+    hci_cmd_buf[5] = 0x9E;
+    hci_cmd_buf[6] = 4; /* Inquiry lasts approximately five seconds. */
+    hci_cmd_buf[7] = 0;
+    if (HCI_Command(8, hci_cmd_buf) >= 0) {
+        maizo_scanning = 1;
+        maizo_scan_ticks = 0;
+        maizo_scan_seen = 0;
+    } else {
+        maizo_cooldown = 4;
+    }
+}
+
+/* Low-priority periodic recovery keeps running during PS2 games, rather than
+ * relying on a new HCI interrupt to trigger the next connection attempt. */
+static void maizo_bt_worker(void *arg)
+{
+    (void)arg;
+    while (maizo_worker_running) {
+        int i, connected = 0;
+        DelayThread(MAIZO_BT_TICK_US);
+        if (!maizo_worker_running)
+            break;
+        WaitSema(bt_dev.hid_sema);
+        if (!maizo_target_valid ||
+            !(bt_dev.status & DS34BT_STATE_USB_CONFIGURED)) {
+            SignalSema(bt_dev.hid_sema);
+            continue;
+        }
+        for (i = 0; i < MAX_PADS; i++) {
+            if (!ds34pad[i].enabled ||
+                memcmp(ds34pad[i].bdaddr, maizo_target, 6) != 0)
+                continue;
+            if (pad_status_check(DS34BT_STATE_RUNNING, i)) {
+                maizo_hid_ticks = 0;
+                connected = 1;
+                break;
+            }
+            if (pad_status_check(DS34BT_STATE_CONNECTED, i)) {
+                connected = 1;
+                /* Recover stalled ACL/HID negotiation after 12 seconds. */
+                if (++maizo_hid_ticks >= 6 &&
+                    ds34pad[i].hci_handle != 0x0FFF) {
+                    maizo_hid_ticks = 0;
+                    hci_disconnect(ds34pad[i].hci_handle);
+                }
+                break;
+            }
+        }
+        if (!connected) {
+            maizo_hid_ticks = 0;
+            if (maizo_link_pending) {
+                if (++maizo_pending_ticks >= 5) {
+                    /* Do not remain stuck on an HCI connection with no
+                     * completion event; cancel and retry after a cooldown. */
+                    maizo_hci_address_cmd(HCI_OCF_CREATE_CONNECTION_CANCEL,
+                                          maizo_target, NULL, 0);
+                    maizo_link_pending = 0;
+                    maizo_cooldown = 1;
+                    for (i = 0; i < MAX_PADS; i++)
+                        if (memcmp(ds34pad[i].bdaddr, maizo_target, 6) == 0 &&
+                            !(ds34pad[i].status & (DS34BT_STATE_CONNECTED |
+                                                   DS34BT_STATE_RUNNING)))
+                            ds34pad_clear(i);
+                }
+            } else if (maizo_scanning) {
+                if (++maizo_scan_ticks >= 7) {
+                    hci_cmd_buf[0] = HCI_OCF_INQUIRY_CANCEL;
+                    hci_cmd_buf[1] = HCI_OGF_LINK_CNTRL;
+                    hci_cmd_buf[2] = 0;
+                    HCI_Command(3, hci_cmd_buf);
+                    maizo_scanning = 0;
+                    maizo_reconnect_tries = 0;
+                    maizo_cooldown = 2;
+                }
+            } else if (maizo_cooldown) {
+                maizo_cooldown--;
+            } else if (maizo_reconnect_tries >= MAIZO_BT_MAX_DIRECT_TRIES) {
+                maizo_discover_selected_pad();
+            } else {
+                maizo_reconnect_gamepad();
+            }
+        }
+        SignalSema(bt_dev.hid_sema);
+    }
+}
+
+static void HCI_event_task(int result, int bytes)
 {
     int i, pad;
 
@@ -580,6 +691,29 @@ static void HCI_event_task(int result)
         /*  buf[n] = Event Parameters based on each event  */
         DPRINTF("HCI event = 0x%02X \n", hci_buf[0]);
         switch (hci_buf[0]) { // switch on event type
+            case HCI_EVENT_INQUIRY_RESULT:
+            case HCI_EVENT_INQUIRY_RESULT_RSSI:
+            case HCI_EVENT_EXTENDED_INQUIRY_RESULT:
+                if (maizo_scanning && maizo_target_valid && bytes >= 9) {
+                    int k, n = hci_buf[2];
+                    if (hci_buf[0] == HCI_EVENT_EXTENDED_INQUIRY_RESULT && n > 1)
+                        n = 1;
+                    for (k = 0; k < n && 3 + 6 * (k + 1) <= bytes; k++)
+                        if (memcmp(hci_buf + 3 + 6 * k, maizo_target, 6) == 0) {
+                            maizo_scan_seen = 1;
+                            break;
+                        }
+                }
+                break;
+
+            case HCI_EVENT_INQUIRY_COMPLETE:
+                if (maizo_scanning) {
+                    maizo_scanning = 0;
+                    maizo_reconnect_tries = 0;
+                    maizo_cooldown = maizo_scan_seen ? 0 : 4;
+                }
+                break;
+
             case HCI_EVENT_COMMAND_COMPLETE:
                 DPRINTF("HCI Command Complete = 0x%02X \n", hci_buf[3]);
                 DPRINTF("\tReturned = 0x%02X \n", hci_buf[5]);
@@ -611,11 +745,25 @@ static void HCI_event_task(int result)
                     DPRINTF("\t Status = 0x%02X \n", hci_buf[2]);
                     DPRINTF("\t Command_OpCode(OGF) = 0x%02X \n", ((hci_buf[5] & 0xFC) >> 2));
                     DPRINTF("\t Command_OpCode(OCF) = 0x%02X 0x%02X \n", (hci_buf[5] & 0x03), hci_buf[4]);
+                    if (hci_buf[4] == HCI_OCF_CREATE_CONNECTION &&
+                        hci_buf[5] == HCI_OGF_LINK_CNTRL) {
+                        maizo_link_pending = 0;
+                        maizo_cooldown = 1;
+                    } else if (hci_buf[4] == HCI_OCF_INQUIRY &&
+                               hci_buf[5] == HCI_OGF_LINK_CNTRL) {
+                        maizo_scanning = 0;
+                        maizo_cooldown = 3;
+                    }
                 }
                 break;
 
             case HCI_EVENT_CONNECT_COMPLETE:
                 DPRINTF("HCI event Connect Complete: \n");
+                if (maizo_target_valid && bytes >= 11 &&
+                    memcmp(hci_buf + 5, maizo_target, 6) == 0) {
+                    maizo_link_pending = 0;
+                    maizo_pending_ticks = 0;
+                }
                 if (!hci_buf[2]) { // check if connected OK
                     DPRINTF("\t Connection_Handle 0x%02X \n", hci_buf[3] | ((hci_buf[4] & 0x0F) << 8));
                     DPRINTF("\t Requested by BD_ADDR: \n\t");
@@ -655,10 +803,11 @@ static void HCI_event_task(int result)
                     }
                 } else {
                     DPRINTF("\t Error 0x%02X \n", hci_buf[2]);
-                    /* Re-establish the known DS4 after the game's IOP reset.
-                     * Retry only a bounded number of times, never indefinitely. */
-                    if (maizo_target_valid && memcmp(hci_buf + 5, maizo_target, 6) == 0)
-                        maizo_reconnect_gamepad();
+                    /* Retry from the worker, not recursively from this HCI
+                     * completion callback. */
+                    if (maizo_target_valid && bytes >= 11 &&
+                        memcmp(hci_buf + 5, maizo_target, 6) == 0)
+                        maizo_cooldown = 1;
                 }
                 break;
 
@@ -691,8 +840,10 @@ static void HCI_event_task(int result)
                     int local_close = ds34pad[i].status &
                                       (DS34BT_STATE_DISCONNECT_REQUEST | DS34BT_STATE_DISCONNECTING);
                     ds34pad_clear(i);
-                    if (was_target && !local_close)
-                        maizo_reconnect_gamepad();
+                    if (was_target && !local_close) {
+                        maizo_link_pending = 0;
+                        maizo_cooldown = 1;
+                    }
                 }
                 break;
 
@@ -750,6 +901,14 @@ static void HCI_event_task(int result)
 
             case HCI_EVENT_CONNECT_REQUEST:
                 DPRINTF("HCI Connection Requested by BD_ADDR: \n\t");
+                /* Pressing PS can initiate an incoming connection. Accept
+                 * only the MAC chosen in the Maizo Bluetooth manager. */
+                if (maizo_target_valid && memcmp(hci_buf + 2, maizo_target, 6) != 0) {
+                    hci_reject_connection(hci_buf + 2);
+                    break;
+                }
+                maizo_link_pending = 0;
+                maizo_pending_ticks = 0;
                 for (i = 0; i < 6; i++) {
                     DPRINTF("0x%02X", hci_buf[2 + i]);
                     if (i < 5)
@@ -903,7 +1062,7 @@ static void ds34pad_init()
 static void hci_event_cb(int resultCode, int bytes, void *arg)
 {
     PollSema(bt_dev.hid_sema);
-    HCI_event_task(resultCode);
+    HCI_event_task(resultCode, bytes);
     UsbInterruptTransfer(bt_dev.interruptEndp, hci_buf, MAX_BUFFER_SIZE, hci_event_cb, NULL);
     SignalSema(bt_dev.hid_sema);
 }
@@ -1164,8 +1323,11 @@ static int L2CAP_event_task(int result, int bytes)
                             hid_LEDRumbleCommand(ds34pad[pad].oldled, 0, 0, pad);
                             pad_status_set(DS34BT_STATE_RUNNING, pad);
                             if (maizo_target_valid &&
-                                memcmp(ds34pad[pad].bdaddr, maizo_target, 6) == 0)
+                                memcmp(ds34pad[pad].bdaddr, maizo_target, 6) == 0) {
                                 maizo_reconnect_tries = 0;
+                                maizo_link_pending = 0;
+                                maizo_hid_ticks = 0;
+                            }
                         }
                         ds34pad[pad].btn_delay = 0xFF;
                         break;
@@ -1572,6 +1734,27 @@ int ds34bt_init(u8 pads, u8 options)
 
     UsbRegisterDriver(&chrg_driver);
 
+    /* Game-side selected-MAC Bluetooth manager. */
+    {
+        iop_thread_t thread;
+        mips_memset(&thread, 0, sizeof(thread));
+        thread.attr = TH_C;
+        thread.thread = maizo_bt_worker;
+        thread.priority = 60;
+        thread.stacksize = 0x1000;
+        maizo_worker_running = 1;
+        maizo_worker_thread_id = CreateThread(&thread);
+        if (maizo_worker_thread_id >= 0) {
+            if (StartThread(maizo_worker_thread_id, NULL) < 0) {
+                DeleteThread(maizo_worker_thread_id);
+                maizo_worker_thread_id = -1;
+                maizo_worker_running = 0;
+            }
+        } else {
+            maizo_worker_running = 0;
+        }
+    }
+
     return 1;
 }
 
@@ -1579,6 +1762,12 @@ void ds34bt_reset()
 {
     int pad;
 
+    maizo_worker_running = 0;
+    if (maizo_worker_thread_id >= 0) {
+        TerminateThread(maizo_worker_thread_id);
+        DeleteThread(maizo_worker_thread_id);
+        maizo_worker_thread_id = -1;
+    }
     if (bt_dev.status & DS34BT_STATE_USB_AUTHORIZED) {
         for (pad = 0; pad < MAX_PADS; pad++) {
             WaitSema(bt_dev.hid_sema);
