@@ -139,3 +139,19 @@ desses repositórios foi incorporado. Os símbolos de botões permanecem os do O
 - Cinco posicoes com mesma linha de base e escala de capas que respeita proporcao.
 - Fonte, titulo, ART e acao do jogo referenciam a mesma entrada da biblioteca.
 - Bluetooth P1/P2 so aparece como pronto quando o driver retorna estado RUNNING.
+
+## Bluetooth DualShock 4 / jogo
+
+- O gerenciador inicia o inquiry Bluetooth ao abrir e atualiza a lista automaticamente.
+- Antes de conectar um dispositivo desconhecido, pede confirmacao do usuario.
+- O HUD e a lista mostram CONECTADO apenas no estado HID RUNNING, nao apenas por
+  haver uma conexao Bluetooth ACL ou endereco selecionado.
+- A ativacao global do PadEmu Bluetooth P1 para jogos PS2 requer confirmacao
+  separada; grava em CONFIG_GAME sem apagar ajustes de vibracao/portas existentes.
+- Configuracoes de PadEmu por jogo continuam com prioridade. Se um jogo desabilitou
+  PadEmu individualmente, precisa revisar a configuracao desse jogo.
+- O modulo IOP em jogo tenta reconectar ao endereco escolhido depois do reset,
+  com no maximo tres tentativas. Isso NAO pode ligar fisicamente um DS4 desligado
+  nem garante reconexao de todos os dongles ou revisoes de controle.
+- Bluetooth usa dongle USB Classico compativel com o driver; nao substitui
+  drivers de gamepad USB ou controles oficiais do PS2.

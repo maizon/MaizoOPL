@@ -535,12 +535,14 @@ void ds34bt_seed_pair_key(const u8 *key)
     }
 }
 
+static u8 maizo_reconnect_tries;
+
 static void maizo_reconnect_gamepad(void)
 {
     int pad;
     static const u8 options[7] = {0x18, 0xCC, 0x01, 0x00, 0x00, 0x00, 0x01};
 
-    if (!maizo_target_valid)
+    if (!maizo_target_valid || maizo_reconnect_tries >= 3)
         return;
     for (pad = 0; pad < MAX_PADS; pad++)
         if (ds34pad[pad].enabled)
@@ -552,6 +554,7 @@ static void maizo_reconnect_gamepad(void)
     mips_memcpy(ds34pad[pad].bdaddr, maizo_target, 6);
     ds34pad[pad].type = DS4;
     ds34pad[pad].isfake = 0;
+    maizo_reconnect_tries++;
     /* The game resets the IOP and therefore breaks the menu Bluetooth link.
      * Create a new HCI connection to the saved controller on game startup. */
     maizo_hci_address_cmd(HCI_OCF_CREATE_CONNECTION, maizo_target, options,
@@ -624,6 +627,7 @@ static void HCI_event_task(int result)
                         break;
                     }
                     pad_status_set(DS34BT_STATE_CONNECTED, i);
+                    maizo_reconnect_tries = 0;
                     /* The clone may never reply to Remote Name. Start HID L2CAP
                      * directly for the address selected/persisted by Maizo. */
                     if (maizo_target_valid && memcmp(maizo_target, ds34pad[i].bdaddr, 6) == 0) {
@@ -641,6 +645,10 @@ static void HCI_event_task(int result)
                     }
                 } else {
                     DPRINTF("\t Error 0x%02X \n", hci_buf[2]);
+                    /* Re-establish the known DS4 after the game's IOP reset.
+                     * Retry only a bounded number of times, never indefinitely. */
+                    if (maizo_target_valid && memcmp(hci_buf + 5, maizo_target, 6) == 0)
+                        maizo_reconnect_gamepad();
                 }
                 break;
 

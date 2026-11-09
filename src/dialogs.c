@@ -640,21 +640,21 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_TERMINATOR}};
 
 struct UIItem diaBTManager[] = {
-    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Maizo Bluetooth Gamepad Manager", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MAIZO  /  CONTROLES BLUETOOTH", -1}}},
     {UI_SPLITTER},
-    {UI_LABEL, PADCFG_BT_STATUS, 1, 1, -1, 0, 0, {.label = {"Pronto para buscar", -1}}},
+    {UI_LABEL, PADCFG_BT_STATUS, 1, 1, -1, 0, 0, {.label = {"Procurando controles...", -1}}},
     {UI_BREAK},
     {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Controles Bluetooth Classic:", -1}}},
     {UI_SPACER},
     {UI_ENUM, PADCFG_BT_DEVICE, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
     {UI_BREAK},
-    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Aperte X para escolher, X de novo para sair da lista", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"X seleciona  |  Confirme antes de conectar", -1}}},
     {UI_BREAK},
-    {UI_BUTTON, PADCFG_BT_SCAN, 1, 1, -1, 0, 0, {.label = {"Buscar", -1}}},
+    {UI_BUTTON, PADCFG_BT_SCAN, 1, 1, -1, 0, 0, {.label = {"Buscar novamente", -1}}},
     {UI_SPACER},
-    {UI_BUTTON, PADCFG_BT_REFRESH, 1, 1, -1, 0, 0, {.label = {"Atualizar lista", -1}}},
+    {UI_BUTTON, PADCFG_BT_REFRESH, 1, 1, -1, 0, 0, {.label = {"Atualizar agora", -1}}},
     {UI_BREAK},
-    {UI_BUTTON, PADCFG_BT_CONNECT, 1, 1, -1, 0, 0, {.label = {"Parear / Conectar", -1}}},
+    {UI_BUTTON, PADCFG_BT_CONNECT, 1, 1, -1, 0, 0, {.label = {"Conectar controle", -1}}},
     {UI_BREAK},
     {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
     {UI_TERMINATOR}};
