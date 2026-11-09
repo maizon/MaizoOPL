@@ -27,6 +27,9 @@
 #include "include/pggsm.h"
 #include "include/cheatman.h"
 #include "include/xparam.h"
+#ifdef PADEMU
+#include "include/maizo_bt_pair.h"
+#endif
 
 #ifdef PADEMU
 #include <libds34bt.h>
@@ -151,6 +154,53 @@ exit:
 #define OPL_SIF_CMD_BUFF_SIZE 1
 static SifCmdHandlerData_t OplSifCmdbuffer[OPL_SIF_CMD_BUFF_SIZE];
 static unsigned char dev9Initialized = 0, dev9Loaded = 0, dev9InitCount = 0;
+
+#ifdef PADEMU
+static u8 maizoBtLaunchPair[MAIZO_BT_PAIR_SIZE];
+static int maizoBtLaunchValid, maizoBtHandoff;
+
+/* Restore a durable bond before searching or starting a new connection. */
+void sysBtRestorePairFromConfig(void)
+{
+    const char *hex = NULL;
+    u8 bond[MAIZO_BT_PAIR_SIZE];
+    if (configGetStr(configGetByType(CONFIG_GAME), MAIZO_BT_PAIR_CONFIG_KEY, &hex) &&
+        maizoBtPairDecode(hex, bond))
+        ds34bt_set_pair_key(bond);
+}
+
+/* Capture the MAC/key while menu RPC is still alive, before IOP teardown. */
+void sysBtCapturePairForGame(void)
+{
+    const char *hex = NULL;
+    u8 live[MAIZO_BT_PAIR_SIZE];
+    config_set_t *game = configGetByType(CONFIG_GAME);
+    maizoBtLaunchValid = maizoBtHandoff = 0;
+    memset(maizoBtLaunchPair, 0, sizeof(maizoBtLaunchPair));
+    if (!gEnablePadEmu || !(gPadEmuSettings & 0xFF))
+        return;
+    if (configGetStr(game, MAIZO_BT_PAIR_CONFIG_KEY, &hex) &&
+        maizoBtPairDecode(hex, maizoBtLaunchPair))
+        maizoBtLaunchValid = 1;
+    if (ds34bt_get_pair_key(live) && maizoBtPairValid(live)) {
+        char text[MAIZO_BT_PAIR_HEX_SIZE];
+        maizoBtPairEncode(live, text);
+        memcpy(maizoBtLaunchPair, live, sizeof(live));
+        maizoBtLaunchValid = 1;
+        if (!hex || strcmp(hex, text) != 0) {
+            configSetStr(game, MAIZO_BT_PAIR_CONFIG_KEY, text);
+            /* A failed best-effort disk save never blocks game launch. */
+            configWrite(game);
+        }
+    }
+    maizoBtHandoff = maizoBtLaunchValid;
+}
+
+int sysBtGameHandoffReady(void)
+{
+    return maizoBtHandoff;
+}
+#endif
 
 void sysInitDev9(void)
 {
@@ -942,8 +992,9 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     config->PadEmuSettings = (unsigned int)(gPadEmuSettings >> 8);
     config->PadMacroSettings = (unsigned int)(gPadMacroSettings);
     memset(config->MaizoBtPair, 0, sizeof(config->MaizoBtPair));
-    if (gEnablePadEmu && (gPadEmuSettings & 0xFF))
-        ds34bt_get_pair_key(config->MaizoBtPair);
+    /* Do not fetch the bond after deinit: menu IOP may already be gone. */
+    if (gEnablePadEmu && (gPadEmuSettings & 0xFF) && maizoBtLaunchValid)
+        memcpy(config->MaizoBtPair, maizoBtLaunchPair, sizeof(config->MaizoBtPair));
 #endif
 
     config->CustomOSDConfigParam.spdifMode = PARAM.spdifMode;

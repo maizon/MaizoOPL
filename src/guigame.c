@@ -16,6 +16,7 @@
 #include "include/guigame.h"
 #include "include/ds34common.h"
 #include "include/vmc_groups.h"
+#include "include/maizo_bt_pair.h"
 
 #ifdef PADEMU
 #include <libds34bt.h>
@@ -550,6 +551,24 @@ static int dg_discon = 0;
 static int ver_set = 0, feat_set = 0;
 
 static int forceGlobalPadEmu;
+static int maizoBtPairDirty;
+
+static void maizoBtRecordBond(void)
+{
+    u8 key[MAIZO_BT_PAIR_SIZE];
+    char encoded[MAIZO_BT_PAIR_HEX_SIZE];
+    const char *previous = NULL;
+    config_set_t *games = configGetByType(CONFIG_GAME);
+    if (!ds34bt_get_pair_key(key) || !maizoBtPairValid(key))
+        return;
+    maizoBtPairEncode(key, encoded);
+    if (!configGetStr(games, MAIZO_BT_PAIR_CONFIG_KEY, &previous) ||
+        strcmp(previous, encoded) != 0) {
+        configSetStr(games, MAIZO_BT_PAIR_CONFIG_KEY, encoded);
+        maizoBtPairDirty = 1;
+    }
+}
+
 static char maizoBtLabels[8][84];
 static int maizoBtCount, maizoBtState, maizoBtConnecting, maizoBtAutoScan;
 static unsigned int maizoBtPollFrames;
@@ -563,6 +582,8 @@ static void maizoBtRefresh(void)
     int p1 = ds34bt_get_status(0);
     int p2 = ds34bt_get_status(1);
     int havePair = ds34bt_get_pair_key(paired);
+    if ((p1 | p2) & DS34BT_STATE_CONNECTED)
+        maizoBtRecordBond();
 
     for (i = 0; i < 8; i++) {
         int ok = ds34bt_scan_get(i, addr, name, &state, &count);
@@ -643,6 +664,8 @@ static void maizoBtEnableForGames(void)
 void guiGameShowBluetoothManager(void)
 {
     int result = -1;
+    maizoBtPairDirty = 0;
+    sysBtRestorePairFromConfig();
     maizoBtConnecting = 0;
     maizoBtAutoScan = 0;
     maizoBtPollFrames = 0;
@@ -676,6 +699,9 @@ void guiGameShowBluetoothManager(void)
                 diaSetLabel(diaBTManager, PADCFG_BT_STATUS, "Adaptador ocupado. Aguarde");
         }
     } while (result != 0 && result != UIID_BTN_OK && result != UIID_BTN_CANCEL);
+    maizoBtRecordBond();
+    if (maizoBtPairDirty)
+        saveConfig(CONFIG_GAME, 0);
 }
 
 
@@ -840,17 +866,17 @@ static int guiGamePadEmuUpdater(int modified)
             diaSetLabel(diaPadEmuConfig, PADCFG_USBDG_MAC, _l(_STR_NOT_CONNECTED));
         }
 
-        if (ds34usb_get_status(0) & DS34USB_STATE_RUNNING) {
-            if (!ds3macset) {
-                if (ds34usb_get_bdaddr(0, ds3_mac)) {
-                    ds3macset = 1;
-                    diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, bdaddr_to_str(ds3_mac, ds3_str));
-                } else {
-                    ds3macset = 0;
-                }
-            }
-        } else {
-            diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, _l(_STR_NOT_CONNECTED));
+        {
+            u8 pair[MAIZO_BT_PAIR_SIZE];
+            const char *saved = NULL;
+            int haveBond = ds34bt_get_pair_key(pair) && maizoBtPairValid(pair);
+            if (!haveBond && configGetStr(configGetByType(CONFIG_GAME),
+                                          MAIZO_BT_PAIR_CONFIG_KEY, &saved))
+                haveBond = maizoBtPairDecode(saved, pair);
+            if (haveBond)
+                diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, bdaddr_to_str(pair + 1, ds3_str));
+            else
+                diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, _l(_STR_NOT_CONNECTED));
             ds3macset = 0;
         }
     }

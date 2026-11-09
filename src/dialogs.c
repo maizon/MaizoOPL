@@ -611,7 +611,7 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_SPACER},
     {UI_LABEL, PADCFG_USBDG_MAC, 1, 1, -1, 0, 0, {.label = {"", -1}}},
     {UI_BREAK},
-    {UI_LABEL, PADCFG_PAD_MAC_STR, 1, 1, -1, -50, 0, {.label = {NULL, _STR_PAD_MAC}}},
+    {UI_LABEL, PADCFG_PAD_MAC_STR, 1, 1, -1, -50, 0, {.label = {"MAC do controle pareado", -1}}},
     {UI_SPACER},
     {UI_LABEL, PADCFG_PAD_MAC, 1, 1, -1, 0, 0, {.label = {"", -1}}},
     {UI_BREAK},

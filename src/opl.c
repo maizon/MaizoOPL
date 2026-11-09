@@ -1016,6 +1016,10 @@ static void _loadConfig()
     }
 
     applyConfig(themeID, langID, 0);
+#ifdef PADEMU
+    if (result & CONFIG_GAME)
+        sysBtRestorePairFromConfig();
+#endif
 
     lscret = result;
     lscstatus = 0;
@@ -1666,7 +1670,10 @@ void deinit(int exception, int modeSelected)
 
 #ifdef PADEMU
     ds34usb_reset();
-    ds34bt_reset();
+    /* Game loader resets the IOP: avoid explicitly switching off the DS4
+     * before bt_pademu.irx can attempt the connection handoff. */
+    if (!sysBtGameHandoffReady())
+        ds34bt_reset();
 #endif
     unloadPads();
 

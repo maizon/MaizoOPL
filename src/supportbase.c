@@ -653,6 +653,7 @@ int sbPrepare(base_game_info_t *game, config_set_t *configSet, int size_cdvdman,
     if (gEnablePadEmu) {
         settings->fakemodule_flags |= FAKE_MODULE_FLAG_USBD;
     }
+    sysBtCapturePairForGame();
 #endif
     // sanitise the settings
     gOSDLanguageSource = 0;
