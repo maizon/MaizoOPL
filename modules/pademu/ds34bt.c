@@ -1304,12 +1304,18 @@ static int L2CAP_event_task(int result, int bytes)
                         DPRINTF("\t FLAG = 0x%04X \n", (l2cap_buf[14] | (l2cap_buf[15] << 8)));
                         DPRINTF("\t RESULT = 0x%04X \n", (l2cap_buf[16] | (l2cap_buf[17] << 8)));
 
+                        /* Only configure HID after successful L2CAP setup. */
+                        if (bytes < 20 || (l2cap_buf[16] | (l2cap_buf[17] << 8)) != 0)
+                            break;
+
                         if ((l2cap_buf[12] | (l2cap_buf[13] << 8)) == control_dcid) {
                             if (ds34pad[pad].type == DS4) {
                                 identifier++;
                                 l2cap_connection_request(ds34pad[pad].hci_handle, identifier, interrupt_dcid, L2CAP_PSM_INTR);
                             }
                         } else if ((l2cap_buf[12] | (l2cap_buf[13] << 8)) == interrupt_dcid) {
+                            if (pad_status_check(DS34BT_STATE_RUNNING, pad))
+                                break; /* Duplicate response: do not reinitialize HID. */
                             hid_initDS34(pad);
                             if (ds34pad[pad].type == DS3) {
                                 ds34pad[pad].oldled[0] = led_patterns[pad][1];
@@ -1382,7 +1388,9 @@ static void l2cap_event_cb(int resultCode, int bytes, void *arg)
 
     ret = L2CAP_event_task(resultCode, bytes);
 
-    if (ret < MAX_PADS) {
+    /* USB transfer failures return -1. Never access ds34pad[-1], which
+     * corrupts IOP memory and may interrupt active Bluetooth sessions. */
+    if (ret >= 0 && ret < MAX_PADS) {
         if (pad_status_check(DS34BT_STATE_RUNNING, ret)) {
             if (pad_status_check(DS34BT_STATE_DISCONNECT_REQUEST, ret)) {
                 if (!ds34pad[ret].isfake) {
