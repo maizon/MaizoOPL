@@ -890,6 +890,14 @@ static void HCI_event_task(int result, int bytes)
                             memcmp(ds34pad[i].bdaddr, maizo_target, 6) == 0) {
                             maizo_auth_failed = 1;
                             maizo_auth_failed_handle = handle;
+                            /* Repeated authentication with a stale saved
+                             * clone link key can never succeed. Forget it
+                             * only for actual key/authentication rejection.
+                             * Keep the selected MAC so pairing via
+                             * PS+SHARE remains possible. */
+                            if (hci_buf[2] == 0x05 || hci_buf[2] == 0x06 ||
+                                hci_buf[2] == 0x0E)
+                                maizo_key_valid = 0;
                             break;
                         }
                     }
