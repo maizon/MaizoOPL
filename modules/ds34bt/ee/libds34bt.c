@@ -19,6 +19,8 @@
 #define DS34BT_SCAN_CONNECT 13
 
 #define DS34BT_PAIR_GET    14
+#define DS34BT_PAIR_SET    15
+#define DS34BT_PAD_INFO    16
 #define DS34BT_BIND_RPC_ID 0x18E3878F
 
 static SifRpcClientData_t ds34bt;
@@ -203,6 +205,30 @@ int ds34bt_scan_connect(int index)
     if (SifCallRpc(&ds34bt, DS34BT_SCAN_CONNECT, 0, rpcbuf, 1, rpcbuf, 1, NULL, NULL))
         return 0;
     return rpcbuf[0];
+}
+
+int ds34bt_set_pair_key(const u8 *pair)
+{
+    if (!ds34bt_inited || !pair)
+        return 0;
+    memcpy(rpcbuf, pair, 23);
+    if (SifCallRpc(&ds34bt, DS34BT_PAIR_SET, 0, rpcbuf, 23, rpcbuf, 1, NULL, NULL))
+        return 0;
+    return rpcbuf[0] != 0;
+}
+
+int ds34bt_get_pad_info(int port, u8 *type, u8 *mac)
+{
+    if (!ds34bt_inited || !type || !mac || port < 0 || port > 1)
+        return 0;
+    rpcbuf[0] = port;
+    if (SifCallRpc(&ds34bt, DS34BT_PAD_INFO, 0, rpcbuf, 1, rpcbuf, 8, NULL, NULL))
+        return 0;
+    if (!(rpcbuf[0] & DS34BT_STATE_RUNNING))
+        return 0;
+    *type = rpcbuf[1];
+    memcpy(mac, rpcbuf + 2, 6);
+    return 1;
 }
 
 int ds34bt_get_features(u8 *info)

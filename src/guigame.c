@@ -586,6 +586,7 @@ static void maizoBtRefresh(void)
     for (i = 0; i < 8; i++) {
         diaSetVisible(diaBTManager, PADCFG_BT_RESULT_0 + i, i < maizoBtCount);
         diaSetEnabled(diaBTManager, PADCFG_BT_RESULT_0 + i, i < maizoBtCount);
+        diaSetVisible(diaBTManager, PADCFG_BT_BREAK_0 + i, i < maizoBtCount);
     }
     if (p1 & DS34BT_STATE_RUNNING || p2 & DS34BT_STATE_RUNNING) {
         maizoBtConnecting = 0;
