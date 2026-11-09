@@ -687,9 +687,9 @@ static void HCI_event_task(int result)
                     /* A controller may drop during a game, not only at
                      * startup. Preserve its MAC before clearing the slot. */
                     int was_target = maizo_target_valid &&
-                        memcmp(ds34pad[i].bdaddr, maizo_target, 6) == 0;
+                                     memcmp(ds34pad[i].bdaddr, maizo_target, 6) == 0;
                     int local_close = ds34pad[i].status &
-                        (DS34BT_STATE_DISCONNECT_REQUEST | DS34BT_STATE_DISCONNECTING);
+                                      (DS34BT_STATE_DISCONNECT_REQUEST | DS34BT_STATE_DISCONNECTING);
                     ds34pad_clear(i);
                     if (was_target && !local_close)
                         maizo_reconnect_gamepad();
