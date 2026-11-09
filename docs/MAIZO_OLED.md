@@ -131,3 +131,11 @@ Foram examinados [Tabler Icons](https://github.com/tabler/tabler-icons), MIT, e
 [flat-gamepad-icons](https://github.com/RobTheFiveNine/flat-gamepad-icons),
 CC-BY-SA-4.0. Os novos ícones são desenhos próprios por primitivas; nenhum arquivo
 desses repositórios foi incorporado. Os símbolos de botões permanecem os do OPL.
+
+## Revisao de HUD premium
+
+- Fundo OPL e todos os recursos ART originais preservados (sem substituicao por preto fixo).
+- Abas compactas, titulo/metadata em linhas distintas, rodape dentro da area segura 640x480.
+- Cinco posicoes com mesma linha de base e escala de capas que respeita proporcao.
+- Fonte, titulo, ART e acao do jogo referenciam a mesma entrada da biblioteca.
+- Bluetooth P1/P2 so aparece como pronto quando o driver retorna estado RUNNING.

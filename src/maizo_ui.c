@@ -8,6 +8,9 @@
 #include "include/maizo_library.h"
 #include "include/maizo_ui.h"
 #include <stdlib.h>
+#ifdef PADEMU
+#include <libds34bt.h>
+#endif
 
 typedef struct
 {
@@ -105,8 +108,10 @@ void maizoDrawIcon(int icon, int x, int y, int size, u64 color)
 
 void maizoDrawBrand(void)
 {
-    rmDrawRect(24, 16, 120, 30, MAIZO_BLACK);
-    fntRenderString(gTheme->fonts[0], 32, 20, ALIGN_NONE, 112, 24, "MAIZO", MAIZO_TEXT);
+    /* Retain the original OPL wallpaper: only a small quiet brand plaque. */
+    rmDrawRect(24, 16, 111, 30, MAIZO_SURFACE);
+    rmDrawRect(24, 16, 3, 30, MAIZO_ACCENT);
+    fntRenderString(gTheme->fonts[0], 34, 20, ALIGN_NONE, 95, 24, "MAIZO", MAIZO_TEXT);
 }
 
 void maizoDrawPanel(int x, int y, int width, int height, int focused)
@@ -116,23 +121,61 @@ void maizoDrawPanel(int x, int y, int width, int height, int focused)
         rmDrawRect(x, y, 3, height, MAIZO_ACCENT);
 }
 
+#ifdef PADEMU
+/* Throttle Bluetooth IOP RPCs; the indicator is live, never guessed from pairing. */
+static unsigned int maizoBtStatusFrame;
+static int maizoBtPortStatus[2];
+
+static void maizoDrawBluetoothStatus(void)
+{
+    int i, ready = -1, linking = -1;
+    if (!maizoBtStatusFrame || guiFrameId - maizoBtStatusFrame >= 60) {
+        maizoBtStatusFrame = guiFrameId ? guiFrameId : 1;
+        for (i = 0; i < 2; i++)
+            maizoBtPortStatus[i] = ds34bt_get_status(i);
+    }
+    for (i = 0; i < 2; i++) {
+        if (maizoBtPortStatus[i] & DS34BT_STATE_RUNNING) {
+            ready = i;
+            break;
+        }
+        if (maizoBtPortStatus[i] & DS34BT_STATE_CONNECTED)
+            linking = i;
+    }
+    if (ready >= 0) {
+        maizoDrawIcon(MAIZO_ICON_PAD, 496, 20, 21, MAIZO_ACCENT);
+        fntRenderString(gTheme->fonts[0], 525, 22, ALIGN_NONE, 91, 21,
+                        ready == 0 ? "DS4 P1" : "DS4 P2", MAIZO_TEXT);
+    } else if (linking >= 0) {
+        maizoDrawIcon(MAIZO_ICON_BLUETOOTH, 496, 20, 21, MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], 525, 22, ALIGN_NONE, 91, 21,
+                        linking == 0 ? "BT P1..." : "BT P2...", MAIZO_MUTED);
+    }
+}
+#endif
+
 void maizoDrawHeader(int tab)
 {
-    static int underline = 32;
-    static const int positions[] = {60, 148, 228, 310, 414, 548};
-    static const char *names[] = {"TODOS", "PS2", "PS1", "APPS", "FAVORITOS", "CONFIGURACOES"};
+    static int underline;
+    static const int positions[] = {92, 175, 254, 329, 436, 551};
+    static const char *labels[] = {"TODOS", "PS2", "PS1", "APPS", "FAVORITOS", "AJUSTES"};
     int i, target;
     if (tab < 0 || tab >= MAIZO_TAB_COUNT)
         return;
-    rmDrawRect(24, 48, 592, 45, MAIZO_SURFACE);
-    fntRenderString(gTheme->fonts[0], 190, 24, ALIGN_NONE, 0, 0, "L1  /  R1", MAIZO_MUTED);
+    /* Single slim strip; no tall, overlapping navbar or new background asset. */
+    rmDrawRect(24, 66, 592, 41, MAIZO_SURFACE);
     for (i = 0; i < MAIZO_TAB_COUNT; i++)
-        fntRenderString(gTheme->fonts[0], positions[i], 62, ALIGN_CENTER, i == MAIZO_SETTINGS ? 130 : 100, 24, names[i], i == tab ? MAIZO_TEXT : MAIZO_MUTED);
-    target = positions[tab] - 24;
-    if (!maizoAnimations() || abs(target - underline) < 4)
+        fntRenderString(gTheme->fonts[0], positions[i], 75, ALIGN_CENTER,
+                        i == MAIZO_FAVORITES ? 106 : 80, 25,
+                        labels[i], i == tab ? MAIZO_TEXT : MAIZO_MUTED);
+    target = positions[tab] - 20;
+    if (!underline || !maizoAnimations() || abs(target - underline) < 4)
         underline = target;
     else
         underline += (target - underline) / 3;
-    rmDrawRect(underline, 88, 48, 2, MAIZO_ACCENT);
+    rmDrawRect(underline, 104, 40, 3, MAIZO_ACCENT);
     maizoDrawBrand();
+#ifdef PADEMU
+    maizoDrawBluetoothStatus();
+#endif
 }
