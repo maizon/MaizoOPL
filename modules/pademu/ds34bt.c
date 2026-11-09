@@ -634,13 +634,20 @@ static void maizo_bt_worker(void *arg)
             }
             if (pad_status_check(DS34BT_STATE_CONNECTED, i)) {
                 connected = 1;
-                /* Never tear down an established ACL connection solely
-                 * because HID negotiation has not reached RUNNING yet.
-                 * Clone DS4 controllers can negotiate slowly, and the old
-                 * 12-second watchdog explicitly disconnected them. The
-                 * Bluetooth controller itself reports real link loss via
-                 * HCI_EVENT_DISCONN_COMPLETE, which enables recovery. */
-                maizo_hid_ticks = 0;
+                /* Keep the ACL link alive while DS4 HID is negotiating.
+                 * A stall in the control channel must never tear down the
+                 * established Bluetooth bond. Re-request L2CAP at 30 s. */
+                if (++maizo_hid_ticks >= 15) {
+                    maizo_hid_ticks = 0;
+                    if (ds34pad[i].type == DS4 &&
+                        ds34pad[i].control_scid == 0 &&
+                        ds34pad[i].hci_handle != 0x0FFF) {
+                        identifier++;
+                        l2cap_connection_request(ds34pad[i].hci_handle,
+                                                 identifier, 0x0070,
+                                                 L2CAP_PSM_CTRL);
+                    }
+                }
                 break;
             }
         }
@@ -901,54 +908,60 @@ static void HCI_event_task(int result, int bytes)
                 break;
 
             case HCI_EVENT_CONNECT_REQUEST:
-                DPRINTF("HCI Connection Requested by BD_ADDR: \n\t");
-                /* Pressing PS can initiate an incoming connection. Accept
-                 * only the MAC chosen in the Maizo Bluetooth manager. */
+                /* PS or PS+SHARE may establish a fresh ACL link. Reuse the
+                 * selected controller's slot even if its old link lost
+                 * the Disconnection Complete event. */
+                if (bytes < 12)
+                    break;
                 if (maizo_target_valid && memcmp(hci_buf + 2, maizo_target, 6) != 0) {
                     hci_reject_connection(hci_buf + 2);
                     break;
                 }
-                maizo_link_pending = 0;
-                maizo_pending_ticks = 0;
-                for (i = 0; i < 6; i++) {
-                    DPRINTF("0x%02X", hci_buf[2 + i]);
-                    if (i < 5)
-                        DPRINTF(":");
-                }
-                DPRINTF("\n\t Link = 0x%02X \n", hci_buf[11]);
-                DPRINTF("\t Class = 0x%02X 0x%02X 0x%02X \n", hci_buf[8], hci_buf[9], hci_buf[10]);
-                for (i = 0; i < MAX_PADS; i++) { // find free slot
-                    if (!pad_status_check(DS34BT_STATE_RUNNING, i) && ds34pad[i].enabled) {
-                        if (pad_status_check(DS34BT_STATE_CONNECTED, i)) {
-                            if (pad_status_check(DS34BT_STATE_DISCONNECTING, i)) // if we're waiting for hci disconnect event
-                                continue;
-                            else
-                                hci_disconnect(ds34pad[i].hci_handle); // try to disconnect
-                        }
+                pad = MAX_PADS;
+                for (i = 0; i < MAX_PADS; i++) {
+                    if (ds34pad[i].enabled &&
+                        memcmp(ds34pad[i].bdaddr, hci_buf + 2, 6) == 0) {
+                        pad = i;
                         break;
                     }
                 }
-                if (i >= MAX_PADS) { // no free slot
-                    hci_reject_connection(hci_buf + 2);
-                    break;
-                }
-                pad = i;
-                mips_memcpy(ds34pad[pad].bdaddr, hci_buf + 2, 6);
-                ds34pad[pad].isfake = 0;
-                if (enable_fake) {
-                    ds34pad[pad].isfake = 1;                              // fake ds3
-                    for (i = 0; i < sizeof(GenuineMacAddress) / 3; i++) { // check if ds3 is genuine
-                        if (ds34pad[pad].bdaddr[5] == GenuineMacAddress[i][0] &&
-                            ds34pad[pad].bdaddr[4] == GenuineMacAddress[i][1] &&
-                            ds34pad[pad].bdaddr[3] == GenuineMacAddress[i][2]) {
-                            ds34pad[pad].isfake = 0;
+                if (pad >= MAX_PADS) {
+                    for (i = 0; i < MAX_PADS; i++) {
+                        if (ds34pad[i].enabled &&
+                            !(ds34pad[i].status & (DS34BT_STATE_RUNNING |
+                                                   DS34BT_STATE_CONNECTED))) {
+                            pad = i;
                             break;
                         }
                     }
                 }
-                pad_status_clear(DS34BT_STATE_CONNECTED, pad);
-                pad_status_clear(DS34BT_STATE_RUNNING, pad);
-                pad_status_clear(DS34BT_STATE_DISCONNECTING, pad);
+                if (pad >= MAX_PADS) {
+                    hci_reject_connection(hci_buf + 2);
+                    break;
+                }
+                /* Never send HCI Disconnect before HCI Accept here.
+                 * The late disconnect event could erase this fresh link. */
+                maizo_link_pending = 0;
+                maizo_pending_ticks = 0;
+                maizo_cooldown = 6; /* Leave time for pairing / HID setup. */
+                ds34pad_clear(pad);
+                mips_memcpy(ds34pad[pad].bdaddr, hci_buf + 2, 6);
+                if (maizo_target_valid) {
+                    ds34pad[pad].type = DS4; /* Clones may omit Remote Name. */
+                    ds34pad[pad].isfake = 0;
+                } else {
+                    ds34pad[pad].isfake = enable_fake ? 1 : 0;
+                    if (ds34pad[pad].isfake) {
+                        for (i = 0; i < sizeof(GenuineMacAddress) / 3; i++) {
+                            if (ds34pad[pad].bdaddr[5] == GenuineMacAddress[i][0] &&
+                                ds34pad[pad].bdaddr[4] == GenuineMacAddress[i][1] &&
+                                ds34pad[pad].bdaddr[3] == GenuineMacAddress[i][2]) {
+                                ds34pad[pad].isfake = 0;
+                                break;
+                            }
+                        }
+                    }
+                }
                 hci_accept_connection(ds34pad[pad].bdaddr);
                 break;
 

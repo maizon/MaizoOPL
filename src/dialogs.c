@@ -627,7 +627,7 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_BREAK},
 
     {UI_BREAK},
-    {UI_BUTTON, PADCFG_TWIN_DIAG, 1, 1, -1, 0, 0, {.label = {"Diagnosticar Twin USB (0810:0001)", -1}}},
+    {UI_BUTTON, PADCFG_TWIN_DIAG, 1, 1, -1, 0, 0, {.label = {"Detector universal de dispositivos USB", -1}}},
     {UI_BREAK},
     {UI_BUTTON, PADCFG_BT_MANAGER, 1, 1, -1, 0, 0, {.label = {"Buscar / conectar controle Bluetooth", -1}}},
     {UI_BREAK},
@@ -666,13 +666,15 @@ struct UIItem diaBTManager[] = {
     {UI_TERMINATOR}};
 
 struct UIItem diaTwinDiag[] = {
-    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Maizo Twin USB - diagnostico no PS2", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MAIZO - detector USB (dispositivos observados)", -1}}},
     {UI_SPLITTER},
     {UI_LABEL, PADCFG_TWIN_DIAG_STATUS, 1, 1, -1, 0, 0, {.label = {"...", -1}}},
     {UI_BREAK},
     {UI_LABEL, PADCFG_TWIN_DIAG_DATA, 1, 1, -1, 0, 0, {.label = {"...", -1}}},
     {UI_BREAK},
-    {UI_BUTTON, PADCFG_TWIN_DIAG_REFRESH, 1, 1, -1, 0, 0, {.label = {"Atualizar / ler pacotes", -1}}},
+    {UI_BUTTON, PADCFG_TWIN_DIAG_REFRESH, 1, 1, -1, 0, 0, {.label = {"Atualizar dispositivos", -1}}},
+    {UI_BREAK},
+    {UI_BUTTON, PADCFG_USB_DIAG_NEXT, 1, 1, -1, 0, 0, {.label = {"Proximo dispositivo USB", -1}}},
     {UI_BREAK},
     {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
     {UI_TERMINATOR}};

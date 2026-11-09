@@ -715,40 +715,99 @@ void guiGameShowBluetoothManager(void)
 }
 
 
-static char twinDataLine[96];
+static u8 maizoUsbDiagIndex;
+static u8 maizoUsbDiagCount;
+static char maizoUsbStatus[112], maizoUsbInfo[112];
 
-static void maizoTwinRefresh(void)
+static void maizoUsbDiagRefresh(void)
 {
-    u8 d[8] = {0};
-    static const char *const status[] = {
-        "Nao enumerado: PS2 nao viu o receptor",
-        "VID/PID 0810:0001 detectado (USB probe)",
-        "Detectado; abrindo endpoint USB",
-        "Rejeitado: interface/configuracao incompativel",
-        "Detectado mas endpoint IN nao abriu",
-        "Falha em configurar dispositivo USB",
-        "USB pronto; teste botoes de P1 e P2",
-        "O receptor USB foi desconectado"};
-    if (!ds34usb_get_twin_diag(d)) {
-        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS, "Driver DS34USB inativo");
-        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, "Ative USB no OPL e reinicie");
+    u8 d[16] = {0};
+    u16 vid, pid;
+    const char *kind, *state;
+    if (!ds34usb_get_device_diag(maizoUsbDiagIndex, d)) {
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    "Detector indisponivel: driver USB inativo");
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA,
+                    "Ative PadEmu USB para observar os dispositivos");
         return;
     }
-    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
-                status[d[0] <= 7 ? d[0] : 0]);
-    snprintf(twinDataLine, sizeof(twinDataLine),
-             "Classe: %02X  Endpoints: %u  Pacotes P1/P2: %u / %u  Estado: %02X",
-             d[1], d[2], d[3], d[4], d[5]);
-    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, twinDataLine);
+    maizoUsbDiagCount = d[0];
+    if (d[0] == 0) {
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    "Nenhum dispositivo observado pelo driver USB");
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA,
+                    "Conecte um dispositivo e pressione Atualizar");
+        return;
+    }
+    if (d[1] == 0xFF) {
+        maizoUsbDiagIndex = 0;
+        if (!ds34usb_get_device_diag(0, d))
+            return;
+    }
+    vid = (u16)d[4] | ((u16)d[5] << 8);
+    pid = (u16)d[6] | ((u16)d[7] << 8);
+    switch (d[9] ? d[9] : d[8]) {
+        case 0x03:
+            kind = d[11] == 1 ? "Teclado HID" :
+                   d[11] == 2 ? "Mouse HID" :
+                                "Dispositivo HID";
+            break;
+        case 0x08:
+            kind = "Armazenamento USB";
+            break;
+        case 0x09:
+            kind = "Hub USB";
+            break;
+        case 0xE0:
+            kind = "Controle wireless/BT";
+            break;
+        default:
+            kind = "Dispositivo USB";
+            break;
+    }
+    switch (d[2]) {
+        case 1:
+            state = "Visto (nao assumido pelo PadEmu)";
+            break;
+        case 2:
+            state = "Reconhecido pelo PadEmu";
+            break;
+        case 3:
+            state = "Abrindo / configurando";
+            break;
+        case 4:
+            state = "Configurado pelo driver";
+            break;
+        case 5:
+            state = "Falha no driver";
+            break;
+        case 6:
+            state = "Desconectado";
+            break;
+        default:
+            state = "Estado desconhecido";
+            break;
+    }
+    snprintf(maizoUsbStatus, sizeof(maizoUsbStatus),
+             "USB %u/%u | %s | %s",
+             (unsigned)d[1] + 1, (unsigned)d[0], kind, state);
+    snprintf(maizoUsbInfo, sizeof(maizoUsbInfo),
+             "VID:%04X PID:%04X | classe:%02X IF:%02X/%02X/%02X EP:%u",
+             vid, pid, d[8], d[9], d[10], d[11], d[12]);
+    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS, maizoUsbStatus);
+    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, maizoUsbInfo);
 }
 
-static void maizoTwinShowDiag(void)
+static void maizoUsbShowDiag(void)
 {
     int result = -1;
+    maizoUsbDiagIndex = 0;
     do {
-        maizoTwinRefresh();
+        maizoUsbDiagRefresh();
         result = diaExecuteDialog(diaTwinDiag, result, 1, NULL);
-    } while (result == PADCFG_TWIN_DIAG_REFRESH);
+        if (result == PADCFG_USB_DIAG_NEXT && maizoUsbDiagCount)
+            maizoUsbDiagIndex = (maizoUsbDiagIndex + 1) % maizoUsbDiagCount;
+    } while (result == PADCFG_TWIN_DIAG_REFRESH || result == PADCFG_USB_DIAG_NEXT);
 }
 
 static int forceGlobalPadMacro;
@@ -824,7 +883,7 @@ static int guiGamePadEmuUpdater(int modified)
 
     diaSetVisible(diaPadEmuConfig, PADCFG_BTINFO, (PadEmuMode == 1) & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_BT_MANAGER, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, (PadEmuMode == 0) & EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, (PadEmuMode == 1) & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, (PadEmuMode == 1) & EnablePadEmu);
 
@@ -978,7 +1037,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
 
     diaSetVisible(diaPadEmuConfig, PADCFG_BTINFO, PadEmuSettings & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_BT_MANAGER, PadEmuSettings & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, !(PadEmuSettings & 0xFF) && EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_TWIN_DIAG, EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, PadEmuSettings & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, PadEmuSettings & EnablePadEmu);
 
@@ -1005,7 +1064,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
         }
 
         if (result == PADCFG_TWIN_DIAG)
-            maizoTwinShowDiag();
+            maizoUsbShowDiag();
 
         if (result == PADCFG_BT_MANAGER)
             guiGameShowBluetoothManager();

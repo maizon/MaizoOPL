@@ -130,3 +130,37 @@ diagnostico, nao uma afirmacao de que o receptor e fisicamente compativel.
 O VID/PID 0810:0001 e reutilizado por diferentes firmwares e descritores.
 Experimente o receptor conectado diretamente antes de ligar o PS2 e com
 ambos os pads ligados. Nao altera a NAND nem o firmware do receptor.
+
+## Universal USB device detector (menu)
+
+The Twin-only button is now a passive USB-device observer. While the OPL menu
+DS34USB IOP driver is loaded, its probe records up to eight devices presented
+by PS2 USBD, whether or not PadEmu supports them. The user can cycle through
+observed entries; the dialog shows VID/PID, device/interface class, subclass,
+protocol, endpoint count and PadEmu driver state. This can include HID gamepads,
+mouse/keyboard devices, USB drives, hubs and vendor-specific peripherals when
+they reach the driver's USB probe.
+
+**Detection does not imply input-driver support.** Unsupported devices are
+not claimed, to avoid breaking the USB drivers responsible for them. For
+devices not claimed by DS34USB, the last-seen record may remain after removal:
+there is no disconnect callback to this driver in that case. This is an
+enumeration diagnostic, not a physical-port analyzer or universal USB HID
+controller emulator.
+
+The older Twin-only RPC remains available for compatibility. Twin's
+existing player-1/player-2 packet decoder remains unchanged.
+
+## Bluetooth in-game re-pairing improvements
+
+Selected-DS4 incoming reconnect requests now reclaim the existing slot even
+if a dropped ACL connection did not deliver its disconnect-complete event.
+The game driver no longer sends HCI Disconnect on the old handle right before
+accepting the fresh one; that asynchronous completion could have erased the
+new slot's state. A connected but not-yet-ready controller retries a stalled
+L2CAP control-channel request after 30 seconds without explicitly tearing
+down its Bluetooth link.
+
+These are defensive compatibility fixes. The gamepad and Bluetooth dongle
+must still be tested on physical PlayStation 2 hardware; no source-level
+patch can guarantee all DS4 clones and adapters work.

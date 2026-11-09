@@ -12,6 +12,7 @@
 #define DS34USB_RESET      8
 
 #define DS34USB_TWIN_DIAG   9
+#define DS34USB_DEVICE_DIAG 10
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 static SifRpcClientData_t ds34usb;
@@ -49,6 +50,18 @@ int ds34usb_reinit_ports(u8 ports)
 
     rpcbuf[0] = ports;
     return (SifCallRpc(&ds34usb, DS34USB_INIT, 0, rpcbuf, 1, NULL, 0, NULL, NULL) == 0);
+}
+
+int ds34usb_get_device_diag(u8 index, u8 info[16])
+{
+    if (!ds34usb_inited || !info)
+        return 0;
+    rpcbuf[0] = index;
+    if (SifCallRpc(&ds34usb, DS34USB_DEVICE_DIAG, 0, rpcbuf, 1,
+                   rpcbuf, 16, NULL, NULL))
+        return 0;
+    memcpy(info, rpcbuf, 16);
+    return 1;
 }
 
 int ds34usb_get_twin_diag(u8 info[8])
