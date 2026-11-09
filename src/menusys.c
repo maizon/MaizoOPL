@@ -1029,20 +1029,29 @@ void menuRenderMenu()
     guiDrawBGPlasma();
     if (thmGetGuiValue() == 0) {
         maizoDrawHeader(MAIZO_SETTINGS);
+        /* Minimal category rail: one accent marker instead of ten boxes. */
+        rmDrawRect(24, 108, 194, 288, MAIZO_SURFACE);
+        rmDrawRect(234, 108, 382, 288, MAIZO_SURFACE);
         for (int i = 0; i < 10; i++) {
-            int y = 108 + i * 28;
-            maizoDrawPanel(24, y, 200, 26, i == settingsCategory);
-            maizoDrawIcon(settingsIcons[i], 32, y + 3, 20, i == settingsCategory ? MAIZO_ACCENT : MAIZO_MUTED);
-            fntRenderString(gTheme->fonts[0], 60, y + 4, ALIGN_NONE, 160, 22, settingsNames[i], MAIZO_TEXT);
+            int y = 112 + i * 28;
+            if (i == settingsCategory)
+                rmDrawRect(28, y + 2, 3, 22, MAIZO_ACCENT);
+            maizoDrawIcon(settingsIcons[i], 38, y + 6, 15,
+                          i == settingsCategory ? MAIZO_ACCENT : MAIZO_MUTED);
+            fntRenderString(gTheme->fonts[0], 65, y + 4, ALIGN_NONE, 148, 22,
+                            settingsNames[i], i == settingsCategory ? MAIZO_TEXT : MAIZO_MUTED);
         }
-        maizoDrawPanel(236, 108, 380, 288, settingsFocus);
-        int y = 130;
+        fntRenderString(gTheme->fonts[0], 254, 117, ALIGN_NONE, 340, 23,
+                        settingsNames[settingsCategory], MAIZO_MUTED);
+        rmDrawRect(254, 142, 326, 1, MAIZO_DIVIDER);
+        int y = 160;
         for (submenu_list_t *it = mainMenu; it; it = it->next) {
             if (it == mainMenuCurrent && settingsFocus)
-                rmDrawRect(244, y - 4, 364, 28, MAIZO_DIVIDER);
-            fntRenderString(gTheme->fonts[0], 254, y, ALIGN_NONE, 346, 25,
-                            submenuItemGetText(&it->item), it == mainMenuCurrent && settingsFocus ? MAIZO_ACCENT : MAIZO_TEXT);
-            y += 30;
+                rmDrawRect(246, y - 1, 3, 21, MAIZO_ACCENT);
+            fntRenderString(gTheme->fonts[0], 260, y, ALIGN_NONE, 332, 23,
+                            submenuItemGetText(&it->item),
+                            it == mainMenuCurrent && settingsFocus ? MAIZO_TEXT : MAIZO_MUTED);
+            y += 31;
         }
 #ifndef PADEMU
         if (settingsCategory == 4 || settingsCategory == 5)

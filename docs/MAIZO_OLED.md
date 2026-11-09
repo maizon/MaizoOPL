@@ -155,3 +155,27 @@ desses repositórios foi incorporado. Os símbolos de botões permanecem os do O
   nem garante reconexao de todos os dongles ou revisoes de controle.
 - Bluetooth usa dongle USB Classico compativel com o driver; nao substitui
   drivers de gamepad USB ou controles oficiais do PS2.
+
+
+## Interface minimalista + DualShock 4 (novembro/2026)
+
+- A tela inicial nao tem mais barra de abas: MAIZO permanece no canto superior
+  esquerdo e o nome da pagina fica em texto pequeno no superior direito. L1/R1
+  continuam trocando as paginas.
+- O carrossel e a capa centralizada mantem o papel de parede OPL e assets ART.
+- Estado real do controle no canto inferior direito, acima das dicas: nome P1/P2
+  somente quando o driver HID sinaliza RUNNING.
+- Configuracoes agora usam categorias discretas e indicador de foco fino,
+  sem cartoes individuais por categoria.
+- Menu Bluetooth usa botoes para cada dispositivo encontrado: selecione e
+  pressione X, confirme; busca comecada automaticamente ao entrar na tela.
+  Ainda existe Buscar novamente para adaptadores com descoberta instavel.
+- O par inclui endereco BD_ADDR e, quando obtida, a chave de link de 16 bytes.
+  Ambos ficam em hexadecimal no arquivo conf_game.cfg (chave maizo_bt_pair);
+  essa configuracao local nao e criptografada — nao compartilhe o arquivo.
+- O pareamento salvo e reaplicado ao IOP, com copia da chave ANTES de liberar
+  as RPCs na inicializacao do jogo. O desligamento HCI explicito e evitado
+  durante o handoff BT quando uma chave/endereco valido foi preparado.
+- O PS2 reinicia o IOP ao abrir jogos, entao a conexao Bluetooth pode cair.
+  O novo driver tenta reconectar. Teste REAL no PS2 e com o dongle e necessario:
+  nenhum software consegue religar fisicamente um DS4 que desligou.
