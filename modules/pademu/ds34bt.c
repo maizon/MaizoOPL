@@ -545,6 +545,9 @@ void ds34bt_seed_pair_key(const u8 *key)
 static u8 maizo_reconnect_tries;
 static u8 maizo_link_pending, maizo_pending_ticks, maizo_hid_ticks;
 static u8 maizo_scanning, maizo_scan_ticks, maizo_scan_seen, maizo_cooldown;
+/* Authentication rejection is distinct from a slow, healthy HID link. */
+static u8 maizo_auth_failed;
+static u16 maizo_auth_failed_handle;
 static int maizo_worker_thread_id = -1;
 static u8 maizo_worker_running;
 
@@ -634,6 +637,15 @@ static void maizo_bt_worker(void *arg)
             }
             if (pad_status_check(DS34BT_STATE_CONNECTED, i)) {
                 connected = 1;
+                if (maizo_auth_failed &&
+                    ds34pad[i].hci_handle == maizo_auth_failed_handle) {
+                    /* Only a confirmed HCI authentication error permits
+                     * dropping ACL; never timeout-disconnect a healthy DS4. */
+                    maizo_auth_failed = 0;
+                    maizo_cooldown = 3;
+                    hci_disconnect(ds34pad[i].hci_handle);
+                    break;
+                }
                 /* Keep the ACL link alive while DS4 HID is negotiating.
                  * A stall in the control channel must never tear down the
                  * established Bluetooth bond. Re-request L2CAP at 30 s. */
@@ -771,6 +783,8 @@ static void HCI_event_task(int result, int bytes)
                     memcmp(hci_buf + 5, maizo_target, 6) == 0) {
                     maizo_link_pending = 0;
                     maizo_pending_ticks = 0;
+                    if (!hci_buf[2])
+                        maizo_auth_failed = 0;
                 }
                 if (!hci_buf[2]) { // check if connected OK
                     DPRINTF("\t Connection_Handle 0x%02X \n", hci_buf[3] | ((hci_buf[4] & 0x0F) << 8));
@@ -841,6 +855,9 @@ static void HCI_event_task(int result, int bytes)
                     }
                 }
                 if (i < MAX_PADS) {
+                    if (maizo_auth_failed &&
+                        maizo_auth_failed_handle == ds34pad[i].hci_handle)
+                        maizo_auth_failed = 0;
                     /* A controller may drop during a game, not only at
                      * startup. Preserve its MAC before clearing the slot. */
                     int was_target = maizo_target_valid &&
@@ -861,8 +878,21 @@ static void HCI_event_task(int result, int bytes)
                 DPRINTF("\t Connection_Handle = 0x%04X \n", (hci_buf[3] | ((hci_buf[4] & 0x0F) << 8)));
                 if (!hci_buf[2]) {
                     DPRINTF("\t Success \n");
+                    maizo_auth_failed = 0;
                 } else {
                     DPRINTF("\t Failed \n");
+                    /* The ACL connection may remain falsely CONNECTED on
+                     * authentication failure. Recover only the failed handle. */
+                    for (i = 0; i < MAX_PADS; i++) {
+                        u16 handle = hci_buf[3] | ((hci_buf[4] & 0x0F) << 8);
+                        if (maizo_target_valid &&
+                            ds34pad[i].hci_handle == handle &&
+                            memcmp(ds34pad[i].bdaddr, maizo_target, 6) == 0) {
+                            maizo_auth_failed = 1;
+                            maizo_auth_failed_handle = handle;
+                            break;
+                        }
+                    }
                 }
                 break;
 
