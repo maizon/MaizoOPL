@@ -584,120 +584,185 @@ static void drawGameImage(struct menu_list *menu, struct submenu_list *item, con
     }
 }
 
-/* Draw only the five visible covers through the existing asynchronous ART
- * cache. No additional texture ownership or launch metadata is introduced. */
-/* Supreme cover carousel: five visible slots, lazy ART cache, no additional
- * texture owners, and real item metadata inherited from the selected source. */
-static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
+/* Aurora/Freestyle-inspired dashboard: the original OPL game-case asset
+ * frames each cover, with a real spine, depth and animated five-card track.
+ * Artwork stays in the asynchronous ART cache; no separate texture manager. */
+static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
+                              config_set_t *config, struct theme_element *elem)
 {
-    mutable_image_t *image = elem->extended;
+    mutable_image_t *art = elem->extended;
     maizo_entry_t *visible[5] = {NULL, NULL, NULL, NULL, NULL};
     GSTEXTURE *textures[5] = {NULL, NULL, NULL, NULL, NULL};
-    int w, h, slot, covers = 1;
-    const int priority[5] = {2, 1, 3, 0, 4};
-    const int order[5] = {0, 4, 1, 3, 2};
+    static const int order[5] = {0, 4, 1, 3, 2};
+    static const int requestOrder[9] = {0, -1, 1, -2, 2, -3, 3, -4, 4};
+    int w, h, i, slot, covers = 1, position, total;
+    float progress = menuDashboardFocus();
+    int dir = menuDashboardSlide() > 0 ? 1 : menuDashboardSlide() < 0 ? -1 : 0;
+    int shift;
 
+    (void)config;
     rmGetScreenExtents(&w, &h);
+    /* Layered dark dashboard, not the OPL list or its legacy menu captions. */
+    rmDrawRect(0, 0, w, h, MAIZO_BLACK);
+    rmDrawRect(0, 67, w, 1, MAIZO_DIVIDER);
+    rmDrawRect(0, h - 84, w, 84, MAIZO_SURFACE);
+    rmDrawRect(0, h - 84, w, 1, MAIZO_DIVIDER);
     maizoDrawHeader(menuDashboardTab());
-    configGetInt(configGetByType(CONFIG_OPL), "maizo_cover_mode", &covers);
+    fntRenderString(elem->font, 31, 82, ALIGN_NONE, 340, 28,
+                    "BIBLIOTECA  /  JOGOS", MAIZO_MUTED);
+    position = menuDashboardPosition();
+    total = menuDashboardCount();
 
-    if (!item) {
-        fntRenderString(elem->font, w / 2, h / 2, ALIGN_CENTER, w - 64, 30,
-                        "Nenhum jogo encontrado", MAIZO_MUTED);
+    if (!item || !art || !art->cache) {
+        fntRenderString(elem->font, w / 2, h / 2, ALIGN_CENTER, w - 80, 32,
+                        "Nenhuma capa disponivel", MAIZO_MUTED);
         return;
     }
 
-    /* Only visible ART textures are requested, prioritizing the selected
-     * entry and near neighbours. Lazy lookup retains the original loader. */
-    for (slot = 0; slot < 5; slot++) {
-        int i = priority[slot];
-        maizo_entry_t *entry = menuDashboardSlot(i - 2);
-        visible[i] = entry;
-        if (entry && covers) {
-            menu_list_t *source = entry->owner;
-            submenu_list_t *selected = entry->item;
-            textures[i] = getGameImageTexture(image->cache,
-                                              source->item->userdata, &selected->item);
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_cover_mode", &covers);
+
+    /* Prefetch before drawing, in selected-first order. The cache has 10
+     * slots; nine nearby entries max avoid eviction-thrashing. Bypasses
+     * the legacy list->delay which produced black neighbours while moving. */
+    if (covers && gEnableArt) {
+        for (i = 0; i < 9; i++) {
+            int offset = requestOrder[i];
+            maizo_entry_t *entry = menuDashboardSlot(offset);
+            if (entry) {
+                menu_list_t *owner = entry->owner;
+                submenu_list_t *child = entry->item;
+                item_list_t *support = owner->item->userdata;
+                const char *startup = support->itemGetStartup(support, child->item.id);
+                GSTEXTURE *tex = NULL;
+                if (startup)
+                    tex = cachePrefetchTexture(art->cache, support,
+                                               &child->item.cache_id[art->cache->userId],
+                                               &child->item.cache_uid[art->cache->userId],
+                                               (char *)startup);
+                if (offset >= -2 && offset <= 2)
+                    textures[offset + 2] = tex;
+            }
         }
     }
 
+    for (i = 0; i < 5; i++)
+        visible[i] = menuDashboardSlot(i - 2);
+
+    shift = (int)(menuDashboardSlide() * (float)(w * 21 / 100));
     for (slot = 0; slot < 5; slot++) {
-        int i = order[slot], selected = i == 2;
-        int ch, cw, cx, cy;
-        GSTEXTURE *tex;
-        maizo_entry_t *entry = visible[i];
+        int index = order[slot], selected = index == 2;
+        int hPct = selected ? 50 : (index == 0 || index == 4 ? 28 : 39);
+        int ch, cw, cx, cy, x, y;
+        int frontX, frontW, frontY, frontH;
+        GSTEXTURE *cover, *caseBox;
+        maizo_entry_t *entry = visible[index];
+
         if (!entry)
             continue;
-
-        ch = h * (selected ? 52 : (i == 0 || i == 4 ? 30 : 41)) / 100;
-        if (selected)
-            ch = h * (46 + (int)(6 * menuDashboardFocus())) / 100;
-        cw = rmWideScale(ch * 8 / 11);
-        cx = w / 2 + (i - 2) * w * 21 / 100;
-        if (!selected)
-            cx += (int)(w * 10 / 100 * menuDashboardSlide());
-        cy = h * 45 / 100;
-        rmDrawRect(cx - cw / 2, cy - ch / 2, cw, ch, MAIZO_CARD);
-        tex = textures[i];
-        if (!tex || !tex->Mem)
-            tex = covers && image->defaultTexture ? &image->defaultTexture->source : NULL;
-        if (tex && tex->Mem && tex->Width && tex->Height) {
-            int tw = cw, th = ch;
-            if ((unsigned long)tex->Width * ch >
-                (unsigned long)tex->Height * cw)
-                th = (int)((unsigned long)cw * tex->Height / tex->Width);
-            else
-                tw = (int)((unsigned long)ch * tex->Width / tex->Height);
-            rmDrawPixmap(tex, cx, cy, ALIGN_CENTER, tw, th, SCALING_NONE,
-                         selected ? gDefaultCol : MAIZO_MUTED);
-        } else {
-            int icon = entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
-                       entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
-                                                      MAIZO_ICON_PS2;
-            maizoDrawIcon(icon, cx - 18, cy - 35, 36,
-                          selected ? MAIZO_BRIGHT : MAIZO_MUTED);
-            fntRenderString(elem->font, cx, cy + 30, ALIGN_CENTER, cw - 12, 48,
-                            entry->title, MAIZO_MUTED);
+        /* The outgoing centre shrinks while the incoming card grows.
+         * Translate the whole track, including the focused card. */
+        if (dir && progress < 1.0f) {
+            int oldIndex = 2 - dir;
+            if (selected)
+                hPct = (int)(39.0f + 11.0f * progress);
+            if (index == oldIndex)
+                hPct = (int)(50.0f - 11.0f * progress);
         }
-        if (selected)
-            rmDrawRect(cx - cw / 2, cy + ch / 2 + 4, cw, 3, MAIZO_ACCENT);
+        ch = h * hPct / 100;
+        cw = rmWideScale(ch * 8 / 11);
+        cx = w / 2 + (index - 2) * (w * 21 / 100) + shift;
+        cy = h * 47 / 100;
+        x = cx - cw / 2;
+        y = cy - ch / 2;
+
+        /* Soft drop-shadow and visible case spine: the original OPL
+         * template is drawn over the user-selected cover below. */
+        rmDrawRect(x + 7, y + 8, cw, ch, GS_SETREG_RGBA(0, 0, 0, 0x55));
+        rmDrawRect(x, y, cw, ch, MAIZO_CARD);
+        rmDrawRect(x + 1, y + 1, cw / 10, ch - 2, MAIZO_DIVIDER);
+
+        cover = textures[index];
+        if (!cover || !cover->Mem)
+            cover = covers && art->defaultTexture ? &art->defaultTexture->source : NULL;
+        if (!cover || !cover->Mem)
+            cover = thmGetTexture(COVER_DEFAULT);
+        caseBox = thmGetTexture(entry->platform == MAIZO_APP ?
+                                APPS_CASE_OVERLAY : CASE_OVERLAY);
+
+        frontX = cw * 11 / 100;
+        frontW = cw * 86 / 100;
+        frontY = ch * 5 / 100;
+        frontH = ch * 91 / 100;
+
+        if (cover && cover->Mem && cover->Width && cover->Height) {
+            if (caseBox && caseBox->Mem) {
+                rmDrawOverlayPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
+                                    SCALING_NONE, gDefaultCol, cover,
+                                    frontX, frontY, frontX + frontW, frontY,
+                                    frontX, frontY + frontH,
+                                    frontX + frontW, frontY + frontH);
+            } else {
+                rmDrawPixmap(cover, x + frontX + frontW / 2,
+                             y + frontY + frontH / 2, ALIGN_CENTER,
+                             frontW, frontH, SCALING_NONE, gDefaultCol);
+            }
+        } else {
+            maizoDrawIcon(entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
+                          entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : MAIZO_ICON_PS2,
+                          cx - 16, cy - 20, 32, MAIZO_BRIGHT);
+            fntRenderString(elem->font, cx, cy + 25, ALIGN_CENTER,
+                            cw - 18, 38, "CAPA", MAIZO_MUTED);
+        }
+
+        if (selected) {
+            rmDrawRect(x + cw / 8, y + ch + 7, cw * 3 / 4, 3, MAIZO_ACCENT);
+            fntRenderString(elem->font, cx, y + ch + 13, ALIGN_CENTER,
+                            cw + 85, 24, "SELECIONADO", MAIZO_BRIGHT);
+        }
     }
 
     {
         maizo_entry_t *current = menuDashboardSlot(0);
-        item_list_t *support = menu->item->userdata;
+        item_list_t *source = current ? ((menu_list_t *)current->owner)->item->userdata : NULL;
+        char counter[48], info[120];
         const char *platform = current && current->platform == MAIZO_PS1 ?
-                                   "PlayStation 1" :
+                                   "PLAYSTATION 1" :
                                current && current->platform == MAIZO_APP ?
-                                   "Aplicativo" :
-                                   "PlayStation 2";
-        char status[120];
-        fntRenderString(elem->font, w / 2, h * 77 / 100, ALIGN_CENTER,
-                        w - 64, 33, submenuItemGetText(&item->item), MAIZO_TEXT);
-        snprintf(status, sizeof(status), "%s  |  %s", platform,
-                 menuItemGetText(menu->item));
-        fntRenderString(elem->font, w / 2, h * 85 / 100, ALIGN_CENTER,
-                        w - 64, 24, status, MAIZO_MUTED);
-        snprintf(status, sizeof(status), "%d / %d", menuDashboardPosition(),
-                 menuDashboardCount());
-        fntRenderString(elem->font, w - 36, 25, ALIGN_RIGHT, 150, 24,
-                        status, MAIZO_MUTED);
-        maizoDrawIcon(support->mode == APP_MODE ? MAIZO_ICON_APPS :
-                      support->mode == PS1_MODE ? MAIZO_ICON_PS1 :
-                                                  MAIZO_ICON_PS2,
-                      32, h - 65, 22, MAIZO_ACCENT);
-        maizoDrawIcon(support->mode == ETH_MODE ? MAIZO_ICON_NETWORK :
-                      support->mode == HDD_MODE ? MAIZO_ICON_HDD :
-                                                  MAIZO_ICON_USB,
-                      60, h - 65, 22, MAIZO_MUTED);
-        if (current && current->favorite)
-            maizoDrawIcon(MAIZO_ICON_STAR, w - 56, h - 65, 22, MAIZO_ACCENT);
-        fntRenderString(elem->font, w / 2, h - 29, ALIGN_CENTER, w - 62, 25,
-                        gSelectButton == KEY_CIRCLE ?
-                            "L1/R1 Paginas    TRIANGULO Opcoes    O Iniciar" :
-                            "L1/R1 Paginas    TRIANGULO Opcoes    X Iniciar",
-                        MAIZO_MUTED);
+                                   "APLICATIVO ELF" :
+                                   "PLAYSTATION 2";
+        snprintf(counter, sizeof(counter), "%d / %d", position, total);
+        fntRenderString(elem->font, w - 32, 82, ALIGN_RIGHT, 145, 28,
+                        counter, MAIZO_MUTED);
+        if (current) {
+            fntRenderString(elem->font, 38, h - 76, ALIGN_NONE, w - 78, 32,
+                            current->title, MAIZO_TEXT);
+            snprintf(info, sizeof(info), "%s   |   %s", platform,
+                     source ? menuItemGetText(((menu_list_t *)current->owner)->item) : "");
+            fntRenderString(elem->font, 38, h - 42, ALIGN_NONE, w - 76, 23,
+                            info, MAIZO_MUTED);
+            if (current->favorite)
+                maizoDrawIcon(MAIZO_ICON_STAR, w - 55, h - 61, 20, MAIZO_ACCENT);
+        }
     }
+}
+
+void thmRenderSupremeMain(struct menu_list *menu, struct submenu_list *item,
+                         config_set_t *config)
+{
+    theme_element_t *elem = (menu && menu->item && 
+                            ((item_list_t *)menu->item->userdata)->mode == APP_MODE) ?
+                               gTheme->appsMainElems.first : gTheme->mainElems.first;
+    while (elem) {
+        if (elem->drawElem == &drawMaizoCarousel) {
+            drawMaizoCarousel(menu, item, config, elem);
+            return;
+        }
+        elem = elem->next;
+    }
+    guiDrawBGPlasma();
+    maizoDrawHeader(menuDashboardTab());
+    fntRenderString(gTheme->fonts[0], 320, 220, ALIGN_CENTER, 560, 45,
+                    "Biblioteca carregando...", MAIZO_MUTED);
 }
 
 static void initGameImage(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name, const char *pattern, int count, const char *texture, const char *overlay)
@@ -1511,9 +1576,14 @@ static void thmLoad(const char *themePath)
     for (i = L1_ICON; i <= R3_ICON; i++)
         thmLoadResource(&newT->textures[i], i, NULL, GS_PSM_CT32, 1); */
 
-    if (!themePath)
+    if (!themePath) {
         for (i = ELF_FORMAT; i <= VMODE_PAL; i++)
             thmLoadResource(&newT->textures[i], i, NULL, GS_PSM_CT32, 1);
+        /* Reuse OPL's actual PS2 box templates, including transparency.
+         * Both are loaded once per theme, not once per cover frame. */
+        texLoadInternal(&newT->textures[CASE_OVERLAY], CASE_OVERLAY);
+        texLoadInternal(&newT->textures[APPS_CASE_OVERLAY], APPS_CASE_OVERLAY);
+    }
 
     gTheme = newT;
     thmFree(curT);

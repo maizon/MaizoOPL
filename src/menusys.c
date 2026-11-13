@@ -104,11 +104,11 @@ static unsigned int librarySignature;
 static int dashboardError;
 static int settingsCategory;
 static int settingsFocus;
-static clock_t focusStartClock;
+static unsigned int focusStartFrame;
 
 static void dashboardStartAnimation(void)
 {
-    focusStartClock = clock();
+    focusStartFrame = guiFrameId;
 }
 static int carouselDirection;
 
@@ -119,16 +119,12 @@ void menuDashboardInvalidate(void)
 
 float menuDashboardFocus(void)
 {
-    clock_t elapsed = clock() - focusStartClock;
-    float duration = maizoAnimationMode() == 1 ? 140.0f : 220.0f;
+    unsigned int elapsed = guiFrameId - focusStartFrame;
+    unsigned int duration = maizoAnimationMode() == 1 ? 7 : 11;
     float t;
-    if (!maizoAnimations())
+    if (!maizoAnimations() || elapsed >= duration)
         return 1.0f;
-    t = (float)elapsed * 1000.0f / ((float)CLOCKS_PER_SEC * duration);
-    if (t >= 1.0f)
-        return 1.0f;
-    if (t <= 0.0f)
-        return 0.0f;
+    t = (float)elapsed / duration;
     return t * t * (3.0f - 2.0f * t);
 }
 float menuDashboardSlide(void)
@@ -1463,6 +1459,16 @@ void menuRenderMain(void)
         }
     }
     item_list_t *list = selected_item->item->userdata;
+
+    if (thmGetGuiValue() == 0) {
+        /* Do not draw the old ItemsList, MenuText or legacy hints over the
+         * Supreme carrousel. Keep the original OPL menu data and callbacks. */
+        _menuRequestConfig();
+        WaitSema(menuSemaId);
+        thmRenderSupremeMain(selected_item, selected_item->item->current, itemConfig);
+        SignalSema(menuSemaId);
+        return;
+    }
 
     if (list->mode == APP_MODE) {
         menuRenderElements(gTheme->appsMainElems.first);

@@ -128,6 +128,8 @@ typedef struct theme
 
 extern theme_t *gTheme;
 
+void thmRenderSupremeMain(struct menu_list *menu, struct submenu_list *item,
+                          config_set_t *config);
 void thmInit(void);
 void thmReinit(const char *path);
 void thmReloadScreenExtents(void);

@@ -8,6 +8,7 @@
 
 #include "pademu.h"
 #include "padmacro.h"
+#include "maizo_sio2_guard.h"
 
 #ifdef BT
 
@@ -250,7 +251,12 @@ static void hookSio2man51_2(sio2_transfer_data_t *sd)
 void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
 {
     register u32 ctrl, port1, port2;
+    int second;
 
+    if (!td || !td->in || !td->out || td->in_size < 3 || td->out_size < 3) {
+        sio2proc(td);
+        return;
+    }
     ctrl = td->regdata[0];
     port1 = td->regdata[0] & 0x03;
     port2 = td->regdata[1] & 0x03;
@@ -260,6 +266,14 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
             sio2proc = pademu_mtap;
         } else if (td->in[0] == 0x01) {
             if (port2 == 1) { // 2 sio cmds
+                second = maizoSio2SecondCommand(td->in, td->in_size,
+                                               td->out_size);
+                if (second < 0) {
+                    /* An uncommon/short SIO2 packet is left to the original
+                     * handler. Never return silently with no pad response. */
+                    sio2proc(td);
+                    return;
+                }
                 if (mtap_inited) {
                     if (pad[0].enabled) {
                         td->in[0] = 0x00;
@@ -273,17 +287,7 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
                         if (pad[0].enabled) {
                             ctrl = 0;
                         } else if (pad[1].enabled) {
-                            for (ctrl = 5; ctrl < td->in_size - 3; ctrl++) {
-                                if (td->in[ctrl] == 0x01 && (td->in[ctrl + 1] & 0xF0) == 0x40 && td->in[ctrl + 2] == 0x00) {
-                                    if (ctrl != 5 && ctrl != 9 && ctrl != 21)
-                                        continue;
-                                    else
-                                        break;
-                                }
-                            }
-                            if (ctrl + 3 == td->in_size) {
-                                return;
-                            }
+                            ctrl = second;
                         }
                         td->in[ctrl] = 0x00;
                         sio2proc(td);
@@ -350,6 +354,9 @@ void pademu(sio2_transfer_data_t *td)
     port1 = td->regdata[0] & 0x03;
     port2 = td->regdata[1] & 0x03;
 
+    if (!td->in || !td->out || td->in_size < 3 || td->out_size < 3)
+        return;
+
     td->stat6c = 0x1100; //?
     td->stat70 = 0x0F;   //?
 
@@ -358,19 +365,14 @@ void pademu(sio2_transfer_data_t *td)
     }
 
     if (port2 == 1) {
-        // find next cmd
-        for (cmd_size = 5; cmd_size < td->in_size - 3; cmd_size++) {
-            if (td->in[cmd_size] == 0x01 && (td->in[cmd_size + 1] & 0xF0) == 0x40 && td->in[cmd_size + 2] == 0x00) {
-                if (cmd_size != 5 && cmd_size != 9 && cmd_size != 21)
-                    continue;
-                else
-                    break;
-            }
-        }
-
-        if (cmd_size + 3 == td->in_size) {
-            DPRINTF("Second cmd not found!\n");
-            return;
+        /* The hook pre-validates the command. Do not walk past the
+         * output buffer when a game submits an uncommon 2P transaction. */
+        {
+            int offset = maizoSio2SecondCommand(td->in, td->in_size,
+                                                 td->out_size);
+            if (offset < 0)
+                return;
+            cmd_size = (u8)offset;
         }
 
         if (mtap_inited) {
@@ -418,6 +420,8 @@ void pademu_cmd(int port, u8 *in, u8 *out, u8 out_size)
 {
     u8 i;
 
+    if (port < 0 || port >= MAX_PORTS || !in || !out || out_size < 3)
+        return;
     mips_memset(out, 0x00, out_size);
 
     if (!(PAD_GET_STATUS(port) & PAD_STATE_RUNNING)) {
@@ -552,6 +556,9 @@ void pademu_mtap(sio2_transfer_data_t *td)
 {
     u8 port1;
 
+    if (!td->in || !td->out || td->in_size < 2 ||
+        td->out_size < sizeof(mtap_data))
+        return;
     port1 = td->regdata[0] & 0x01;
 
     mips_memset(td->out, 0x00, td->out_size);
@@ -573,8 +580,11 @@ void pademu_mtap(sio2_transfer_data_t *td)
             break;
 
         case 0x21: // changes slot for pad
+            if (td->in_size < 3 || td->out_size < 7 ||
+                td->in[2] >= MAX_SLOT)
+                break;
             mips_memcpy(td->out, &mtap_data, sizeof(mtap_data));
-            mtap_slot = td->out[5] = td->in[2]; // slot
+            mtap_slot = td->out[5] = td->in[2]; // validated slot 0..3
             td->out[6] = 0x5a;
             td->stat6c = 0x00001100;
             break;
