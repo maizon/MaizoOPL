@@ -10,6 +10,7 @@
 #include "ds34usb.h"
 #include "maizotwin.h"
 #include "maizohid.h"
+#include "maizohid_usb.h"
 #include "sys_utils.h"
 #include "padmacro.h"
 
@@ -105,7 +106,8 @@ int usb_probe(int devId)
     if (device->idVendor == DS34_VID && (device->idProduct == DS3_PID || device->idProduct == DS4_PID || device->idProduct == DS4_PID_SLIM))
         return 1;
 
-    return 0;
+    /* A valid HID gamepad interface is not restricted to one VID/PID. */
+    return maizohid_find_interface(devId, NULL, NULL);
 }
 
 int usb_connect(int devId)
@@ -115,6 +117,9 @@ int usb_connect(int devId)
     UsbConfigDescriptor *config;
     UsbInterfaceDescriptor *interface;
     UsbEndpointDescriptor *endpoint;
+    UsbInterfaceDescriptor *hid_interface = NULL;
+    UsbEndpointDescriptor *hid_endpoint = NULL;
+    int generic_hid;
 
     DPRINTF("DS34USB: connect: devId=%i\n", devId);
 
@@ -138,7 +143,12 @@ int usb_connect(int devId)
 
     device = (UsbDeviceDescriptor *)UsbGetDeviceStaticDescriptor(devId, NULL, USB_DT_DEVICE);
     config = (UsbConfigDescriptor *)UsbGetDeviceStaticDescriptor(devId, device, USB_DT_CONFIG);
+    if (!device || !config) {
+        usb_release(pad);
+        return 1;
+    }
     interface = (UsbInterfaceDescriptor *)((char *)config + config->bLength);
+    generic_hid = maizohid_find_interface(devId, &hid_interface, &hid_endpoint);
 
     if (device->idVendor == MAIZOTWIN_VID && device->idProduct == MAIZOTWIN_PID) {
         if (twin_root >= 0 || interface->bInterfaceClass != 0x03 ||
@@ -165,14 +175,16 @@ int usb_connect(int devId)
             }
         }
         epCount = interface->bNumEndpoints - 1;
-    } else if (device->idVendor == MAIZOHID_VID && device->idProduct == MAIZOHID_PID) {
-        if (interface->bInterfaceClass != 0x03 || interface->bNumEndpoints == 0) {
-            usb_release(pad);
-            return 1;
-        }
+    } else if (generic_hid &&
+               !(device->idVendor == DS34_VID &&
+                 (device->idProduct == DS3_PID || device->idProduct == DS4_PID ||
+                  device->idProduct == DS4_PID_SLIM)) &&
+               !(device->idVendor == SONY_VID &&
+                 (device->idProduct == GUITAR_HERO_PS3_PID ||
+                  device->idProduct == ROCK_BAND_PS3_PID))) {
         ds34pad[pad].type = MAIZOHID;
-        ds34pad[pad].hid_interface = interface->bInterfaceNumber;
-        epCount = interface->bNumEndpoints - 1;
+        ds34pad[pad].hid_interface = hid_interface->bInterfaceNumber;
+        epCount = 0;
     } else if (device->idProduct == DS3_PID) {
         ds34pad[pad].type = DS3;
         epCount = interface->bNumEndpoints - 1;
@@ -187,7 +199,9 @@ int usb_connect(int devId)
         epCount = 20; // ds4 v2 returns interface->bNumEndpoints as 0
     }
 
-    endpoint = (UsbEndpointDescriptor *)UsbGetDeviceStaticDescriptor(devId, NULL, USB_DT_ENDPOINT);
+    endpoint = ds34pad[pad].type == MAIZOHID ?
+                   hid_endpoint :
+                   (UsbEndpointDescriptor *)UsbGetDeviceStaticDescriptor(devId, NULL, USB_DT_ENDPOINT);
 
     do {
         if (endpoint->bmAttributes == USB_ENDPOINT_XFER_INT) {
@@ -268,6 +282,7 @@ static void usb_release(int pad)
     ds34pad[pad].outEndp = -1;
     ds34pad[pad].devId = -1;
     ds34pad[pad].hid_packet_size = 0;
+    mips_memset(&ds34pad[pad].hid_layout, 0, sizeof(ds34pad[pad].hid_layout));
     ds34pad[pad].status = DS34USB_STATE_DISCONNECTED;
 
     SignalSema(ds34pad[pad].sema);
@@ -614,7 +629,7 @@ int ds34usb_get_data(u8 *dst, int size, int port)
                                usb_data_cb, (void *)reader);
 
     if (ret == USB_RC_OK) {
-        TransferWait(ds34pad[port].sema);
+        TransferWait(ds34pad[reader].sema);
         if (!usb_resulCode && usb_rx_bytes > 0)
             readReport(usb_buf, usb_rx_bytes, reader);
 
