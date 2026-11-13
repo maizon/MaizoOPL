@@ -6,11 +6,13 @@
 #include "usbd.h"
 #include "usbd_macro.h"
 #include "thbase.h"
+#include "intrman.h"
 #include "thsemap.h"
 #include "ds34usb.h"
 #include "../../pademu/maizotwin.h"
 #include "../../pademu/maizohid.h"
 #include "../../pademu/maizohid_usb.h"
+#include "../../pademu/maizohid_latch.h"
 
 IRX_ID("ds34usb", 1, 1);
 
@@ -115,6 +117,18 @@ enum {
     MAIZO_USB_NO_SLOT
 };
 static u8 maizo_usb_stage, maizo_usb_class, maizo_usb_endpoints;
+
+/* Menu USB HID is sampled asynchronously too. The previous RPC handler
+ * waited for every interrupt-IN completion and could stall the whole
+ * dashboard by hundreds of milliseconds under fast navigation. */
+static volatile u8 hid_stream_state[MAX_PADS];
+static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
+static volatile unsigned int hid_stream_generation[MAX_PADS];
+static u16 hid_pending[MAX_PADS];
+static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
+static int hid_stream_thread_id = -1;
+static void hid_stream_thread(void *arg);
+static void hid_stream_callback(int result, int bytes, void *arg);
 static u8 maizo_usb_reports, maizo_usb_error;
 static u16 maizo_usb_vid, maizo_usb_pid, maizo_usb_packet, maizo_usb_report_bits;
 
@@ -353,6 +367,12 @@ int usb_disconnect(int devId)
 
 static void usb_release(int pad)
 {
+    int state;
+    CpuSuspendIntr(&state);
+    hid_stream_generation[pad]++;
+    hid_stream_state[pad] = 0;
+    hid_pending[pad] = 0;
+    CpuResumeIntr(state);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
         twin_root = -1;
@@ -505,14 +525,24 @@ static void readReport(u8 *data, int bytes, int pad)
         int player = (bytes >= MAIZOTWIN_PACKET && data[0] >= 1 && data[0] <= 2) ?
                          twin_slots[data[0] - 1] :
                          -1;
-        if (player >= 0 && maizotwin_decode(data, bytes, &ds34pad[player].ds2))
-            twin_report_counts[data[0] - 1]++;
+        if (player >= 0) {
+            u16 oldButtons = ds34pad[player].ds2.nButtonState;
+            if (maizotwin_decode(data, bytes, &ds34pad[player].ds2)) {
+                hid_pending[player] |=
+                    maizohid_press_edges(oldButtons, ds34pad[player].ds2.nButtonState);
+                twin_report_counts[data[0] - 1]++;
+            }
+        }
         return;
     }
     if (ds34pad[pad].type == MAIZOHID) {
-        if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2) &&
-            maizo_usb_reports < 255)
-            maizo_usb_reports++;
+        u16 oldButtons = ds34pad[pad].ds2.nButtonState;
+        if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2)) {
+            hid_pending[pad] |=
+                maizohid_press_edges(oldButtons, ds34pad[pad].ds2.nButtonState);
+            if (maizo_usb_reports < 255)
+                maizo_usb_reports = maizo_usb_reports == 254 ? 1 : maizo_usb_reports + 1;
+        }
         return;
     }
     if (data[0]) {
@@ -714,6 +744,60 @@ static int LEDRumble(u8 *led, u8 lrum, u8 rrum, int pad)
     return ret;
 }
 
+/* USB callbacks publish completion metadata, never start nested
+ * transfers. Polling and parsing are outside RPC and the EE frame loop. */
+static void hid_stream_callback(int result, int bytes, void *arg)
+{
+    unsigned int token = (unsigned int)arg;
+    int port = token & (MAX_PADS - 1);
+    if ((token >> 2) != hid_stream_generation[port])
+        return;
+    hid_stream_result[port] = result;
+    hid_stream_bytes[port] = bytes;
+    hid_stream_state[port] = 2;
+}
+
+static void hid_stream_thread(void *arg)
+{
+    int pad;
+    (void)arg;
+    for (;;) {
+        for (pad = 0; pad < MAX_PADS; pad++) {
+            ds34usb_device *device = &ds34pad[pad];
+            unsigned int token;
+            int ret, oldstate, bytes;
+            if (!device->enabled || device->devId < 0 ||
+                device->interruptEndp < 0 ||
+                !(device->status & DS34USB_STATE_RUNNING) ||
+                (device->type != MAIZOHID && device->type != TWINHID) ||
+                (device->type == TWINHID && pad != twin_root))
+                continue;
+
+            if (hid_stream_state[pad] == 2) {
+                bytes = hid_stream_bytes[pad];
+                if (hid_stream_result[pad] == USB_RC_OK &&
+                    bytes > 0 && bytes <= MAX_BUFFER_SIZE) {
+                    CpuSuspendIntr(&oldstate);
+                    readReport(hid_stream_buffers[pad], bytes, pad);
+                    CpuResumeIntr(oldstate);
+                }
+                hid_stream_state[pad] = 0;
+            }
+            if (hid_stream_state[pad] != 0)
+                continue;
+            token = (hid_stream_generation[pad] << 2) | (unsigned int)pad;
+            hid_stream_state[pad] = 1;
+            ret = UsbInterruptTransfer(device->interruptEndp,
+                                       hid_stream_buffers[pad],
+                                       device->hid_packet_size,
+                                       hid_stream_callback, (void *)token);
+            if (ret != USB_RC_OK)
+                hid_stream_state[pad] = 0;
+        }
+        DelayThread(2000);
+    }
+}
+
 static unsigned int timeout(void *arg)
 {
     int sema = (int)arg;
@@ -783,6 +867,17 @@ void ds34usb_set_led(u8 *led, int port)
     LED(led, port);
 }
 
+/* Atomic one-shot edges: retain a press observed between two calls
+ * to PAD_GET_DATA, then release normally on the following game poll. */
+static void hid_copy_snapshot(void *dst, int size, int port)
+{
+    struct ds2report report;
+    mips_memcpy(&report, ds34pad[port].data, sizeof(report));
+    maizohid_apply_press(&report, hid_pending[port]);
+    hid_pending[port] = 0;
+    mips_memcpy(dst, &report, size);
+}
+
 void ds34usb_get_data(char *dst, int size, int port)
 {
     int ret;
@@ -793,6 +888,19 @@ void ds34usb_get_data(char *dst, int size, int port)
     int reader = (ds34pad[port].type == TWINHID && twin_root >= 0) ?
                      twin_root :
                      port;
+
+    /* A menu frame must never wait for a USB low-speed report. */
+    if (hid_stream_thread_id > 0 &&
+        (ds34pad[port].type == MAIZOHID ||
+         ds34pad[port].type == TWINHID)) {
+        int oldstate;
+        if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
+            return;
+        CpuSuspendIntr(&oldstate);
+        hid_copy_snapshot(dst, size, port);
+        CpuResumeIntr(oldstate);
+        return;
+    }
 
     if (ds34pad[reader].interruptEndp < 0)
         return;
@@ -1089,6 +1197,21 @@ int _start(int argc, char *argv[])
     if (UsbRegisterDriver(&usb_driver) != USB_RC_OK) {
         DPRINTF("DS34USB: Error registering USB devices\n");
         return MODULE_NO_RESIDENT_END;
+    }
+
+    {
+        iop_thread_t stream_th;
+        stream_th.attr = TH_C;
+        stream_th.thread = hid_stream_thread;
+        stream_th.priority = 42;
+        stream_th.stacksize = 0x1000;
+        stream_th.option = 0;
+        hid_stream_thread_id = CreateThread(&stream_th);
+        if (hid_stream_thread_id > 0 &&
+            StartThread(hid_stream_thread_id, NULL) < 0) {
+            DeleteThread(hid_stream_thread_id);
+            hid_stream_thread_id = -1;
+        }
     }
 
     iop_thread_t rpc_th;

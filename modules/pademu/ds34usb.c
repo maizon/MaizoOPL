@@ -6,11 +6,13 @@
 #include "usbd.h"
 #include "usbd_macro.h"
 #include "thbase.h"
+#include "intrman.h"
 #include "thsemap.h"
 #include "ds34usb.h"
 #include "maizotwin.h"
 #include "maizohid.h"
 #include "maizohid_usb.h"
+#include "maizohid_latch.h"
 #include "sys_utils.h"
 #include "padmacro.h"
 
@@ -80,6 +82,21 @@ ds34usb_device ds34pad[MAX_PADS];
  * Only the root owns the USB endpoints. Both logical slots share its lock. */
 static int twin_root = -1;
 static int twin_slots[2] = {-1, -1};
+
+/* USB interrupt-IN reports must not stall the SIO2 gamepad command handler.
+ * An IOP worker keeps one URB in flight per connected HID receiver and
+ * publishes the latest completed snapshot; DS3/DS4 keep their established
+ * synchronous path for compatibility. */
+#define HID_STREAM_POLL_US 2000
+static volatile u8 hid_stream_state[MAX_PADS]; /* 0=idle, 1=inflight, 2=complete */
+static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
+static volatile unsigned int hid_stream_generation[MAX_PADS];
+static u16 hid_pending[MAX_PADS];
+static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
+static volatile int hid_stream_stop;
+static int hid_stream_thread_id = -1;
+static void hid_stream_thread(void *arg);
+static void hid_stream_callback(int result, int bytes, void *arg);
 
 
 int usb_probe(int devId)
@@ -262,6 +279,14 @@ int usb_disconnect(int devId)
 
 static void usb_release(int pad)
 {
+    int oldstate;
+    /* Stale in-flight callbacks cannot publish into a replacement device's
+     * snapshot after a disconnect. */
+    CpuSuspendIntr(&oldstate);
+    hid_stream_generation[pad]++;
+    hid_stream_state[pad] = 0;
+    hid_pending[pad] = 0;
+    CpuResumeIntr(oldstate);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
         twin_root = -1;
@@ -412,12 +437,20 @@ static void readReport(u8 *data, int bytes, int pad_idx)
         int player = (bytes >= MAIZOTWIN_PACKET && data[0] >= 1 && data[0] <= 2) ?
                          twin_slots[data[0] - 1] :
                          -1;
-        if (player >= 0)
-            maizotwin_decode(data, bytes, &ds34pad[player].ds2);
+        if (player >= 0) {
+            u16 oldButtons = ds34pad[player].ds2.nButtonState;
+            if (maizotwin_decode(data, bytes, &ds34pad[player].ds2))
+                hid_pending[player] |=
+                    maizohid_press_edges(oldButtons, ds34pad[player].ds2.nButtonState);
+        }
         return;
     }
     if (pad->type == MAIZOHID) {
-        if (!maizohid_decode(&pad->hid_layout, data, bytes, &pad->ds2))
+        u16 oldButtons = pad->ds2.nButtonState;
+        if (maizohid_decode(&pad->hid_layout, data, bytes, &pad->ds2))
+            hid_pending[pad_idx] |=
+                maizohid_press_edges(oldButtons, pad->ds2.nButtonState);
+        else
             DPRINTF("MAIZOHID: ignored short / unrecognized input report\n");
         return;
     }
@@ -571,6 +604,65 @@ static int LEDRumble(u8 *led, u8 lrum, u8 rrum, int pad)
     return ret;
 }
 
+/* A callback only records completion; it never decodes and never submits
+ * another request from USBD callback context. */
+static void hid_stream_callback(int result, int bytes, void *arg)
+{
+    unsigned int token = (unsigned int)arg;
+    int port = token & (MAX_PADS - 1);
+    if ((token >> 2) != hid_stream_generation[port])
+        return;
+    hid_stream_result[port] = result;
+    hid_stream_bytes[port] = bytes;
+    hid_stream_state[port] = 2;
+}
+
+static void hid_stream_thread(void *arg)
+{
+    int pad;
+    (void)arg;
+    while (!hid_stream_stop) {
+        for (pad = 0; pad < MAX_PADS; pad++) {
+            ds34usb_device *device = &ds34pad[pad];
+            unsigned int token;
+            int ret, oldstate, bytes;
+            if (!device->enabled || device->devId < 0 ||
+                device->interruptEndp < 0 ||
+                !(device->status & DS34USB_STATE_RUNNING) ||
+                (device->type != MAIZOHID && device->type != TWINHID) ||
+                (device->type == TWINHID && pad != twin_root))
+                continue;
+
+            if (hid_stream_state[pad] == 2) {
+                bytes = hid_stream_bytes[pad];
+                /* Decode the completed report before submitting another one,
+                 * so its input buffer is never overwritten concurrently. */
+                if (hid_stream_result[pad] == USB_RC_OK &&
+                    bytes > 0 && bytes <= MAX_BUFFER_SIZE) {
+                    CpuSuspendIntr(&oldstate);
+                    readReport(hid_stream_buffers[pad], bytes, pad);
+                    CpuResumeIntr(oldstate);
+                }
+                hid_stream_state[pad] = 0;
+            }
+            if (hid_stream_state[pad] != 0)
+                continue;
+
+            /* No dynamic allocation, no waiting on a USB transaction in
+             * pademu_cmd and one persistent endpoint per controller. */
+            token = (hid_stream_generation[pad] << 2) | (unsigned int)pad;
+            hid_stream_state[pad] = 1;
+            ret = UsbInterruptTransfer(device->interruptEndp,
+                                       hid_stream_buffers[pad],
+                                       device->hid_packet_size,
+                                       hid_stream_callback, (void *)token);
+            if (ret != USB_RC_OK)
+                hid_stream_state[pad] = 0;
+        }
+        DelayThread(HID_STREAM_POLL_US);
+    }
+}
+
 static unsigned int timeout(void *arg)
 {
     int sema = (int)arg;
@@ -602,6 +694,17 @@ void ds34usb_set_rumble(u8 lrum, u8 rrum, int port)
     SignalSema(ds34pad[port].sema);
 }
 
+/* Atomic one-shot edges: retain a press observed between two calls
+ * to PAD_GET_DATA, then release normally on the following game poll. */
+static void hid_copy_snapshot(void *dst, int size, int port)
+{
+    struct ds2report report;
+    mips_memcpy(&report, ds34pad[port].data, sizeof(report));
+    maizohid_apply_press(&report, hid_pending[port]);
+    hid_pending[port] = 0;
+    mips_memcpy(dst, &report, size);
+}
+
 int ds34usb_get_data(u8 *dst, int size, int port)
 {
     int ret = 0;
@@ -613,6 +716,22 @@ int ds34usb_get_data(u8 *dst, int size, int port)
     int reader = (ds34pad[port].type == TWINHID && twin_root >= 0) ?
                      twin_root :
                      port;
+
+    /* Cached HID snapshot: O(18 bytes), no 200 ms USB alarm/transaction on
+     * the SIO2 game's critical path. Release and press states are both
+     * decoded by the background USB worker. */
+    if (hid_stream_thread_id > 0 &&
+        (ds34pad[port].type == MAIZOHID ||
+         ds34pad[port].type == TWINHID)) {
+        int oldstate;
+        if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
+            return 0;
+        CpuSuspendIntr(&oldstate);
+        hid_copy_snapshot(dst, size, port);
+        ret = ds34pad[port].analog_btn & 1;
+        CpuResumeIntr(oldstate);
+        return ret;
+    }
 
     if (ds34pad[reader].interruptEndp < 0)
         return 0;
@@ -671,6 +790,12 @@ void ds34usb_reset()
 {
     int pad;
 
+    hid_stream_stop = 1;
+    if (hid_stream_thread_id > 0) {
+        TerminateThread(hid_stream_thread_id);
+        DeleteThread(hid_stream_thread_id);
+        hid_stream_thread_id = -1;
+    }
     for (pad = 0; pad < MAX_PADS; pad++)
         usb_release(pad);
 }
@@ -744,5 +869,22 @@ int ds34usb_init(u8 pads, u8 options)
         return 0;
     }
 
+    /* Fail open: if the worker cannot be created, the old synchronous HID
+     * polling path remains available (higher latency but still operable). */
+    {
+        iop_thread_t thread;
+        thread.attr = TH_C;
+        thread.thread = hid_stream_thread;
+        thread.priority = 42;
+        thread.stacksize = 0x1000;
+        thread.option = 0;
+        hid_stream_stop = 0;
+        hid_stream_thread_id = CreateThread(&thread);
+        if (hid_stream_thread_id > 0 &&
+            StartThread(hid_stream_thread_id, NULL) < 0) {
+            DeleteThread(hid_stream_thread_id);
+            hid_stream_thread_id = -1;
+        }
+    }
     return 1;
 }

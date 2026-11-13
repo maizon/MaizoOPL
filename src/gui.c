@@ -1581,7 +1581,7 @@ static void guiShow()
     if (screenHandlerTarget) {
         u8 alpha;
         const u8 transition_frames = thmGetGuiValue() == 0 ?
-                                         (maizoAnimationMode() == 1 ? 10 : 16) :
+                                         (maizoAnimationMode() == 1 ? 6 : 8) :
                                          26;
         if (transIndex < (transition_frames / 2)) {
             // Fade-out old screen
@@ -1610,9 +1610,8 @@ static void guiShow()
         // render with the set screen handler
         screenHandler->renderScreen();
 
-    /* Above page content and transitions; modal dialogs render afterwards. */
-    if (thmGetGuiValue() == 0)
-        maizoDrawBrand();
+    /* Each Supreme screen draws its own header exactly once. Repeating the
+     * brand here doubled font rendering on every frame. */
 }
 
 void guiIntroLoop(void)

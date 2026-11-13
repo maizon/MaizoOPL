@@ -167,7 +167,9 @@ void cacheDestroyCache(image_cache_t *cache)
     free(cache);
 }
 
-GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId, int *UID, char *value)
+static GSTEXTURE *cacheGetTextureEx(image_cache_t *cache, item_list_t *list,
+                                    int *cacheId, int *UID, char *value,
+                                    int prefetch)
 {
     if (*cacheId == -2) {
         return NULL;
@@ -189,7 +191,7 @@ GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId
     }
 
     // under the cache pre-delay (to avoid filling cache while moving around)
-    if (guiInactiveFrames < list->delay)
+    if (!prefetch && guiInactiveFrames < list->delay)
         return NULL;
 
     cache_entry_t *currEntry, *oldestEntry = NULL;
@@ -227,4 +229,18 @@ GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId
     }
 
     return NULL;
+}
+
+GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list,
+                           int *cacheId, int *UID, char *value)
+{
+    return cacheGetTextureEx(cache, list, cacheId, UID, value, 0);
+}
+
+/* Only the dashboard requests this path: schedule neighbouring covers
+ * while buttons are moving, instead of waiting for idle-frame delay. */
+GSTEXTURE *cachePrefetchTexture(image_cache_t *cache, item_list_t *list,
+                                int *cacheId, int *UID, char *value)
+{
+    return cacheGetTextureEx(cache, list, cacheId, UID, value, 1);
 }

@@ -20,6 +20,7 @@
 #ifdef PADEMU
 #include <libds34bt.h>
 #include <libds34usb.h>
+#include "include/maizo_pademu_bits.h"
 #endif
 
 #define NEWLIB_PORT_AWARE
@@ -550,6 +551,7 @@ static int dg_discon = 0;
 static int ver_set = 0, feat_set = 0;
 
 static int forceGlobalPadEmu;
+static int maizoPadEmuEditPort;
 static char maizoBtLabels[8][72];
 static const char *maizoBtChoices[9];
 static int maizoBtCount, maizoBtState;
@@ -732,20 +734,22 @@ static char *ver_to_str(char *str, u8 ma, u16 mi)
 static int guiGamePadEmuUpdater(int modified)
 {
     int PadEmuMode, PadPort, PadEmuVib, PadEmuPort, PadEmuMtap, PadEmuMtapPort, PadEmuWorkaround;
-    static int oldPadPort;
     int previousSource = gPadEmuSource;
 
     diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_SOURCE, &gPadEmuSource);
 
     // update GUI to display per-game or global settings if changed
-    if (previousSource != gPadEmuSource && gPadEmuSource == SETTINGS_GLOBAL) {
+    if (!forceGlobalPadEmu && previousSource != gPadEmuSource &&
+        gPadEmuSource == SETTINGS_GLOBAL) {
         config_set_t *configSet = gameMenuLoadConfig(diaPadEmuConfig);
         configRemoveKey(configSet, CONFIG_ITEM_PADEMUSOURCE);
         guiGameLoadPadEmuConfig(configSet, configGetByType(CONFIG_GAME));
-    } else if (previousSource != gPadEmuSource && gPadEmuSource == SETTINGS_PERGAME) {
+    } else if (!forceGlobalPadEmu && previousSource != gPadEmuSource &&
+               gPadEmuSource == SETTINGS_PERGAME) {
         config_set_t *configSet = gameMenuLoadConfig(diaPadEmuConfig);
         configSetInt(configSet, CONFIG_ITEM_PADEMUSOURCE, gPadEmuSource);
         guiGameLoadPadEmuConfig(configSet, configGetByType(CONFIG_GAME));
+        maizoPadEmuEditPort = 0;
     }
 
     diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_ENABLE, &EnablePadEmu);
@@ -764,7 +768,7 @@ static int guiGamePadEmuUpdater(int modified)
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_MODE, EnablePadEmu);
 
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADPORT, EnablePadEmu);
-    diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_VIB, PadEmuPort & EnablePadEmu);
+    diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_VIB, PadEmuPort && EnablePadEmu);
 
     diaSetVisible(diaPadEmuConfig, PADCFG_USBDG_MAC, (PadEmuMode == 1) & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PAD_MAC, (PadEmuMode == 1) & EnablePadEmu);
@@ -780,31 +784,37 @@ static int guiGamePadEmuUpdater(int modified)
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, (PadEmuMode == 1) & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, (PadEmuMode == 1) & EnablePadEmu);
 
-    if (modified) {
-        if (PadEmuMtap) {
-            diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT, PadEmuPorts_enums[PadEmuMtapPort]);
-            diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_PORT, (PadPort == 0) & EnablePadEmu);
-            PadEmuSettings |= 0x00000E00;
-        } else {
-            diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT, PadEmuPorts_enums[0]);
-            diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_PORT, EnablePadEmu);
-            PadEmuSettings &= 0xFFFF03FF;
-            if (PadPort > 1) {
-                PadPort = 0;
-                diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, PadPort);
-            }
-        }
-
-        if (PadPort != oldPadPort) {
-            diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, (PadEmuSettings >> (8 + PadPort)) & 1);
-            diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, (PadEmuSettings >> (16 + PadPort)) & 1);
-
-            oldPadPort = PadPort;
-        }
+    /* Editing the port selector must commit the OLD slot before displaying
+     * the NEW slot. The old OR/bitwise-NOT expression overwrote neighbouring
+     * port bits and inadvertently cleared the multitap/2P flags. */
+    if (PadEmuMtapPort != 2)
+        PadEmuMtapPort = 1;
+    if (PadPort < 0 || PadPort > (PadEmuMtap ? 3 : 1)) {
+        PadPort = 0;
+        diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, 0);
     }
 
-    PadEmuSettings |= PadEmuMode | (PadEmuPort << (8 + PadPort)) | (PadEmuVib << (16 + PadPort)) | (PadEmuMtap << 24) | ((PadEmuMtapPort - 1) << 25) | (PadEmuWorkaround << 26);
-    PadEmuSettings &= (~(PadEmuMode ? 0 : 1) & ~(!PadEmuPort << (8 + PadPort)) & ~(!PadEmuVib << (16 + PadPort)) & ~(!PadEmuMtap << 24) & ~(!(PadEmuMtapPort - 1) << 25) & ~(!PadEmuWorkaround << 26));
+    if (modified) {
+        diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT,
+                   PadEmuPorts_enums[PadEmuMtap ? PadEmuMtapPort : 0]);
+        diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_PORT, EnablePadEmu);
+        if (PadPort != maizoPadEmuEditPort) {
+            PadEmuSettings = (int)maizoPademuSetSlot(
+                (unsigned int)PadEmuSettings, maizoPadEmuEditPort,
+                PadEmuPort, PadEmuVib);
+            maizoPadEmuEditPort = PadPort;
+            PadEmuPort = ((unsigned int)PadEmuSettings >> (8 + PadPort)) & 1;
+            PadEmuVib = ((unsigned int)PadEmuSettings >> (16 + PadPort)) & 1;
+            diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, PadEmuPort);
+            diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, PadEmuVib);
+        }
+    }
+    PadEmuSettings = (int)maizoPademuSetSlot(
+        (unsigned int)PadEmuSettings, maizoPadEmuEditPort, PadEmuPort, PadEmuVib);
+    PadEmuSettings = (int)maizoPademuSetOptions(
+        (unsigned int)PadEmuSettings, PadEmuMode, PadEmuMtap,
+        PadEmuMtapPort, PadEmuWorkaround);
+    diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_VIB, PadEmuPort && EnablePadEmu);
 
     if (PadEmuMode == 1) {
         if (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED) {
@@ -907,6 +917,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
     int PadEmuMtap, PadEmuMtapPort, i;
 
     forceGlobalPadEmu = forceGlobal;
+    maizoPadEmuEditPort = 0;
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_SOURCE, !forceGlobalPadEmu);
 
     if (forceGlobalPadEmu)
@@ -934,13 +945,8 @@ void guiGameShowPadEmuConfig(int forceGlobal)
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, PadEmuSettings & EnablePadEmu);
     diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, PadEmuSettings & EnablePadEmu);
 
-    if (PadEmuMtap) {
-        diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT, PadEmuPorts_enums[PadEmuMtapPort]);
-        PadEmuSettings |= 0x00000E00;
-    } else {
-        diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT, PadEmuPorts_enums[0]);
-        PadEmuSettings &= 0xFFFF03FF;
-    }
+    diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT,
+               PadEmuPorts_enums[PadEmuMtap ? PadEmuMtapPort : 0]);
 
     int result = -1;
 
@@ -981,6 +987,19 @@ void guiGameShowPadEmuConfig(int forceGlobal)
         if (result == UIID_BTN_OK)
             break;
     }
+
+    /* Unlike per-game settings, the global PadEmu dialog has no parent
+     * game-menu Apply action. Persist it on OK and restore it on Cancel. */
+    if (forceGlobal) {
+        config_set_t *configGame = configGetByType(CONFIG_GAME);
+        if (result == UIID_BTN_OK) {
+            guiGameSavePadEmuGlobalConfig(configGame);
+            if (!saveConfig(CONFIG_GAME, 0))
+                guiMsgBox("Falha ao salvar PadEmu global. Verifique o armazenamento.", 0, NULL);
+        }
+        guiGameLoadPadEmuConfig(NULL, configGame);
+    }
+    forceGlobalPadEmu = 0;
 }
 
 static int guiGamePadMacroUpdater(int modified)

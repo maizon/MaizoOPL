@@ -26,7 +26,15 @@ assert "MAIZO_SETTING_CATEGORIES 9" in menu
 assert "maizo_sort_mode" in menu and "maizoLibrarySortMode" in menu
 assert "maizo_cover_mode" in menu and "maizo_cover_mode" in art
 assert "maizo_animation_mode" in ui
-assert "clock() - focusStartClock" in menu
+assert "guiFrameId - focusStartFrame" in menu
+assert "cachePrefetchTexture" in art
+assert "thmRenderSupremeMain" in menu
+assert "CASE_OVERLAY" in art
+assert "hid_stream_thread" in read("modules/ds34usb/iop/ds34usb.c")
+assert "hid_stream_thread" in read("modules/pademu/ds34usb.c")
+assert "maizoPademuSetSlot" in read("src/guigame.c")
+assert "saveConfig(CONFIG_GAME, 0)" in read("src/guigame.c")
+assert "maizoSio2SecondCommand" in read("modules/pademu/pademu.c")
 assert "MAIZO_BLACK" in gui and "SUPREME" in gui
 assert "maizoDrawPanel" in dia and "maizoDrawBrand" in dia
 assert "maizoDrawRow" in menu
