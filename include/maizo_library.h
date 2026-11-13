@@ -40,6 +40,8 @@ typedef struct
 void maizoLibraryClear(maizo_library_t *library);
 int maizoLibraryAdd(maizo_library_t *library, void *owner, void *item, int platform, const char *identity, const char *title, int favorite);
 void maizoLibrarySort(maizo_library_t *library);
+/* 0: title, 1: platform+title, 2: original source order. */
+void maizoLibrarySortMode(maizo_library_t *library, int mode);
 int maizoLibraryFilter(maizo_library_t *library, int tab);
 void maizoLibraryMove(maizo_library_t *library, int direction);
 maizo_entry_t *maizoLibrarySlot(maizo_library_t *library, int offset);

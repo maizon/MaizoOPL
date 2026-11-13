@@ -84,7 +84,10 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
     rmGetScreenExtents(&screenWidth, &screenHeight);
 
     if (hide_text) {
-        if ((mask_buffer = malloc(maxLen)) != NULL) {
+        /* Never expose a password when temporary masking allocation fails. */
+        if (len >= maxLen)
+            len = maxLen > 0 ? maxLen - 1 : 0;
+        if ((mask_buffer = malloc(maxLen > 0 ? maxLen : 1)) != NULL) {
             memset(mask_buffer, '*', len);
             mask_buffer[len] = '\0';
         }
@@ -97,7 +100,12 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
 
         rmStartFrame();
         guiDrawBGPlasma();
-        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+        if (thmGetGuiValue() == 0) {
+            maizoDrawPanel(24, 78, screenWidth - 48,
+                           gTheme->usedHeight - 133, 0);
+            maizoDrawBrand();
+        } else
+            rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
 
         // Title
         if (title != NULL) {
@@ -107,7 +115,9 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
         }
 
         // Text
-        fntRenderString(gTheme->fonts[0], 50, 120, ALIGN_NONE, 0, 0, hide_text ? mask_buffer : text, gTheme->textColor);
+        fntRenderString(gTheme->fonts[0], 50, 120, ALIGN_NONE, 0, 0,
+                        hide_text ? (mask_buffer ? mask_buffer : "") : text,
+                        thmGetGuiValue() == 0 ? MAIZO_TEXT : gTheme->textColor);
 
         // separating line for simpler orientation
         rmDrawLine(25, 138, 615, 138, gColWhite);
@@ -291,7 +301,12 @@ static int diaShowColSel(unsigned char *r, unsigned char *g, unsigned char *b)
 
         rmStartFrame();
         guiDrawBGPlasma();
-        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+        if (thmGetGuiValue() == 0) {
+            maizoDrawPanel(24, 38, screenWidth - 48,
+                           gTheme->usedHeight - 98, 0);
+            maizoDrawBrand();
+        } else
+            rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
 
         // "Color selection"
         fntRenderString(gTheme->fonts[0], 50, 50, ALIGN_NONE, 0, 0, _l(_STR_COLOR_SELECTION), GS_SETREG_RGBA(0x60, 0x60, 0x60, 0x80));
@@ -433,7 +448,10 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
     // all texts are rendered up from the given point!
     u64 txtcol;
 
-    if (diaIsControllable(item))
+    if (thmGetGuiValue() == 0)
+        txtcol = !item->enabled ? MAIZO_DISABLED :
+                 diaIsControllable(item) ? MAIZO_TEXT : MAIZO_MUTED;
+    else if (diaIsControllable(item))
         txtcol = gTheme->uiTextColor;
     else
         txtcol = gTheme->textColor;
@@ -463,8 +481,12 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
             // to ODD lines
             ypos &= ~1;
 
-            if (!measure)
-                rmDrawLine(x, ypos, x + UI_BREAK_LEN, ypos, gColWhite);
+            if (!measure) {
+                if (thmGetGuiValue() == 0)
+                    maizoDrawSeparator(x, ypos, screenWidth - x - 35);
+                else
+                    rmDrawLine(x, ypos, x + UI_BREAK_LEN, ypos, gColWhite);
+            }
             break;
         }
 
@@ -587,10 +609,14 @@ static int diaLayout(struct UIItem *ui, struct UIItem *cur, int haveFocus, int m
 {
     int oled = thmGetGuiValue() == 0;
     int x0 = oled ? 32 : 20;
-    int x = x0, y = (oled ? 72 : 20) - scroll, hmax = 0;
+    int x = x0, y = (oled ? 110 : 20) - scroll, hmax = 0;
     struct UIItem *item;
     for (item = ui; item->type != UI_TERMINATOR; item++) {
         int w = 0, h = 0;
+        /* The old first-line heading is still shown in the Supreme header. */
+        if (oled && item == ui && item->type == UI_LABEL &&
+            (item + 1)->type == UI_SPLITTER)
+            continue;
         if (diaShouldBreakLine(item)) {
             x = x0;
             if (hmax > 0)
@@ -599,7 +625,7 @@ static int diaLayout(struct UIItem *ui, struct UIItem *cur, int haveFocus, int m
         }
         if (item == cur)
             *focusY = y + scroll;
-        int hidden = measure || (oled && (y < 66 || y > gTheme->usedHeight - 100));
+        int hidden = measure || (oled && (y < 103 || y > gTheme->usedHeight - 93));
         diaRenderItem(x, y, item, item == cur, haveFocus, &w, &h, hidden);
         if (w > 0)
             x += w + UI_SPACING_V;
@@ -627,25 +653,39 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
             scroll = 0;
             lastUI = ui;
         }
+        const char *title = "OPCOES";
         int total = diaLayout(ui, cur, haveFocus, 1, 0, &focusY);
-        int bottom = gTheme->usedHeight - 100;
-        if (cur && focusY - scroll < 72)
-            scroll = focusY - 72;
+        int top = 110, bottom = gTheme->usedHeight - 94;
+        int maxScroll = total > bottom ? total - bottom : 0;
+        if (ui->type == UI_LABEL) {
+            const char *label = diaGetLocalisedText(ui->label.text, ui->label.stringId);
+            if (label && label[0])
+                title = label;
+        }
+        if (cur && focusY - scroll < top)
+            scroll = focusY - top;
         if (cur && focusY - scroll > bottom)
             scroll = focusY - bottom;
         if (scroll < 0)
             scroll = 0;
-        maizoDrawPanel(24, 60, 592, gTheme->usedHeight - 140, 0);
+        if (scroll > maxScroll)
+            scroll = maxScroll;
+        maizoDrawPanel(24, 94, screenWidth - 48,
+                       gTheme->usedHeight - 178, 0);
+        maizoDrawBrand();
+        fntRenderString(gTheme->fonts[0], screenWidth - 30, 20,
+                        ALIGN_RIGHT, screenWidth - 210, 30, title, MAIZO_MUTED);
         diaLayout(ui, cur, haveFocus, 0, scroll, &focusY);
-        if (total > bottom) {
-            int track = gTheme->usedHeight - 180;
-            int thumb = track * (bottom - 72) / total;
+        if (maxScroll > 0) {
+            int track = gTheme->usedHeight - 210;
+            int thumb = track * (bottom - top) / (total - top);
             if (thumb < 12)
                 thumb = 12;
-            rmDrawRect(610, 72, 2, track, MAIZO_DIVIDER);
-            rmDrawRect(610, 72 + scroll * (track - thumb) / (total - bottom + 72), 2, thumb, MAIZO_ACCENT);
+            rmDrawRect(screenWidth - 31, 108, 2, track, MAIZO_DIVIDER);
+            rmDrawRect(screenWidth - 31,
+                       108 + scroll * (track - thumb) / maxScroll,
+                       2, thumb, MAIZO_ACCENT);
         }
-        maizoDrawBrand();
     } else {
         diaLayout(ui, cur, haveFocus, 0, 0, &focusY);
     }

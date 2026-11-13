@@ -126,6 +126,7 @@ int guiAlignSubMenuHints(int hintCount, int *textID, int *iconID, int font, int 
 void guiShowNetCompatUpdate(void);
 void guiShowNetCompatUpdateSingle(int id, item_list_t *support, config_set_t *configSet);
 void guiShowAbout();
+void guiShowSupremeDiagnostics(void);
 void guiShowConfig();
 void guiShowStorageConfig(void);
 void guiShowPS1Config(void);
