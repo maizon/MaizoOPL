@@ -1581,7 +1581,8 @@ static void guiShow()
     if (screenHandlerTarget) {
         u8 alpha;
         const u8 transition_frames = thmGetGuiValue() == 0 ?
-                                     (maizoAnimationMode() == 1 ? 10 : 16) : 26;
+                                         (maizoAnimationMode() == 1 ? 10 : 16) :
+                                         26;
         if (transIndex < (transition_frames / 2)) {
             // Fade-out old screen
             // index: 0..7

@@ -105,7 +105,7 @@ static int compareOrdinal(const void *a, const void *b)
 {
     const maizo_entry_t *left = a, *right = b;
     return left->ordinal < right->ordinal ? -1 : left->ordinal > right->ordinal ? 1 :
-                                                                           0;
+                                                                                  0;
 }
 
 void maizoLibrarySortMode(maizo_library_t *library, int mode)
@@ -139,7 +139,8 @@ void maizoLibrarySortMode(maizo_library_t *library, int mode)
     }
     library->count = write;
     qsort(library->entries, library->count, sizeof(*library->entries),
-          mode == 1 ? comparePlatformTitle : mode == 2 ? compareOrdinal : compareTitle);
+          mode == 1 ? comparePlatformTitle : mode == 2 ? compareOrdinal :
+                                                        compareTitle);
 }
 
 void maizoLibrarySort(maizo_library_t *library)

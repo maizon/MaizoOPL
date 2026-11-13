@@ -1682,14 +1682,17 @@ void menuRenderInfo(void)
                         "INFORMACOES", MAIZO_MUTED);
         maizoDrawPanel(30, 110, 580, 285, 0);
         maizoDrawIcon(mode == APP_MODE ? MAIZO_ICON_APPS :
-                      mode == PS1_MODE ? MAIZO_ICON_PS1 : MAIZO_ICON_PS2,
+                      mode == PS1_MODE ? MAIZO_ICON_PS1 :
+                                         MAIZO_ICON_PS2,
                       44, 126, 40, MAIZO_BRIGHT);
         fntRenderString(gTheme->fonts[0], 98, 132, ALIGN_NONE, 486, 52,
                         submenuItemGetText(&current->item), MAIZO_TEXT);
         maizoDrawSeparator(44, 198, 548);
         fntRenderString(gTheme->fonts[0], 48, 215, ALIGN_NONE, 520, 30,
                         mode == APP_MODE ? "Aplicativo ELF" :
-                        mode == PS1_MODE ? "PlayStation 1" : "PlayStation 2", MAIZO_MUTED);
+                        mode == PS1_MODE ? "PlayStation 1" :
+                                           "PlayStation 2",
+                        MAIZO_MUTED);
         if (identity && identity[0]) {
             fntRenderString(gTheme->fonts[0], 48, 264, ALIGN_NONE, 520, 26,
                             "Identificador / origem:", MAIZO_MUTED);

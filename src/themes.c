@@ -652,7 +652,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                          selected ? gDefaultCol : MAIZO_MUTED);
         } else {
             int icon = entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
-                       entry->platform == MAIZO_APP ? MAIZO_ICON_APPS : MAIZO_ICON_PS2;
+                       entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
+                                                      MAIZO_ICON_PS2;
             maizoDrawIcon(icon, cx - 18, cy - 35, 36,
                           selected ? MAIZO_BRIGHT : MAIZO_MUTED);
             fntRenderString(elem->font, cx, cy + 30, ALIGN_CENTER, cw - 12, 48,
@@ -666,9 +667,10 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         maizo_entry_t *current = menuDashboardSlot(0);
         item_list_t *support = menu->item->userdata;
         const char *platform = current && current->platform == MAIZO_PS1 ?
-                               "PlayStation 1" :
+                                   "PlayStation 1" :
                                current && current->platform == MAIZO_APP ?
-                               "Aplicativo" : "PlayStation 2";
+                                   "Aplicativo" :
+                                   "PlayStation 2";
         char status[120];
         fntRenderString(elem->font, w / 2, h * 77 / 100, ALIGN_CENTER,
                         w - 64, 33, submenuItemGetText(&item->item), MAIZO_TEXT);
@@ -681,17 +683,19 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         fntRenderString(elem->font, w - 36, 25, ALIGN_RIGHT, 150, 24,
                         status, MAIZO_MUTED);
         maizoDrawIcon(support->mode == APP_MODE ? MAIZO_ICON_APPS :
-                      support->mode == PS1_MODE ? MAIZO_ICON_PS1 : MAIZO_ICON_PS2,
+                      support->mode == PS1_MODE ? MAIZO_ICON_PS1 :
+                                                  MAIZO_ICON_PS2,
                       32, h - 65, 22, MAIZO_ACCENT);
         maizoDrawIcon(support->mode == ETH_MODE ? MAIZO_ICON_NETWORK :
-                      support->mode == HDD_MODE ? MAIZO_ICON_HDD : MAIZO_ICON_USB,
+                      support->mode == HDD_MODE ? MAIZO_ICON_HDD :
+                                                  MAIZO_ICON_USB,
                       60, h - 65, 22, MAIZO_MUTED);
         if (current && current->favorite)
             maizoDrawIcon(MAIZO_ICON_STAR, w - 56, h - 65, 22, MAIZO_ACCENT);
         fntRenderString(elem->font, w / 2, h - 29, ALIGN_CENTER, w - 62, 25,
                         gSelectButton == KEY_CIRCLE ?
-                        "L1/R1 Paginas    TRIANGULO Opcoes    O Iniciar" :
-                        "L1/R1 Paginas    TRIANGULO Opcoes    X Iniciar",
+                            "L1/R1 Paginas    TRIANGULO Opcoes    O Iniciar" :
+                            "L1/R1 Paginas    TRIANGULO Opcoes    X Iniciar",
                         MAIZO_MUTED);
     }
 }

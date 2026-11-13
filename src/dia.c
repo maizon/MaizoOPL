@@ -449,8 +449,9 @@ static void diaRenderItem(int x, int y, struct UIItem *item, int selected, int h
     u64 txtcol;
 
     if (thmGetGuiValue() == 0)
-        txtcol = !item->enabled ? MAIZO_DISABLED :
-                 diaIsControllable(item) ? MAIZO_TEXT : MAIZO_MUTED;
+        txtcol = !item->enabled          ? MAIZO_DISABLED :
+                 diaIsControllable(item) ? MAIZO_TEXT :
+                                           MAIZO_MUTED;
     else if (diaIsControllable(item))
         txtcol = gTheme->uiTextColor;
     else
