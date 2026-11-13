@@ -1021,7 +1021,8 @@ void menuRenderMenu()
         maizoDrawHeader(MAIZO_SETTINGS);
         for (int i = 0; i < 10; i++) {
             int y = 108 + i * 28;
-            maizoDrawPanel(24, y, 200, 26, i == settingsCategory);
+            if (i == settingsCategory)
+                rmDrawRect(25, y + 2, 3, 22, MAIZO_ACCENT);
             maizoDrawIcon(settingsIcons[i], 32, y + 3, 20, i == settingsCategory ? MAIZO_ACCENT : MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 60, y + 4, ALIGN_NONE, 160, 22, settingsNames[i], MAIZO_TEXT);
         }
@@ -1038,9 +1039,11 @@ void menuRenderMenu()
         if (settingsCategory == 4 || settingsCategory == 5)
             fntRenderString(gTheme->fonts[0], 252, 150, ALIGN_NONE, 340, 80, "PadEmu nao incluido nesta build", MAIZO_MUTED);
 #endif
-        if (settingsCategory == 0)
+        if (settingsCategory == 0) {
+            static const char *const animationNames[] = {"Desativadas", "Suaves", "Completas"};
             fntRenderString(gTheme->fonts[0], 252, 370, ALIGN_NONE, 340, 24,
-                            maizoAnimations() ? "Animacoes: ligadas" : "Animacoes: desligadas", MAIZO_MUTED);
+                            animationNames[maizoAnimationMode()], MAIZO_MUTED);
+        }
         guiDrawSubMenuHints();
         return;
     }
@@ -1243,7 +1246,9 @@ void menuHandleInputMenu()
             if (selected_item && selected_item->item->current)
                 selected_item->item->execSquare(selected_item->item);
         } else if (id == MENU_ANIMATIONS) {
-            configSetInt(configGetByType(CONFIG_OPL), "maizo_animations", !maizoAnimations());
+            int mode = (maizoAnimationMode() + 1) % 3;
+            configSetInt(configGetByType(CONFIG_OPL), "maizo_animation_mode", mode);
+            configSetInt(configGetByType(CONFIG_OPL), "maizo_animations", mode != 0);
             saveConfig(CONFIG_OPL, 1);
 #ifdef PADEMU
         } else if (id == MENU_PADEMU) {
@@ -1611,6 +1616,37 @@ void menuRenderGameMenu()
     // list menu.
     if (selected_item->item->current == NULL)
         return;
+
+    if (thmGetGuiValue() == 0) {
+        submenu_list_t *it;
+        int index = 0, active = 0, first, y;
+        if (!gameMenuCurrent)
+            gameMenuCurrent = gameMenu;
+        for (it = gameMenu; it; it = it->next, index++)
+            if (it == gameMenuCurrent)
+                active = index;
+        first = active >= 8 ? active - 7 : 0;
+        maizoDrawHeader(MAIZO_SETTINGS);
+        fntRenderString(gTheme->fonts[0], 36, 105, ALIGN_NONE, 194, 50,
+                        selected_item->item->current->item.text, MAIZO_TEXT);
+        fntRenderString(gTheme->fonts[0], 36, 167, ALIGN_NONE, 194, 38,
+                        gameConfigSource(), MAIZO_MUTED);
+        maizoDrawPanel(236, 100, 380, 304, 0);
+        index = 0;
+        y = 120;
+        for (it = gameMenu; it; it = it->next, index++) {
+            if (index < first || index >= first + 8)
+                continue;
+            if (it == gameMenuCurrent)
+                rmDrawRect(245, y - 3, 3, 24, MAIZO_ACCENT);
+            fntRenderString(gTheme->fonts[0], 255, y, ALIGN_NONE, 349, 28,
+                            submenuItemGetText(&it->item),
+                            it == gameMenuCurrent ? MAIZO_TEXT : MAIZO_MUTED);
+            y += 35;
+        }
+        guiDrawSubMenuHints();
+        return;
+    }
 
     // draw the animated menu
     if (!gameMenuCurrent)

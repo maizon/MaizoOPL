@@ -972,7 +972,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34USB_RESET      8
 
 #define DS34USB_TWIN_DIAG   9
-#define DS34USB_USB_DIAG   10
+#define DS34USB_USB_DIAG    10
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)

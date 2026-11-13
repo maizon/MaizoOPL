@@ -4,8 +4,8 @@
 /* Read only the USB descriptors already enumerated by ps2sdk.  Do not
  * assume the first interface/endpoint of a composite device is the pad. */
 static int maizohid_find_interface(int devId,
-                                  UsbInterfaceDescriptor **found_interface,
-                                  UsbEndpointDescriptor **found_input)
+                                   UsbInterfaceDescriptor **found_interface,
+                                   UsbEndpointDescriptor **found_input)
 {
     UsbDeviceDescriptor *device;
     UsbConfigDescriptor *config;

@@ -13,7 +13,10 @@ typedef struct
 {
     signed char x1, y1, x2, y2;
 } stroke_t;
-#define S(a, b, c, d) {a, b, c, d}
+#define S(a, b, c, d) \
+    {                 \
+        a, b, c, d    \
+    }
 static const stroke_t disc[] = {S(5, 2, 19, 2), S(19, 2, 22, 12), S(22, 12, 19, 22), S(19, 22, 5, 22), S(5, 22, 2, 12), S(2, 12, 5, 2), S(10, 10, 14, 10), S(14, 10, 14, 14), S(14, 14, 10, 14), S(10, 14, 10, 10)};
 static const stroke_t app[] = {S(3, 3, 21, 3), S(21, 3, 21, 21), S(21, 21, 3, 21), S(3, 21, 3, 3), S(3, 8, 21, 8), S(7, 12, 11, 16), S(11, 16, 7, 19), S(14, 18, 18, 18)};
 static const stroke_t star[] = {S(12, 2, 15, 8), S(15, 8, 22, 9), S(22, 9, 17, 14), S(17, 14, 18, 22), S(18, 22, 12, 18), S(12, 18, 6, 22), S(6, 22, 7, 14), S(7, 14, 2, 9), S(2, 9, 9, 8), S(9, 8, 12, 2)};
@@ -32,11 +35,20 @@ static const stroke_t back[] = {S(11, 4, 3, 12), S(3, 12, 11, 20), S(3, 12, 22, 
 static const stroke_t confirm[] = {S(3, 12, 9, 19), S(9, 19, 22, 4)};
 #undef S
 
+int maizoAnimationMode(void)
+{
+    int mode = 2;
+    config_set_t *config = configGetByType(CONFIG_OPL);
+    if (configGetInt(config, "maizo_animation_mode", &mode) && mode >= 0 && mode <= 2)
+        return mode;
+    mode = 1;
+    configGetInt(config, "maizo_animations", &mode);
+    return mode ? 2 : 0;
+}
+
 int maizoAnimations(void)
 {
-    int enabled = 1;
-    configGetInt(configGetByType(CONFIG_OPL), "maizo_animations", &enabled);
-    return enabled != 0;
+    return maizoAnimationMode() != 0;
 }
 
 void maizoDrawIcon(int icon, int x, int y, int size, u64 color)
@@ -103,9 +115,10 @@ void maizoDrawIcon(int icon, int x, int y, int size, u64 color)
                    x + rmWideScale(lines[i].x2 * size / 24), y + lines[i].y2 * size / 24, color);
 }
 
+/* The original MaizoWii logo PNG is not present in either repository.
+ * Keep this transparent text fallback until the approved asset is imported. */
 void maizoDrawBrand(void)
 {
-    rmDrawRect(24, 16, 120, 30, MAIZO_BLACK);
     fntRenderString(gTheme->fonts[0], 32, 20, ALIGN_NONE, 112, 24, "MAIZO", MAIZO_TEXT);
 }
 
@@ -118,21 +131,14 @@ void maizoDrawPanel(int x, int y, int width, int height, int focused)
 
 void maizoDrawHeader(int tab)
 {
-    static int underline = 32;
-    static const int positions[] = {60, 148, 228, 310, 414, 548};
-    static const char *names[] = {"TODOS", "PS2", "PS1", "APPS", "FAVORITOS", "CONFIGURACOES"};
-    int i, target;
+    static const char *const names[] = {
+        "TODOS", "PS2", "PS1", "APPS", "FAVORITOS", "CONFIGURACOES"};
     if (tab < 0 || tab >= MAIZO_TAB_COUNT)
         return;
-    rmDrawRect(24, 48, 592, 45, MAIZO_SURFACE);
-    fntRenderString(gTheme->fonts[0], 190, 24, ALIGN_NONE, 0, 0, "L1  /  R1", MAIZO_MUTED);
-    for (i = 0; i < MAIZO_TAB_COUNT; i++)
-        fntRenderString(gTheme->fonts[0], positions[i], 62, ALIGN_CENTER, i == MAIZO_SETTINGS ? 130 : 100, 24, names[i], i == tab ? MAIZO_TEXT : MAIZO_MUTED);
-    target = positions[tab] - 24;
-    if (!maizoAnimations() || abs(target - underline) < 4)
-        underline = target;
-    else
-        underline += (target - underline) / 3;
-    rmDrawRect(underline, 88, 48, 2, MAIZO_ACCENT);
+
+    /* Supreme header: only the MAIZO wordmark and current page, not tabs.
+     * L1/R1 still switch pages via the original input callbacks. */
     maizoDrawBrand();
+    fntRenderString(gTheme->fonts[0], 458, 20, ALIGN_NONE, 156, 26,
+                    names[tab], MAIZO_MUTED);
 }

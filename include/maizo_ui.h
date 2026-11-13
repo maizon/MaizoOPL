@@ -23,6 +23,7 @@ enum maizo_icon {
     MAIZO_ICON_CONFIRM
 };
 int maizoAnimations(void);
+int maizoAnimationMode(void);
 void maizoDrawIcon(int icon, int x, int y, int size, u64 color);
 void maizoDrawBrand(void);
 void maizoDrawHeader(int tab);
