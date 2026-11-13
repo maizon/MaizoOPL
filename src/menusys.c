@@ -1817,7 +1817,8 @@ void menuRenderAppMenu()
         maizoDrawHeader(MAIZO_APPS_TAB);
         fntRenderString(gTheme->fonts[0], 42, 102, ALIGN_NONE, 548, 35,
                         selected_item->item->current ?
-                        selected_item->item->current->item.text : "APLICATIVO",
+                            selected_item->item->current->item.text :
+                            "APLICATIVO",
                         MAIZO_TEXT);
         maizoDrawPanel(30, 132, 582, 245, 0);
         for (item = appMenu; item; item = item->next, index++) {
