@@ -94,7 +94,21 @@ static int compareTitle(const void *a, const void *b)
     return result ? result : compareIdentity(a, b);
 }
 
-void maizoLibrarySort(maizo_library_t *library)
+static int comparePlatformTitle(const void *a, const void *b)
+{
+    const maizo_entry_t *left = a, *right = b;
+    int platform = left->platform - right->platform;
+    return platform ? platform : compareTitle(a, b);
+}
+
+static int compareOrdinal(const void *a, const void *b)
+{
+    const maizo_entry_t *left = a, *right = b;
+    return left->ordinal < right->ordinal ? -1 : left->ordinal > right->ordinal ? 1 :
+                                                                                  0;
+}
+
+void maizoLibrarySortMode(maizo_library_t *library, int mode)
 {
     size_t read, write = 0;
     if (!library->count)
@@ -102,8 +116,21 @@ void maizoLibrarySort(maizo_library_t *library)
     qsort(library->entries, library->count, sizeof(*library->entries), compareSourceOrder);
     for (read = 0; read < library->count; read++) {
         maizo_entry_t *entry = &library->entries[read];
-        if (write && compareIdentity(&library->entries[write - 1], entry) == 0) {
-            library->entries[write - 1].favorite |= entry->favorite;
+        size_t scan;
+        int duplicate = 0;
+        /* Separate devices with the same disc ID are distinct installations.
+         * Deduplicate only repeated items from the same real source. */
+        for (scan = write; scan > 0; scan--) {
+            maizo_entry_t *previous = &library->entries[scan - 1];
+            if (compareIdentity(previous, entry) != 0)
+                break;
+            if (previous->owner == entry->owner) {
+                previous->favorite |= entry->favorite;
+                duplicate = 1;
+                break;
+            }
+        }
+        if (duplicate) {
             free(entry->identity);
             free(entry->title);
         } else {
@@ -111,7 +138,17 @@ void maizoLibrarySort(maizo_library_t *library)
         }
     }
     library->count = write;
-    qsort(library->entries, library->count, sizeof(*library->entries), compareTitle);
+    int (*comparator)(const void *, const void *) = compareTitle;
+    if (mode == 1)
+        comparator = comparePlatformTitle;
+    else if (mode == 2)
+        comparator = compareOrdinal;
+    qsort(library->entries, library->count, sizeof(*library->entries), comparator);
+}
+
+void maizoLibrarySort(maizo_library_t *library)
+{
+    maizoLibrarySortMode(library, 0);
 }
 
 static void remember(maizo_library_t *library)

@@ -65,6 +65,14 @@ jobs:
         path: |
           OPNPS2LD-*.ELF
 
+    - name: Upload MAIZO SUPREME ELF
+      if: ${{ success() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: MAIZO-SUPREME
+        path: OPNPS2LD-*.ELF
+        if-no-files-found: error
+
     - name: Upload release artifact info
       if: ${{ success() }}
       uses: actions/upload-artifact@v4

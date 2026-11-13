@@ -201,6 +201,38 @@ void guiEndFrame(void)
     guiUnlock();
 }
 
+void guiShowSupremeDiagnostics(void)
+{
+    char version[96], mode[96], features[96], video[96];
+    snprintf(version, sizeof(version), "OPL: %s", OPL_VERSION);
+    snprintf(mode, sizeof(mode), "Tema: MAIZO SUPREME");
+    snprintf(video, sizeof(video), "Area da interface: %d x %d",
+             screenWidth, gTheme ? gTheme->usedHeight : screenHeight);
+#ifdef PADEMU
+    snprintf(features, sizeof(features), "PadEmu: incluido nesta compilacao");
+#else
+    snprintf(features, sizeof(features), "PadEmu: nao incluido nesta compilacao");
+#endif
+    struct UIItem diagnostic[] = {
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MAIZO SUPREME - Sistema", -1}}},
+        {UI_SPLITTER},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {version, -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {mode, -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {features, -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {video, -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Dispositivos USB: Controles > Diagnostico USB", -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"FPS e consumo de VRAM nao estimados sem medicao.", -1}}},
+        {UI_BREAK},
+        {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
+        {UI_TERMINATOR}};
+    diaExecuteDialog(diagnostic, -1, 1, NULL);
+}
+
 void guiShowAbout()
 {
     char OPLVersion[40];
@@ -260,6 +292,15 @@ static void guiRenderNotifications(char *string, int y)
     int x;
 
     x = screenWidth - rmUnScaleX(fntCalcDimensions(gTheme->fonts[0], string)) - 10;
+    if (thmGetGuiValue() == 0) {
+        if (x < 30)
+            x = 30;
+        maizoDrawPanel(x - 12, y, screenWidth - x - 16, MENU_ITEM_HEIGHT + 10, 0);
+        rmDrawRect(x - 12, y, 3, MENU_ITEM_HEIGHT + 10, MAIZO_ACCENT);
+        fntRenderString(gTheme->fonts[0], x, y + 5, ALIGN_NONE,
+                        screenWidth - x - 25, 28, string, MAIZO_TEXT);
+        return;
+    }
 
     rmDrawRect(x - 10, y, screenWidth - x, MENU_ITEM_HEIGHT + 10, gColDarker);
     fntRenderString(gTheme->fonts[0], x - 5, y + 5, ALIGN_NONE, 0, 0, string, gTheme->textColor);
@@ -269,7 +310,7 @@ static void guiShowNotifications(void)
 {
     char notification[128];
     char *col_pos;
-    int y = 10;
+    int y = thmGetGuiValue() == 0 ? gTheme->usedHeight - 184 : 10;
     int yadd = 35;
 
     if (showPartPopup || showThmPopup || showLngPopup || showCfgPopup) {
@@ -1122,7 +1163,22 @@ static void guiDrawBusy(int alpha)
 
 static void guiRenderGreeting(int alpha)
 {
-    u64 mycolor = GS_SETREG_RGBA(0x1C, 0x1C, 0x1C, alpha);
+    u64 mycolor;
+    if (thmGetGuiValue() == 0) {
+        rmDrawRect(0, 0, screenWidth, screenHeight, MAIZO_BLACK);
+        mycolor = GS_SETREG_RGBA(245, 246, 248, alpha);
+        fntRenderString(gTheme->fonts[0], screenWidth >> 1, (gTheme->usedHeight >> 1) - 45,
+                        ALIGN_CENTER, 340, 46, "MAIZO", mycolor);
+        mycolor = GS_SETREG_RGBA(89, 165, 255, alpha);
+        fntRenderString(gTheme->fonts[0], screenWidth >> 1, (gTheme->usedHeight >> 1) + 4,
+                        ALIGN_CENTER, 320, 28, "SUPREME", mycolor);
+        mycolor = GS_SETREG_RGBA(160, 164, 174, alpha);
+        fntRenderString(gTheme->fonts[0], screenWidth >> 1, (gTheme->usedHeight >> 1) + 45,
+                        ALIGN_CENTER, 420, 28,
+                        gInitComplete ? "Pronto" : "Preparando biblioteca...", mycolor);
+        return;
+    }
+    mycolor = GS_SETREG_RGBA(0x1C, 0x1C, 0x1C, alpha);
     rmDrawRect(0, 0, screenWidth, screenHeight, mycolor);
 
     GSTEXTURE *logo = thmGetTexture(LOGO_PICTURE);
@@ -1513,11 +1569,20 @@ static void guiReadPads()
 // screen handlers. Fade transition code written by Maximus32
 static void guiShow()
 {
+    /* Disabled effects must never delay navigation or launch callbacks. */
+    if (screenHandlerTarget && thmGetGuiValue() == 0 && !maizoAnimations()) {
+        screenHandler = screenHandlerTarget;
+        screenHandlerTarget = NULL;
+        transIndex = 0;
+    }
+
     // is there a transmission effect going on or are
     // we in a normal rendering state?
     if (screenHandlerTarget) {
         u8 alpha;
-        const u8 transition_frames = 26;
+        const u8 transition_frames = thmGetGuiValue() == 0 ?
+                                         (maizoAnimationMode() == 1 ? 10 : 16) :
+                                         26;
         if (transIndex < (transition_frames / 2)) {
             // Fade-out old screen
             // index: 0..7
@@ -1697,15 +1762,32 @@ int guiMsgBox(const char *text, int addAccept, struct UIItem *ui)
         else
             guiShow();
 
-        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
-
-        rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
-        rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
-
-        fntRenderString(gTheme->fonts[0], screenWidth >> 1, gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0, text, gTheme->textColor);
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_BACK, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
-        if (addAccept)
-            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_ACCEPT, gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+        if (thmGetGuiValue() == 0) {
+            rmDrawRect(0, 0, screenWidth, screenHeight,
+                       GS_SETREG_RGBA(0, 0, 0, 0x60));
+            maizoDrawPanel(58, (gTheme->usedHeight >> 1) - 86,
+                           screenWidth - 116, 172, 0);
+            maizoDrawIcon(MAIZO_ICON_WARNING, 82,
+                          (gTheme->usedHeight >> 1) - 55, 28, MAIZO_WARNING);
+            fntRenderString(gTheme->fonts[0], screenWidth >> 1,
+                            (gTheme->usedHeight >> 1) - 32,
+                            ALIGN_CENTER, screenWidth - 154, 95, text, MAIZO_TEXT);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON,
+                               _STR_BACK, gTheme->fonts[0], 470,
+                               (gTheme->usedHeight >> 1) + 58, MAIZO_MUTED);
+            if (addAccept)
+                guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON,
+                                   _STR_ACCEPT, gTheme->fonts[0], 85,
+                                   (gTheme->usedHeight >> 1) + 58, MAIZO_ACCENT);
+        } else {
+            rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+            rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
+            rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
+            fntRenderString(gTheme->fonts[0], screenWidth >> 1, gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0, text, gTheme->textColor);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_BACK, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+            if (addAccept)
+                guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_ACCEPT, gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+        }
 
         guiEndFrame();
     }
@@ -1748,9 +1830,19 @@ void guiRenderTextScreen(const char *message)
 
     guiShow();
 
-    rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
-
-    fntRenderString(gTheme->fonts[0], screenWidth >> 1, gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0, message, gTheme->textColor);
+    if (thmGetGuiValue() == 0) {
+        rmDrawRect(0, 0, screenWidth, screenHeight,
+                   GS_SETREG_RGBA(0, 0, 0, 0x5A));
+        maizoDrawPanel(54, (gTheme->usedHeight >> 1) - 53,
+                       screenWidth - 108, 106, 0);
+        fntRenderString(gTheme->fonts[0], screenWidth >> 1,
+                        (gTheme->usedHeight >> 1) - 6, ALIGN_CENTER,
+                        screenWidth - 142, 65, message, MAIZO_TEXT);
+    } else {
+        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+        fntRenderString(gTheme->fonts[0], screenWidth >> 1, gTheme->usedHeight >> 1,
+                        ALIGN_CENTER, 0, 0, message, gTheme->textColor);
+    }
 
     guiDrawOverlays();
 
