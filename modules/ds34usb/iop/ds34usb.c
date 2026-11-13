@@ -12,6 +12,7 @@
 #include "../../pademu/maizotwin.h"
 #include "../../pademu/maizohid.h"
 #include "../../pademu/maizohid_usb.h"
+#include "../../pademu/maizohid_latch.h"
 
 IRX_ID("ds34usb", 1, 1);
 
@@ -123,6 +124,7 @@ static u8 maizo_usb_stage, maizo_usb_class, maizo_usb_endpoints;
 static volatile u8 hid_stream_state[MAX_PADS];
 static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
 static volatile unsigned int hid_stream_generation[MAX_PADS];
+static u16 hid_pending[MAX_PADS];
 static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
 static int hid_stream_thread_id = -1;
 static void hid_stream_thread(void *arg);
@@ -369,6 +371,7 @@ static void usb_release(int pad)
     CpuSuspendIntr(&state);
     hid_stream_generation[pad]++;
     hid_stream_state[pad] = 0;
+    hid_pending[pad] = 0;
     CpuResumeIntr(state);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
@@ -522,14 +525,24 @@ static void readReport(u8 *data, int bytes, int pad)
         int player = (bytes >= MAIZOTWIN_PACKET && data[0] >= 1 && data[0] <= 2) ?
                          twin_slots[data[0] - 1] :
                          -1;
-        if (player >= 0 && maizotwin_decode(data, bytes, &ds34pad[player].ds2))
-            twin_report_counts[data[0] - 1]++;
+        if (player >= 0) {
+            u16 oldButtons = ds34pad[player].ds2.nButtonState;
+            if (maizotwin_decode(data, bytes, &ds34pad[player].ds2)) {
+                hid_pending[player] |=
+                    maizohid_press_edges(oldButtons, ds34pad[player].ds2.nButtonState);
+                twin_report_counts[data[0] - 1]++;
+            }
+        }
         return;
     }
     if (ds34pad[pad].type == MAIZOHID) {
-        if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2) &&
-            maizo_usb_reports < 255)
-            maizo_usb_reports = maizo_usb_reports == 254 ? 1 : maizo_usb_reports + 1;
+        u16 oldButtons = ds34pad[pad].ds2.nButtonState;
+        if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2)) {
+            hid_pending[pad] |=
+                maizohid_press_edges(oldButtons, ds34pad[pad].ds2.nButtonState);
+            if (maizo_usb_reports < 255)
+                maizo_usb_reports = maizo_usb_reports == 254 ? 1 : maizo_usb_reports + 1;
+        }
         return;
     }
     if (data[0]) {
@@ -854,6 +867,17 @@ void ds34usb_set_led(u8 *led, int port)
     LED(led, port);
 }
 
+/* Atomic one-shot edges: retain a press observed between two calls
+ * to PAD_GET_DATA, then release normally on the following game poll. */
+static void hid_copy_snapshot(void *dst, int size, int port)
+{
+    struct ds2report report;
+    mips_memcpy(&report, ds34pad[port].data, sizeof(report));
+    maizohid_apply_press(&report, hid_pending[port]);
+    hid_pending[port] = 0;
+    mips_memcpy(dst, &report, size);
+}
+
 void ds34usb_get_data(char *dst, int size, int port)
 {
     int ret;
@@ -873,7 +897,7 @@ void ds34usb_get_data(char *dst, int size, int port)
         if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
             return;
         CpuSuspendIntr(&oldstate);
-        mips_memcpy(dst, ds34pad[port].data, size);
+        hid_copy_snapshot(dst, size, port);
         CpuResumeIntr(oldstate);
         return;
     }

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "maizo_pademu_bits.h"
 #include "maizo_sio2_guard.h"
+#include "maizohid_latch.h"
 
 int main(void)
 {
@@ -52,6 +53,20 @@ int main(void)
     data[23] = 0x00;
     assert(maizoSio2SecondCommand(data, sizeof(data), sizeof(data)) == 21);
 
-    puts("MAIZO: P2, per-slot vibration, multitap and SIO2 packet guards passed");
+    {
+        struct ds2report report = {0};
+        uint16_t edges = 0;
+        report.nButtonState = 0xFFFF;
+        edges |= maizohid_press_edges(0xFFFF, (uint16_t)~DS2ButtonCross);
+        edges |= maizohid_press_edges((uint16_t)~DS2ButtonCross, 0xFFFF);
+        maizohid_apply_press(&report, edges);
+        assert((report.nButtonState & DS2ButtonCross) == 0);
+        assert(report.PressureCross == 255);
+        report.nButtonState = 0xFFFF;
+        edges = 0;
+        maizohid_apply_press(&report, edges);
+        assert(report.nButtonState == 0xFFFF);
+    }
+    puts("MAIZO: PadEmu P2, multitap, SIO2 and short USB press tests passed");
     return 0;
 }
