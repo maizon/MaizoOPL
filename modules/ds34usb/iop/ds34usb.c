@@ -99,6 +99,25 @@ enum {
 };
 static u8 twin_stage, twin_class, twin_endpoints, twin_report_counts[2];
 
+/* USB HID diagnostic state belongs to the IOP driver; VID/PID alone never
+ * implies that a report descriptor parsed or that PadEmu is operational. */
+enum {
+    MAIZO_USB_NOT_SEEN = 0,
+    MAIZO_USB_PROBED,
+    MAIZO_USB_CONNECT,
+    MAIZO_USB_REJECT_INTERFACE,
+    MAIZO_USB_ENDPOINT_FAIL,
+    MAIZO_USB_CONFIG_FAIL,
+    MAIZO_USB_DESCRIPTOR_REQUEST_FAIL,
+    MAIZO_USB_DESCRIPTOR_PARSE_FAIL,
+    MAIZO_USB_READY,
+    MAIZO_USB_DISCONNECTED,
+    MAIZO_USB_NO_SLOT
+};
+static u8 maizo_usb_stage, maizo_usb_class, maizo_usb_endpoints;
+static u8 maizo_usb_reports, maizo_usb_error;
+static u16 maizo_usb_vid, maizo_usb_pid, maizo_usb_packet, maizo_usb_report_bits;
+
 
 
 int usb_probe(int devId)
@@ -113,8 +132,12 @@ int usb_probe(int devId)
         return 0;
     }
 
-    if (device->idVendor == MAIZOHID_VID && device->idProduct == MAIZOHID_PID)
+    if (device->idVendor == MAIZOHID_VID && device->idProduct == MAIZOHID_PID) {
+        maizo_usb_stage = MAIZO_USB_PROBED;
+        maizo_usb_vid = device->idVendor;
+        maizo_usb_pid = device->idProduct;
         return 1;
+    }
     if (device->idVendor == MAIZOTWIN_VID && device->idProduct == MAIZOTWIN_PID) {
         twin_stage = TWIN_STAGE_PROBED;
         return 1;
@@ -124,7 +147,13 @@ int usb_probe(int devId)
         return 1;
 
     /* A valid HID gamepad interface is not restricted to one VID/PID. */
-    return maizohid_find_interface(devId, NULL, NULL);
+    if (maizohid_find_interface(devId, NULL, NULL)) {
+        maizo_usb_stage = MAIZO_USB_PROBED;
+        maizo_usb_vid = device->idVendor;
+        maizo_usb_pid = device->idProduct;
+        return 1;
+    }
+    return 0;
 }
 
 int usb_connect(int devId)
@@ -146,6 +175,8 @@ int usb_connect(int devId)
     }
 
     if (pad >= MAX_PADS) {
+        if (maizo_usb_stage == MAIZO_USB_PROBED)
+            maizo_usb_stage = MAIZO_USB_NO_SLOT;
         DPRINTF("DS34USB: Error - only %d device allowed !\n", MAX_PADS);
         return 1;
     }
@@ -173,6 +204,14 @@ int usb_connect(int devId)
     }
     interface = (UsbInterfaceDescriptor *)((char *)config + config->bLength);
     generic_hid = maizohid_find_interface(devId, &hid_interface, &hid_endpoint);
+    if (maizo_usb_stage == MAIZO_USB_PROBED &&
+        maizo_usb_vid == device->idVendor && maizo_usb_pid == device->idProduct) {
+        maizo_usb_stage = MAIZO_USB_CONNECT;
+        maizo_usb_reports = maizo_usb_error = 0;
+        maizo_usb_report_bits = maizo_usb_packet = 0;
+        maizo_usb_class = hid_interface ? hid_interface->bInterfaceClass : 0;
+        maizo_usb_endpoints = hid_interface ? hid_interface->bNumEndpoints : 0;
+    }
 
     if (device->idVendor == MAIZOTWIN_VID && device->idProduct == MAIZOTWIN_PID) {
         twin_stage = TWIN_STAGE_CONNECT;
@@ -210,6 +249,11 @@ int usb_connect(int devId)
         ds34pad[pad].type = MAIZOHID;
         ds34pad[pad].hid_interface = hid_interface->bInterfaceNumber;
         epCount = 0; /* Only the matched interrupt-IN descriptor is needed. */
+    } else if (device->idVendor == MAIZOHID_VID &&
+               device->idProduct == MAIZOHID_PID && !generic_hid) {
+        maizo_usb_stage = MAIZO_USB_REJECT_INTERFACE;
+        usb_release(pad);
+        return 1;
     } else if (device->idProduct == DS3_PID) {
         ds34pad[pad].type = DS3;
         epCount = interface->bNumEndpoints - 1;
@@ -222,6 +266,8 @@ int usb_connect(int devId)
                    hid_endpoint :
                    (UsbEndpointDescriptor *)UsbGetDeviceStaticDescriptor(devId, NULL, USB_DT_ENDPOINT);
     if (!endpoint) {
+        if (ds34pad[pad].type == MAIZOHID)
+            maizo_usb_stage = MAIZO_USB_ENDPOINT_FAIL;
         if (ds34pad[pad].type == TWINHID)
             twin_stage = TWIN_STAGE_ENDPOINT_FAIL;
         usb_release(pad);
@@ -255,6 +301,8 @@ int usb_connect(int devId)
     if (ds34pad[pad].interruptEndp < 0 ||
         ((ds34pad[pad].type != MAIZOHID && ds34pad[pad].type != TWINHID) &&
          ds34pad[pad].outEndp < 0)) {
+        if (ds34pad[pad].type == MAIZOHID)
+            maizo_usb_stage = MAIZO_USB_ENDPOINT_FAIL;
         if (ds34pad[pad].type == TWINHID)
             twin_stage = TWIN_STAGE_ENDPOINT_FAIL;
         usb_release(pad);
@@ -263,11 +311,19 @@ int usb_connect(int devId)
 
     ds34pad[pad].status |= DS34USB_STATE_CONNECTED;
 
-    if (UsbSetDeviceConfiguration(ds34pad[pad].controlEndp,
-                                  config->bConfigurationValue, usb_config_set,
-                                  (void *)pad) != USB_RC_OK &&
-        ds34pad[pad].type == TWINHID)
-        twin_stage = TWIN_STAGE_CONFIG_FAIL;
+    {
+        int configured = UsbSetDeviceConfiguration(ds34pad[pad].controlEndp,
+                                                   config->bConfigurationValue, usb_config_set,
+                                                   (void *)pad);
+        if (configured != USB_RC_OK) {
+            if (ds34pad[pad].type == TWINHID)
+                twin_stage = TWIN_STAGE_CONFIG_FAIL;
+            if (ds34pad[pad].type == MAIZOHID) {
+                maizo_usb_stage = MAIZO_USB_CONFIG_FAIL;
+                maizo_usb_error = (u8)configured;
+            }
+        }
+    }
     SignalSema(ds34pad[pad].sema);
 
     return 0;
@@ -285,6 +341,8 @@ int usb_disconnect(int devId)
     }
 
     if (pad < MAX_PADS) {
+        if (ds34pad[pad].type == MAIZOHID)
+            maizo_usb_stage = MAIZO_USB_DISCONNECTED;
         if (ds34pad[pad].type == TWINHID)
             twin_stage = TWIN_STAGE_DISCONNECTED;
         usb_release(pad);
@@ -353,6 +411,10 @@ static void usb_config_set(int result, int count, void *arg)
 
     PollSema(ds34pad[pad].sema);
     if (result != USB_RC_OK) {
+        if (ds34pad[pad].type == MAIZOHID) {
+            maizo_usb_stage = MAIZO_USB_CONFIG_FAIL;
+            maizo_usb_error = (u8)result;
+        }
         if (ds34pad[pad].type == TWINHID)
             twin_stage = TWIN_STAGE_CONFIG_FAIL;
         SignalSema(ds34pad[pad].sema);
@@ -375,8 +437,11 @@ static void usb_config_set(int result, int count, void *arg)
                                  0x06 /* GET_DESCRIPTOR */, 0x2200,
                                  ds34pad[pad].hid_interface, MAIZOHID_MAX_DESCRIPTOR,
                                  hid_report_descriptor[pad], maizo_descriptor_cb, (void *)pad);
-        if (ret != USB_RC_OK)
+        if (ret != USB_RC_OK) {
+            maizo_usb_stage = MAIZO_USB_DESCRIPTOR_REQUEST_FAIL;
+            maizo_usb_error = (u8)ret;
             DPRINTF("MAIZOHID: descriptor request failed %d\n", ret);
+        }
         SignalSema(ds34pad[pad].sema);
         return;
     }
@@ -410,9 +475,14 @@ static void maizo_descriptor_cb(int resultCode, int bytes, void *arg)
         maizohid_parse(&ds34pad[pad].hid_layout, hid_report_descriptor[pad], bytes) &&
         ds34pad[pad].hid_layout.report_bits <= ds34pad[pad].hid_packet_size * 8) {
         ds34pad[pad].status |= DS34USB_STATE_RUNNING;
+        maizo_usb_stage = MAIZO_USB_READY;
+        maizo_usb_report_bits = ds34pad[pad].hid_layout.report_bits;
+        maizo_usb_packet = ds34pad[pad].hid_packet_size;
         DPRINTF("MAIZOHID menu: detected port %d\n", pad);
     } else {
         ds34pad[pad].status &= ~DS34USB_STATE_RUNNING;
+        maizo_usb_stage = MAIZO_USB_DESCRIPTOR_PARSE_FAIL;
+        maizo_usb_error = (u8)resultCode;
         DPRINTF("MAIZOHID menu: unsupported report descriptor\n");
     }
 }
@@ -438,7 +508,9 @@ static void readReport(u8 *data, int bytes, int pad)
         return;
     }
     if (ds34pad[pad].type == MAIZOHID) {
-        maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2);
+        if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2) &&
+            maizo_usb_reports < 255)
+            maizo_usb_reports++;
         return;
     }
     if (data[0]) {
@@ -900,6 +972,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34USB_RESET      8
 
 #define DS34USB_TWIN_DIAG   9
+#define DS34USB_USB_DIAG   10
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)
@@ -936,6 +1009,22 @@ void *rpc_sf(int cmd, void *data, int size)
             break;
         case DS34USB_RESET:
             ds34usb_reset();
+            break;
+        case DS34USB_USB_DIAG:
+            mips_memset(data, 0, 16);
+            ((u8 *)data)[0] = maizo_usb_stage;
+            ((u8 *)data)[1] = maizo_usb_vid & 0xFF;
+            ((u8 *)data)[2] = maizo_usb_vid >> 8;
+            ((u8 *)data)[3] = maizo_usb_pid & 0xFF;
+            ((u8 *)data)[4] = maizo_usb_pid >> 8;
+            ((u8 *)data)[5] = maizo_usb_class;
+            ((u8 *)data)[6] = maizo_usb_endpoints;
+            ((u8 *)data)[7] = maizo_usb_packet & 0xFF;
+            ((u8 *)data)[8] = maizo_usb_packet >> 8;
+            ((u8 *)data)[9] = maizo_usb_reports;
+            ((u8 *)data)[10] = maizo_usb_report_bits & 0xFF;
+            ((u8 *)data)[11] = maizo_usb_report_bits >> 8;
+            ((u8 *)data)[12] = maizo_usb_error;
             break;
         case DS34USB_TWIN_DIAG:
             mips_memset(data, 0, 8);

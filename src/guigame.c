@@ -640,26 +640,57 @@ static char twinDataLine[96];
 
 static void maizoTwinRefresh(void)
 {
-    u8 d[8] = {0};
-    static const char *const status[] = {
-        "Nao enumerado: PS2 nao viu o receptor",
-        "VID/PID 0810:0001 detectado (USB probe)",
-        "Detectado; abrindo endpoint USB",
-        "Rejeitado: interface/configuracao incompativel",
-        "Detectado mas endpoint IN nao abriu",
-        "Falha em configurar dispositivo USB",
-        "USB pronto; teste botoes de P1 e P2",
-        "O receptor USB foi desconectado"};
-    if (!ds34usb_get_twin_diag(d)) {
-        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS, "Driver DS34USB inativo");
-        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, "Ative USB no OPL e reinicie");
+    u8 d[16] = {0};
+    static const char *const hid_status[] = {
+        "Nenhum gamepad USB HID detectado",
+        "USB enumerado; aguardando driver",
+        "USB detectado; abrindo endpoint",
+        "Interface HID nao compativel",
+        "Falha ao abrir endpoint USB",
+        "Falha na configuracao USB",
+        "Falha ao solicitar descritor HID",
+        "Descritor HID nao suportado",
+        "Driver HID pronto; teste botoes",
+        "Dispositivo USB desconectado",
+        "Sem porta PadEmu livre"};
+    static const char *const twin_status[] = {
+        "Receptor Twin USB nao detectado",
+        "Receptor Twin detectado por VID/PID",
+        "Receptor Twin: abrindo endpoint",
+        "Twin: interface incompativel",
+        "Twin: falha no endpoint USB",
+        "Twin: falha na configuracao USB",
+        "Twin pronto para testar",
+        "Receptor Twin removido"};
+    if (!ds34usb_get_usb_diag(d)) {
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    "Driver IOP indisponivel (nao e erro de VID/PID)");
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA,
+                    "Verifique USB ativado no OPL e reinicie");
         return;
     }
-    diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
-                status[d[0] <= 7 ? d[0] : 0]);
-    snprintf(twinDataLine, sizeof(twinDataLine),
-             "Classe: %02X  Endpoints: %u  Pacotes P1/P2: %u / %u  Estado: %02X",
-             d[1], d[2], d[3], d[4], d[5]);
+    if (d[0]) {
+        unsigned int vid = d[1] | (d[2] << 8);
+        unsigned int pid = d[3] | (d[4] << 8);
+        unsigned int packet = d[7] | (d[8] << 8);
+        unsigned int bits = d[10] | (d[11] << 8);
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    hid_status[d[0] < sizeof(hid_status) / sizeof(hid_status[0]) ? d[0] : 0]);
+        snprintf(twinDataLine, sizeof(twinDataLine),
+                 "VID:%04X PID:%04X CL:%02X EP:%u PK:%u BITS:%u IN:%u ER:%u",
+                 vid, pid, d[5], d[6], packet, bits, d[9], d[12]);
+    } else {
+        u8 twin[8] = {0};
+        if (!ds34usb_get_twin_diag(twin)) {
+            diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS, "Diagnostico USB indisponivel");
+            return;
+        }
+        diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
+                    twin_status[twin[0] <= 7 ? twin[0] : 0]);
+        snprintf(twinDataLine, sizeof(twinDataLine),
+                 "TWIN 0810:0001 CL:%02X EP:%u IN P1/P2:%u/%u Estado:%02X",
+                 twin[1], twin[2], twin[3], twin[4], twin[5]);
+    }
     diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, twinDataLine);
 }
 
