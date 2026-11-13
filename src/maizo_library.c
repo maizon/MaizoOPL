@@ -138,9 +138,12 @@ void maizoLibrarySortMode(maizo_library_t *library, int mode)
         }
     }
     library->count = write;
-    qsort(library->entries, library->count, sizeof(*library->entries),
-          mode == 1 ? comparePlatformTitle : mode == 2 ? compareOrdinal :
-                                                        compareTitle);
+    int (*comparator)(const void *, const void *) = compareTitle;
+    if (mode == 1)
+        comparator = comparePlatformTitle;
+    else if (mode == 2)
+        comparator = compareOrdinal;
+    qsort(library->entries, library->count, sizeof(*library->entries), comparator);
 }
 
 void maizoLibrarySort(maizo_library_t *library)
