@@ -597,7 +597,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     static const int requestOrder[9] = {0, -1, 1, -2, 2, -3, 3, -4, 4};
     int w, h, i, slot, covers = 1, position, total;
     float progress = menuDashboardFocus();
-    int dir = menuDashboardSlide() > 0 ? 1 : menuDashboardSlide() < 0 ? -1 : 0;
+    int dir = menuDashboardSlide() > 0 ? 1 : menuDashboardSlide() < 0 ? -1 :
+                                                                       0;
     int shift;
 
     (void)config;
@@ -687,7 +688,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         if (!cover || !cover->Mem)
             cover = thmGetTexture(COVER_DEFAULT);
         caseBox = thmGetTexture(entry->platform == MAIZO_APP ?
-                                APPS_CASE_OVERLAY : CASE_OVERLAY);
+                                    APPS_CASE_OVERLAY :
+                                    CASE_OVERLAY);
 
         frontX = cw * 11 / 100;
         frontW = cw * 86 / 100;
@@ -708,7 +710,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
             }
         } else {
             maizoDrawIcon(entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
-                          entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : MAIZO_ICON_PS2,
+                          entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
+                                                         MAIZO_ICON_PS2,
                           cx - 16, cy - 20, 32, MAIZO_BRIGHT);
             fntRenderString(elem->font, cx, cy + 25, ALIGN_CENTER,
                             cw - 18, 38, "CAPA", MAIZO_MUTED);
@@ -747,11 +750,12 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
 }
 
 void thmRenderSupremeMain(struct menu_list *menu, struct submenu_list *item,
-                         config_set_t *config)
+                          config_set_t *config)
 {
-    theme_element_t *elem = (menu && menu->item && 
-                            ((item_list_t *)menu->item->userdata)->mode == APP_MODE) ?
-                               gTheme->appsMainElems.first : gTheme->mainElems.first;
+    theme_element_t *elem = (menu && menu->item &&
+                             ((item_list_t *)menu->item->userdata)->mode == APP_MODE) ?
+                                gTheme->appsMainElems.first :
+                                gTheme->mainElems.first;
     while (elem) {
         if (elem->drawElem == &drawMaizoCarousel) {
             drawMaizoCarousel(menu, item, config, elem);

@@ -267,7 +267,7 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
         } else if (td->in[0] == 0x01) {
             if (port2 == 1) { // 2 sio cmds
                 second = maizoSio2SecondCommand(td->in, td->in_size,
-                                               td->out_size);
+                                                td->out_size);
                 if (second < 0) {
                     /* An uncommon/short SIO2 packet is left to the original
                      * handler. Never return silently with no pad response. */
@@ -369,7 +369,7 @@ void pademu(sio2_transfer_data_t *td)
          * output buffer when a game submits an uncommon 2P transaction. */
         {
             int offset = maizoSio2SecondCommand(td->in, td->in_size,
-                                                 td->out_size);
+                                                td->out_size);
             if (offset < 0)
                 return;
             cmd_size = (u8)offset;

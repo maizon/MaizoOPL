@@ -1610,9 +1610,8 @@ static void guiShow()
         // render with the set screen handler
         screenHandler->renderScreen();
 
-    /* Above page content and transitions; modal dialogs render afterwards. */
-    if (thmGetGuiValue() == 0)
-        maizoDrawBrand();
+    /* Each Supreme screen draws its own header exactly once. Repeating the
+     * brand here doubled font rendering on every frame. */
 }
 
 void guiIntroLoop(void)

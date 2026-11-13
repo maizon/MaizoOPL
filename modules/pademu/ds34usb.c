@@ -6,6 +6,7 @@
 #include "usbd.h"
 #include "usbd_macro.h"
 #include "thbase.h"
+#include "intrman.h"
 #include "thsemap.h"
 #include "ds34usb.h"
 #include "maizotwin.h"

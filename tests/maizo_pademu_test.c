@@ -41,11 +41,15 @@ int main(void)
      * or leave the first gamepad command without a response. */
     assert(maizoSio2SecondCommand(NULL, 32, 32) == -1);
     assert(maizoSio2SecondCommand(data, 2, 2) == -1);
-    data[9] = 0x01; data[10] = 0x42; data[11] = 0x00;
+    data[9] = 0x01;
+    data[10] = 0x42;
+    data[11] = 0x00;
     assert(maizoSio2SecondCommand(data, sizeof(data), sizeof(data)) == 9);
     assert(maizoSio2SecondCommand(data, sizeof(data), 10) == -1);
     data[9] = 0x00;
-    data[21] = 0x01; data[22] = 0x40; data[23] = 0x00;
+    data[21] = 0x01;
+    data[22] = 0x40;
+    data[23] = 0x00;
     assert(maizoSio2SecondCommand(data, sizeof(data), sizeof(data)) == 21);
 
     puts("MAIZO: P2, per-slot vibration, multitap and SIO2 packet guards passed");

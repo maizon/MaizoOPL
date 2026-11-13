@@ -168,8 +168,8 @@ void cacheDestroyCache(image_cache_t *cache)
 }
 
 static GSTEXTURE *cacheGetTextureEx(image_cache_t *cache, item_list_t *list,
-                                     int *cacheId, int *UID, char *value,
-                                     int prefetch)
+                                    int *cacheId, int *UID, char *value,
+                                    int prefetch)
 {
     if (*cacheId == -2) {
         return NULL;

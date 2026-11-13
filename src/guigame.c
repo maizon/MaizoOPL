@@ -749,6 +749,7 @@ static int guiGamePadEmuUpdater(int modified)
         config_set_t *configSet = gameMenuLoadConfig(diaPadEmuConfig);
         configSetInt(configSet, CONFIG_ITEM_PADEMUSOURCE, gPadEmuSource);
         guiGameLoadPadEmuConfig(configSet, configGetByType(CONFIG_GAME));
+        maizoPadEmuEditPort = 0;
     }
 
     diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_ENABLE, &EnablePadEmu);

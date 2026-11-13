@@ -111,6 +111,7 @@ static void dashboardStartAnimation(void)
     focusStartFrame = guiFrameId;
 }
 static int carouselDirection;
+static unsigned int dashboardLastNavFrame;
 
 void menuDashboardInvalidate(void)
 {
@@ -1549,8 +1550,17 @@ static void dashboardHandleInput(void)
         menuHandleInputMenu();
         return;
     }
-    if (getKey(KEY_LEFT) || getKey(KEY_RIGHT) || getKey(KEY_UP) || getKey(KEY_DOWN)) {
-        carouselDirection = getKey(KEY_LEFT) || getKey(KEY_UP) ? -1 : 1;
+    /* The classic OPL key-repeat delay is deliberately preserved in
+     * legacy themes. Supreme navigates instantly on a new press, then
+     * repeats every five rendered frames while held. No blocking sleep. */
+    int pressLeft = getKeyPressed(KEY_LEFT) || getKeyPressed(KEY_UP);
+    int pressRight = getKeyPressed(KEY_RIGHT) || getKeyPressed(KEY_DOWN);
+    int pressEdge = getKeyOn(KEY_LEFT) || getKeyOn(KEY_UP) ||
+                    getKeyOn(KEY_RIGHT) || getKeyOn(KEY_DOWN);
+    if ((pressLeft || pressRight) &&
+        (pressEdge || guiFrameId - dashboardLastNavFrame >= 5)) {
+        dashboardLastNavFrame = guiFrameId;
+        carouselDirection = pressLeft ? -1 : 1;
         maizoLibraryMove(&dashboard, carouselDirection);
         dashboardSelect();
         dashboardStartAnimation();
