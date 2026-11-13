@@ -38,7 +38,11 @@ enum MENU_IDs {
     MENU_ITEM_INFO,
     MENU_ANIMATIONS,
     MENU_PADEMU,
-    MENU_BLUETOOTH
+    MENU_BLUETOOTH,
+    MENU_STORAGE_SETTINGS,
+    MENU_PS1_SETTINGS,
+    MENU_VIDEO_SETTINGS,
+    MENU_USB_DIAG
 };
 
 enum GAME_MENU_IDs {
@@ -106,9 +110,10 @@ void menuDashboardInvalidate(void)
 float menuDashboardFocus(void)
 {
     unsigned int elapsed = guiFrameId - focusStartFrame;
-    if (!maizoAnimations() || elapsed >= 10)
+    unsigned int duration = maizoAnimationMode() == 1 ? 6 : 12;
+    if (!maizoAnimations() || elapsed >= duration)
         return 1.0f;
-    float t = elapsed / 10.0f;
+    float t = (float)elapsed / duration;
     return t * t * (3.0f - 2.0f * t);
 }
 float menuDashboardSlide(void)
@@ -208,7 +213,8 @@ static void menuInitMainMenu(void);
 
 static void dashboardChangeTab(int direction)
 {
-    int tab = (dashboard.tab + direction + MAIZO_TAB_COUNT) % MAIZO_TAB_COUNT;
+    /* SETTINGS is a screen opened by START, not a sixth dashboard tab. */
+    int tab = (dashboard.tab + direction + MAIZO_SETTINGS) % MAIZO_SETTINGS;
     carouselDirection = 0;
     if (!maizoLibraryFilter(&dashboard, tab)) {
         dashboardError = 1;
@@ -412,32 +418,41 @@ void menuSaveConfig()
     guiHandleDeferedIO(&actionStatus, _l(_STR_SAVING_SETTINGS), IO_CUSTOM_SIMPLEACTION, &_menuSaveConfig);
 }
 
-static const char *settingsNames[] = {"GERAL", "VIDEO", "AUDIO", "CONTROLES", "PADEMU", "BLUETOOTH", "ARMAZENAMENTO", "REDE", "PS1", "SOBRE"};
-static const int settingsIcons[] = {MAIZO_ICON_SETTINGS, MAIZO_ICON_VIDEO, MAIZO_ICON_AUDIO, MAIZO_ICON_PAD,
-                                    MAIZO_ICON_PAD, MAIZO_ICON_BLUETOOTH, MAIZO_ICON_HDD, MAIZO_ICON_NETWORK, MAIZO_ICON_PS1, MAIZO_ICON_INFO};
+static const char *settingsNames[] = {"INTERFACE", "CONTROLES", "JOGOS", "VIDEO", "AUDIO", "ARMAZENAMENTO", "REDE", "SISTEMA", "DIAGNOSTICO"};
+static const int settingsIcons[] = {
+    MAIZO_ICON_SETTINGS, MAIZO_ICON_PAD, MAIZO_ICON_PS2,
+    MAIZO_ICON_VIDEO, MAIZO_ICON_AUDIO, MAIZO_ICON_HDD,
+    MAIZO_ICON_NETWORK, MAIZO_ICON_INFO, MAIZO_ICON_USB};
+#define MAIZO_SETTING_CATEGORIES 9
 
 static int settingsItemCategory(int id)
 {
     switch (id) {
         case MENU_GFX_SETTINGS:
-            return 1;
-        case MENU_AUDIO_SETTINGS:
-            return 2;
+        case MENU_ANIMATIONS:
+            return 0;
         case MENU_CONTROLLER_SETTINGS:
-            return 3;
         case MENU_PADEMU:
-            return 4;
         case MENU_BLUETOOTH:
+            return 1;
+        case MENU_OSD_LANGUAGE_SETTINGS:
+        case MENU_PS1_SETTINGS:
+        case MENU_ITEM_INFO:
+            return 2;
+        case MENU_VIDEO_SETTINGS:
+            return 3;
+        case MENU_AUDIO_SETTINGS:
+            return 4;
+        case MENU_STORAGE_SETTINGS:
             return 5;
         case MENU_NET_CONFIG:
         case MENU_NET_UPDATE:
-            return 7;
         case MENU_START_NBD:
             return 6;
-        case MENU_ABOUT:
-            return 9;
+        case MENU_USB_DIAG:
+            return 8;
         default:
-            return 0;
+            return 7;
     }
 }
 
@@ -448,6 +463,11 @@ static void menuInitMainMenu(void)
 
     // initialize the menu
     submenuAppendItem(&mainMenu, -1, NULL, MENU_SETTINGS, _STR_SETTINGS);
+    if (thmGetGuiValue() == 0) {
+        submenuAppendItem(&mainMenu, -1, "Video da interface", MENU_VIDEO_SETTINGS, -1);
+        submenuAppendItem(&mainMenu, -1, "Armazenamento e fontes", MENU_STORAGE_SETTINGS, -1);
+        submenuAppendItem(&mainMenu, -1, "Configuracoes PlayStation 1", MENU_PS1_SETTINGS, -1);
+    }
     submenuAppendItem(&mainMenu, -1, NULL, MENU_GFX_SETTINGS, _STR_GFX_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_CONTROLLER_SETTINGS, _STR_CONTROLLER_SETTINGS);
@@ -468,14 +488,13 @@ static void menuInitMainMenu(void)
 #ifdef PADEMU
         submenuAppendItem(&mainMenu, -1, "PadEmu / macros / USB HID", MENU_PADEMU, -1);
         submenuAppendItem(&mainMenu, -1, "Gerenciar controles Bluetooth", MENU_BLUETOOTH, -1);
+        submenuAppendItem(&mainMenu, -1, "Diagnostico USB HID universal", MENU_USB_DIAG, -1);
 #endif
         submenu_list_t *item = mainMenu;
         while (item) {
             submenu_list_t *next = item->next;
             int category = settingsItemCategory(item->item.id);
             int keep = category == settingsCategory;
-            if ((settingsCategory == 6 || settingsCategory == 8) && item->item.id == MENU_SETTINGS)
-                keep = 1;
             if (!keep)
                 submenuRemoveItem(&mainMenu, item->item.id);
             item = next;
@@ -1019,25 +1038,35 @@ void menuRenderMenu()
     guiDrawBGPlasma();
     if (thmGetGuiValue() == 0) {
         maizoDrawHeader(MAIZO_SETTINGS);
-        for (int i = 0; i < 10; i++) {
-            int y = 108 + i * 28;
+        for (int i = 0; i < MAIZO_SETTING_CATEGORIES; i++) {
+            int y = 108 + i * 30;
             if (i == settingsCategory)
                 rmDrawRect(25, y + 2, 3, 22, MAIZO_ACCENT);
             maizoDrawIcon(settingsIcons[i], 32, y + 3, 20, i == settingsCategory ? MAIZO_ACCENT : MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 60, y + 4, ALIGN_NONE, 160, 22, settingsNames[i], MAIZO_TEXT);
         }
-        maizoDrawPanel(236, 108, 380, 288, settingsFocus);
+        maizoDrawPanel(236, 108, 380, 288, 0);
         int y = 130;
-        for (submenu_list_t *it = mainMenu; it; it = it->next) {
+        int itemIndex = 0, activeIndex = 0, first;
+        for (submenu_list_t *it = mainMenu; it; it = it->next, itemIndex++)
+            if (it == mainMenuCurrent)
+                activeIndex = itemIndex;
+        first = activeIndex >= 8 ? activeIndex - 7 : 0;
+        itemIndex = 0;
+        for (submenu_list_t *it = mainMenu; it; it = it->next, itemIndex++) {
+            if (itemIndex < first || itemIndex >= first + 8)
+                continue;
             if (it == mainMenuCurrent && settingsFocus)
-                rmDrawRect(244, y - 4, 364, 28, MAIZO_DIVIDER);
+                rmDrawRect(244, y + 1, 3, 22, MAIZO_ACCENT);
             fntRenderString(gTheme->fonts[0], 254, y, ALIGN_NONE, 346, 25,
-                            submenuItemGetText(&it->item), it == mainMenuCurrent && settingsFocus ? MAIZO_ACCENT : MAIZO_TEXT);
-            y += 30;
+                            submenuItemGetText(&it->item),
+                            it == mainMenuCurrent && settingsFocus ? MAIZO_TEXT : MAIZO_MUTED);
+            y += 32;
         }
 #ifndef PADEMU
-        if (settingsCategory == 4 || settingsCategory == 5)
-            fntRenderString(gTheme->fonts[0], 252, 150, ALIGN_NONE, 340, 80, "PadEmu nao incluido nesta build", MAIZO_MUTED);
+        if (settingsCategory == 1 || settingsCategory == 8)
+            fntRenderString(gTheme->fonts[0], 252, 380, ALIGN_NONE, 340, 28,
+                            "PadEmu indisponivel nesta compilacao", MAIZO_MUTED);
 #endif
         if (settingsCategory == 0) {
             static const char *const animationNames[] = {"Desativadas", "Suaves", "Completas"};
@@ -1175,11 +1204,11 @@ void menuHandleInputMenu()
 {
     if (thmGetGuiValue() == 0) {
         if (getKeyOn(KEY_L1) || getKeyOn(KEY_R1)) {
-            guiLock();
-            dashboardRefresh();
-            dashboardChangeTab(getKeyOn(KEY_R1) ? 1 : -1);
-            guiUnlock();
-            guiSwitchScreen(GUI_SCREEN_MAIN);
+            settingsCategory = (settingsCategory +
+                                (getKeyOn(KEY_R1) ? 1 : MAIZO_SETTING_CATEGORIES - 1)) %
+                               MAIZO_SETTING_CATEGORIES;
+            settingsFocus = 0;
+            menuInitMainMenu();
             return;
         }
         if (getKeyOn(KEY_LEFT)) {
@@ -1192,7 +1221,9 @@ void menuHandleInputMenu()
         }
         if (!settingsFocus) {
             if (getKey(KEY_UP) || getKey(KEY_DOWN)) {
-                settingsCategory = (settingsCategory + (getKey(KEY_UP) ? 9 : 1)) % 10;
+                settingsCategory = (settingsCategory +
+                                    (getKey(KEY_UP) ? MAIZO_SETTING_CATEGORIES - 1 : 1)) %
+                                   MAIZO_SETTING_CATEGORIES;
                 menuInitMainMenu();
                 sfxPlay(SFX_CURSOR);
             } else if (getKeyOn(gSelectButton)) {
@@ -1260,13 +1291,22 @@ void menuHandleInputMenu()
 #endif
         } else if (id == MENU_SETTINGS) {
             if (menuCheckParentalLock() == 0) {
-                if (thmGetGuiValue() == 0 && settingsCategory == 6)
-                    guiShowStorageConfig();
-                else if (thmGetGuiValue() == 0 && settingsCategory == 8)
-                    guiShowPS1Config();
-                else
-                    guiShowConfig();
+                guiShowConfig();
             }
+        } else if (id == MENU_STORAGE_SETTINGS) {
+            if (menuCheckParentalLock() == 0)
+                guiShowStorageConfig();
+        } else if (id == MENU_PS1_SETTINGS) {
+            if (menuCheckParentalLock() == 0)
+                guiShowPS1Config();
+        } else if (id == MENU_USB_DIAG) {
+#ifdef PADEMU
+            if (menuCheckParentalLock() == 0)
+                guiGameShowUsbDiagnostics();
+#endif
+        } else if (id == MENU_VIDEO_SETTINGS) {
+            if (menuCheckParentalLock() == 0)
+                guiShowUIConfig();
         } else if (id == MENU_GFX_SETTINGS) {
             if (menuCheckParentalLock() == 0) {
                 guiShowUIConfig();
@@ -1471,7 +1511,7 @@ static void dashboardHandleInput(void)
             }
         }
     } else if (hasItem && getKeyOn(KEY_SQUARE)) {
-        dashboardToggleFavorite();
+        selected_item->item->execSquare(selected_item->item);
     } else if (hasItem && getKeyOn(KEY_TRIANGLE)) {
         dashboardShowContext();
     } else if (hasItem && getKeyOn(gSelectButton)) {
@@ -1768,6 +1808,29 @@ void menuRenderAppMenu()
 
     if (!appMenu)
         return;
+
+    if (thmGetGuiValue() == 0) {
+        submenu_list_t *item;
+        int index = 0, y = 144;
+        if (!appMenuCurrent)
+            appMenuCurrent = appMenu;
+        maizoDrawHeader(MAIZO_APPS_TAB);
+        fntRenderString(gTheme->fonts[0], 42, 102, ALIGN_NONE, 548, 35,
+                        selected_item->item->current ?
+                        selected_item->item->current->item.text : "APLICATIVO",
+                        MAIZO_TEXT);
+        maizoDrawPanel(30, 132, 582, 245, 0);
+        for (item = appMenu; item; item = item->next, index++) {
+            if (item == appMenuCurrent)
+                rmDrawRect(48, y, 3, 23, MAIZO_ACCENT);
+            fntRenderString(gTheme->fonts[0], 64, y, ALIGN_NONE, 500, 26,
+                            submenuItemGetText(&item->item),
+                            item == appMenuCurrent ? MAIZO_TEXT : MAIZO_MUTED);
+            y += 36;
+        }
+        guiDrawSubMenuHints();
+        return;
+    }
 
     // draw the animated menu
     if (!appMenuCurrent)

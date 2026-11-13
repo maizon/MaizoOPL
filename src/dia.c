@@ -42,7 +42,10 @@ static int screenHeight;
 static void diaDrawBoundingBox(int x, int y, int w, int h, int focus)
 {
     if (thmGetGuiValue() == 0) {
-        rmDrawLine(x - 4, y + h + 3, x + w + 4, y + h + 3, focus ? MAIZO_ACCENT : MAIZO_MUTED);
+        if (focus)
+            rmDrawRect(x - 5, y + 1, 3, h > 2 ? h - 2 : 2, MAIZO_ACCENT);
+        else
+            rmDrawRect(x - 4, y + 1, 2, h > 2 ? h - 2 : 2, MAIZO_DIVIDER);
         return;
     }
     u64 color = focus ? gTheme->selTextColor : gTheme->textColor;

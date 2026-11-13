@@ -1546,7 +1546,8 @@ static void guiShow()
         screenHandler->renderScreen();
 
     /* Above page content and transitions; modal dialogs render afterwards. */
-    maizoDrawBrand();
+    if (thmGetGuiValue() == 0)
+        maizoDrawBrand();
 }
 
 void guiIntroLoop(void)

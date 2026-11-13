@@ -694,7 +694,7 @@ static void maizoTwinRefresh(void)
     diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA, twinDataLine);
 }
 
-static void maizoTwinShowDiag(void)
+void guiGameShowUsbDiagnostics(void)
 {
     int result = -1;
     do {
@@ -957,7 +957,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
         }
 
         if (result == PADCFG_TWIN_DIAG)
-            maizoTwinShowDiag();
+            guiGameShowUsbDiagnostics();
 
         if (result == PADCFG_BT_MANAGER)
             guiGameShowBluetoothManager();
