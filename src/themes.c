@@ -597,9 +597,13 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     static const int requestOrder[9] = {0, -1, 1, -2, 2, -3, 3, -4, 4};
     int w, h, i, slot, covers = 1, position, total;
     float progress = menuDashboardFocus();
-    int dir = menuDashboardSlide() > 0 ? 1 : menuDashboardSlide() < 0 ? -1 :
-                                                                       0;
-    int shift;
+    float slide = menuDashboardSlide();
+    int dir = 0, shift;
+
+    if (slide > 0.0f)
+        dir = 1;
+    else if (slide < 0.0f)
+        dir = -1;
 
     (void)config;
     rmGetScreenExtents(&w, &h);
@@ -649,7 +653,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     for (i = 0; i < 5; i++)
         visible[i] = menuDashboardSlot(i - 2);
 
-    shift = (int)(menuDashboardSlide() * (float)(w * 21 / 100));
+    shift = (int)(slide * (float)(w * 21 / 100));
     for (slot = 0; slot < 5; slot++) {
         int index = order[slot], selected = index == 2;
         int hPct = selected ? 50 : (index == 0 || index == 4 ? 28 : 39);

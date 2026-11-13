@@ -121,7 +121,7 @@ void menuDashboardInvalidate(void)
 float menuDashboardFocus(void)
 {
     unsigned int elapsed = guiFrameId - focusStartFrame;
-    unsigned int duration = maizoAnimationMode() == 1 ? 7 : 11;
+    unsigned int duration = maizoAnimationMode() == 1 ? 4 : 5;
     float t;
     if (!maizoAnimations() || elapsed >= duration)
         return 1.0f;
