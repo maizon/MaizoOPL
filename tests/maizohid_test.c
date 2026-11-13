@@ -43,7 +43,7 @@ int main(void)
     /* Gamepad uses report ID 1, while an independent FEATURE uses report ID 2.
      * A second report ID must not make a valid INPUT layout fail. */
     {
-        uint8_t multi[sizeof(descriptor) + 9];
+        uint8_t multi[sizeof(descriptor) + 10];
         uint8_t numbered[sizeof(r) + 1] = {1, 128, 128, 128, 128, 8, 0, 0};
         memcpy(multi, descriptor, 6);
         multi[6] = 0x85;
@@ -57,7 +57,7 @@ int main(void)
         multi[sizeof(descriptor) + 6] = 0x01;
         multi[sizeof(descriptor) + 7] = 0xB1;
         multi[sizeof(descriptor) + 8] = 0x02;
-        multi[sizeof(descriptor)] = 0xC0;
+        multi[sizeof(descriptor) + 9] = 0xC0;
         assert(maizohid_parse(&layout, multi, sizeof(multi)));
         assert(layout.has_report_id && layout.report_id == 1);
         assert(layout.report_bits == sizeof(numbered) * 8);
