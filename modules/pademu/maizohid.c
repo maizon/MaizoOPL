@@ -11,7 +11,8 @@ extern void mips_memset(void *, int, unsigned);
  * Small HID INPUT report-descriptor reader for the 0079:0006 family.
  * Read usages and bit offsets instead of guessing that every device with
  * this VID/PID has the same raw report (Microntek != DragonRise).
- * Only the first input report is supported; unsupported layouts fail closed.
+ * Select one INPUT report ID; ignore unrelated FEATURE/OUTPUT report IDs.
+ * Other INPUT IDs are intentionally not decoded without an explicit layout.
  */
 static uint32_t item_unsigned(const uint8_t *p, unsigned int n)
 {
@@ -46,7 +47,8 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
     unsigned int p = 0, bitpos = 0;
     unsigned int page = 0, report_size = 0, report_count = 0;
     unsigned int usages[32], usage_count = 0, usage_min = 0, usage_max = 0;
-    int have_usage_range = 0, seen_input = 0, have_other_id = 0;
+    int have_usage_range = 0, seen_input = 0, selected_input = 0;
+    unsigned int current_report_id = 0, selected_report_id = 0;
     int32_t logical_min = 0, logical_max = 0;
 
     if (!out || !desc || !length || length > MAIZOHID_MAX_DESCRIPTOR)
@@ -85,14 +87,10 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
                 case 7:
                     report_size = value;
                     break;
-                case 8: /* Report ID */
-                    if (value == 0 || (out->has_report_id && value != out->report_id)) {
-                        have_other_id = 1;
-                    } else if (!out->has_report_id) {
-                        out->has_report_id = 1;
-                        out->report_id = (uint8_t)value;
-                        bitpos = 8;
-                    }
+                case 8: /* Report ID (global state; may differ for FEATURE/OUTPUT). */
+                    if (!value || value > 255)
+                        return 0;
+                    current_report_id = value;
                     break;
                 case 9:
                     report_count = value;
@@ -114,7 +112,17 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
             }
         } else if (type == 0) {
             if (tag == 8) { /* INPUT */
-                if (!have_other_id && !(value & 1) && (value & 2) &&
+                if (!selected_input) {
+                    selected_input = 1;
+                    selected_report_id = current_report_id;
+                    if (selected_report_id) {
+                        out->has_report_id = 1;
+                        out->report_id = (uint8_t)selected_report_id;
+                        bitpos = 8;
+                    }
+                }
+                if (current_report_id == selected_report_id &&
+                    !(value & 1) && (value & 2) &&
                     report_size > 0 && report_count < 256 && bitpos + report_size * report_count <= 512) {
                     for (i = 0; i < report_count; i++) {
                         unsigned int usage = usage_count ? usages[i < usage_count ? i : usage_count - 1] :
@@ -132,11 +140,14 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
                             set_field(f, bitpos + i * report_size, report_size, logical_min, logical_max);
                     }
                 }
-                seen_input = 1;
-                if (report_size > 0 && report_count <= 512 && bitpos + report_size * report_count <= 512)
-                    bitpos += report_size * report_count;
-                else
-                    return 0;
+                if (current_report_id == selected_report_id) {
+                    seen_input = 1;
+                    if (report_size > 0 && report_count <= 512 &&
+                        bitpos + report_size * report_count <= 512)
+                        bitpos += report_size * report_count;
+                    else
+                        return 0;
+                }
             }
             /* HID local items apply to one main item only. */
             usage_count = 0;
@@ -146,7 +157,7 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
         p += size;
     }
     out->report_bits = (uint16_t)bitpos;
-    if (!seen_input || have_other_id || !out->axis[0].valid || !out->axis[1].valid ||
+    if (!seen_input || !out->axis[0].valid || !out->axis[1].valid ||
         !out->button[0].valid || !out->button[7].valid ||
         (!out->hat.valid && !out->dpad[0].valid))
         return 0;

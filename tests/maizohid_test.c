@@ -40,6 +40,32 @@ int main(void)
     assert(!maizohid_decode(&layout, r, sizeof(r) - 1, &pad));
     assert(!maizohid_parse(&layout, descriptor, 1));
 
+    /* Gamepad uses report ID 1, while an independent FEATURE uses report ID 2.
+     * A second report ID must not make a valid INPUT layout fail. */
+    {
+        uint8_t multi[sizeof(descriptor) + 9];
+        uint8_t numbered[sizeof(r) + 1] = {1, 128, 128, 128, 128, 8, 0, 0};
+        memcpy(multi, descriptor, 6);
+        multi[6] = 0x85;
+        multi[7] = 0x01;
+        memcpy(multi + 8, descriptor + 6, sizeof(descriptor) - 7);
+        multi[sizeof(descriptor) + 1] = 0x85;
+        multi[sizeof(descriptor) + 2] = 0x02;
+        multi[sizeof(descriptor) + 3] = 0x75;
+        multi[sizeof(descriptor) + 4] = 0x08;
+        multi[sizeof(descriptor) + 5] = 0x95;
+        multi[sizeof(descriptor) + 6] = 0x01;
+        multi[sizeof(descriptor) + 7] = 0xB1;
+        multi[sizeof(descriptor) + 8] = 0x02;
+        multi[sizeof(descriptor)] = 0xC0;
+        assert(maizohid_parse(&layout, multi, sizeof(multi)));
+        assert(layout.has_report_id && layout.report_id == 1);
+        assert(layout.report_bits == sizeof(numbered) * 8);
+        assert(maizohid_decode(&layout, numbered, sizeof(numbered), &pad));
+        numbered[0] = 2;
+        assert(!maizohid_decode(&layout, numbered, sizeof(numbered), &pad));
+    }
+
     puts("MaizoHID: HID descriptor + DS2 translator tests passed");
     return 0;
 }

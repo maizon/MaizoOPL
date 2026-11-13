@@ -7,7 +7,7 @@
 /* DragonRise / Microntek PC Twin Shock, not a universal VID/PID mapping. */
 #define MAIZOHID_VID            0x0079
 #define MAIZOHID_PID            0x0006
-#define MAIZOHID_MAX_DESCRIPTOR 256
+#define MAIZOHID_MAX_DESCRIPTOR 512
 
 typedef struct
 {
