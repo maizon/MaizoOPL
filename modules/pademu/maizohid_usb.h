@@ -59,4 +59,43 @@ static int maizohid_find_interface(int devId,
     return 0;
 }
 
+/* Ask the gamepad for its advertised report descriptor length (Microntek
+ * 0079:0006 is commonly 107 bytes); low-speed firmware can reject 512.
+ * This parser never reads past the enumerated config descriptor. */
+static unsigned int maizohid_report_length(int devId, unsigned int iface_number)
+{
+    UsbDeviceDescriptor *device;
+    UsbConfigDescriptor *config;
+    const u8 *cursor, *end;
+    int selected = 0;
+
+    device = (UsbDeviceDescriptor *)UsbGetDeviceStaticDescriptor(devId, NULL, USB_DT_DEVICE);
+    if (!device)
+        return MAIZOHID_MAX_DESCRIPTOR;
+    config = (UsbConfigDescriptor *)UsbGetDeviceStaticDescriptor(devId, device, USB_DT_CONFIG);
+    if (!config || config->bLength < 9 ||
+        config->wTotalLength < config->bLength ||
+        config->wTotalLength > 4096)
+        return MAIZOHID_MAX_DESCRIPTOR;
+    cursor = (const u8 *)config + config->bLength;
+    end = (const u8 *)config + config->wTotalLength;
+    while (cursor + 2 <= end) {
+        unsigned int length = cursor[0];
+        if (length < 2 || length > (unsigned int)(end - cursor))
+            break;
+        if (cursor[1] == USB_DT_INTERFACE) {
+            selected = length >= sizeof(UsbInterfaceDescriptor) &&
+                       cursor[2] == iface_number;
+        } else if (cursor[1] == 0x21 && selected && length >= 9 &&
+                   cursor[6] == 0x22) {
+            unsigned int report_len = cursor[7] | ((unsigned int)cursor[8] << 8);
+            if (report_len && report_len <= MAIZOHID_MAX_DESCRIPTOR)
+                return report_len;
+            break;
+        }
+        cursor += length;
+    }
+    return MAIZOHID_MAX_DESCRIPTOR;
+}
+
 #endif

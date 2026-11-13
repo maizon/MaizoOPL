@@ -433,9 +433,11 @@ static void usb_config_set(int result, int count, void *arg)
     }
 
     if (ds34pad[pad].type == MAIZOHID) {
+        unsigned int descriptor_len =
+            maizohid_report_length(ds34pad[pad].devId, ds34pad[pad].hid_interface);
         ret = UsbControlTransfer(ds34pad[pad].controlEndp, USB_DIR_IN | USB_RECIP_INTERFACE,
                                  0x06 /* GET_DESCRIPTOR */, 0x2200,
-                                 ds34pad[pad].hid_interface, MAIZOHID_MAX_DESCRIPTOR,
+                                 ds34pad[pad].hid_interface, descriptor_len,
                                  hid_report_descriptor[pad], maizo_descriptor_cb, (void *)pad);
         if (ret != USB_RC_OK) {
             maizo_usb_stage = MAIZO_USB_DESCRIPTOR_REQUEST_FAIL;
