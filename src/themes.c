@@ -680,11 +680,11 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         x = cx - cw / 2;
         y = cy - ch / 2;
 
-        /* Soft drop-shadow and visible case spine: the original OPL
-         * template is drawn over the user-selected cover below. */
-        rmDrawRect(x + 7, y + 8, cw, ch, GS_SETREG_RGBA(0, 0, 0, 0x55));
+        /* The 3D case is a BACKGROUND, not an overlay. OPL's original
+         * case.png is partly opaque: compositing it OVER the user cover
+         * hid the picture and generated the doubled image seen on CRT. */
+        rmDrawRect(x + 6, y + 7, cw, ch, GS_SETREG_RGBA(0, 0, 0, 0x55));
         rmDrawRect(x, y, cw, ch, MAIZO_CARD);
-        rmDrawRect(x + 1, y + 1, cw / 10, ch - 2, MAIZO_DIVIDER);
 
         cover = textures[index];
         if (!cover || !cover->Mem)
@@ -695,61 +695,102 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                                     APPS_CASE_OVERLAY :
                                     CASE_OVERLAY);
 
-        frontX = cw * 11 / 100;
-        frontW = cw * 86 / 100;
-        frontY = ch * 5 / 100;
-        frontH = ch * 91 / 100;
+        /* Spine / plastic rim stay visible, while the artwork fits the
+         * FRONT window without distortion. All figures are relative to
+         * the same card dimensions for the centre and neighbours. */
+        frontX = cw * 13 / 100;
+        frontW = cw * 83 / 100;
+        frontY = ch * 6 / 100;
+        frontH = ch * 88 / 100;
+
+        if (caseBox && caseBox->Mem)
+            rmDrawPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
+                         SCALING_NONE, gDefaultCol);
+        else {
+            rmDrawRect(x + 1, y + 1, cw - 2, ch - 2, MAIZO_DIVIDER);
+            rmDrawRect(x + 2, y + 2, cw / 10, ch - 4, MAIZO_ACCENT);
+        }
+        rmDrawRect(x + frontX - 1, y + frontY - 1,
+                   frontW + 2, frontH + 2, MAIZO_BLACK);
 
         if (cover && cover->Mem && cover->Width && cover->Height) {
-            if (caseBox && caseBox->Mem) {
-                rmDrawOverlayPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
-                                    SCALING_NONE, gDefaultCol, cover,
-                                    frontX, frontY, frontX + frontW, frontY,
-                                    frontX, frontY + frontH,
-                                    frontX + frontW, frontY + frontH);
-            } else {
-                rmDrawPixmap(cover, x + frontX + frontW / 2,
-                             y + frontY + frontH / 2, ALIGN_CENTER,
-                             frontW, frontH, SCALING_NONE, gDefaultCol);
-            }
+            int artW = frontW, artH = frontH;
+            if ((unsigned long)cover->Width * frontH >
+                (unsigned long)cover->Height * frontW)
+                artH = (int)((unsigned long)frontW * cover->Height /
+                             cover->Width);
+            else
+                artW = (int)((unsigned long)frontH * cover->Width /
+                             cover->Height);
+            rmDrawPixmap(cover, x + frontX + frontW / 2,
+                         y + frontY + frontH / 2, ALIGN_CENTER,
+                         artW, artH, SCALING_NONE, gDefaultCol);
         } else {
             maizoDrawIcon(entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
                           entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
                                                          MAIZO_ICON_PS2,
                           cx - 16, cy - 20, 32, MAIZO_BRIGHT);
-            fntRenderString(elem->font, cx, cy + 25, ALIGN_CENTER,
-                            cw - 18, 38, "CAPA", MAIZO_MUTED);
         }
 
+        /* Plastic edge and a narrow reflective strip are drawn LAST.
+         * Do not draw a full-size case sprite over the cover. */
+        rmDrawRect(x + frontX - 1, y + frontY,
+                   1, frontH, MAIZO_DIVIDER);
+        rmDrawRect(x + frontX + frontW, y + frontY,
+                   1, frontH, MAIZO_DIVIDER);
+        rmDrawRect(x + frontX, y + frontY,
+                   frontW, 1, MAIZO_DIVIDER);
         if (selected) {
-            rmDrawRect(x + cw / 8, y + ch + 7, cw * 3 / 4, 3, MAIZO_ACCENT);
-            fntRenderString(elem->font, cx, y + ch + 13, ALIGN_CENTER,
-                            cw + 85, 24, "SELECIONADO", MAIZO_BRIGHT);
+            rmDrawRect(x + cw / 8, y + ch + 5,
+                       cw * 3 / 4, 2, MAIZO_ACCENT);
+            /* Use the game name; the obsolete SELECIONADO placeholder was
+             * taking the most prominent space in the selected card. */
+            fntRenderString(elem->font, cx, y + ch + 10,
+                            ALIGN_CENTER, cw + 115, 24,
+                            entry->title, MAIZO_TEXT);
         }
     }
 
     {
         maizo_entry_t *current = menuDashboardSlot(0);
-        item_list_t *source = current ? ((menu_list_t *)current->owner)->item->userdata : NULL;
-        char counter[48], info[120];
+        menu_list_t *owner = current ? current->owner : NULL;
+        item_list_t *support = owner ? owner->item->userdata : NULL;
+        char counter[48];
         const char *platform = current && current->platform == MAIZO_PS1 ?
-                                   "PLAYSTATION 1" :
+                                   "PlayStation 1" :
                                current && current->platform == MAIZO_APP ?
-                                   "APLICATIVO ELF" :
-                                   "PLAYSTATION 2";
-        snprintf(counter, sizeof(counter), "%d / %d", position, total);
-        fntRenderString(elem->font, w - 32, 82, ALIGN_RIGHT, 145, 28,
-                        counter, MAIZO_MUTED);
+                                   "Homebrew / ELF" :
+                                   "PlayStation 2";
+        const char *origin = owner ? menuItemGetText(owner->item) : "";
+        int badgeX = w - 212;
+
+        /* Standard MAIZO identity: title > platform > real storage name,
+         * without inventing game genre, player count or display mode. */
+        snprintf(counter, sizeof(counter), "%d de %d", position, total);
         if (current) {
-            fntRenderString(elem->font, 38, h - 76, ALIGN_NONE, w - 78, 32,
-                            current->title, MAIZO_TEXT);
-            snprintf(info, sizeof(info), "%s   |   %s", platform,
-                     source ? menuItemGetText(((menu_list_t *)current->owner)->item) : "");
-            fntRenderString(elem->font, 38, h - 42, ALIGN_NONE, w - 76, 23,
-                            info, MAIZO_MUTED);
+            fntRenderString(elem->font, 34, h - 80, ALIGN_NONE,
+                            badgeX - 47, 32, current->title, MAIZO_TEXT);
+            maizoDrawIcon(current->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
+                          current->platform == MAIZO_APP ? MAIZO_ICON_APPS :
+                                                          MAIZO_ICON_PS2,
+                          34, h - 43, 21, MAIZO_ACCENT);
+            fntRenderString(elem->font, 62, h - 43, ALIGN_NONE,
+                            badgeX - 78, 22, platform, MAIZO_MUTED);
             if (current->favorite)
-                maizoDrawIcon(MAIZO_ICON_STAR, w - 55, h - 61, 20, MAIZO_ACCENT);
+                maizoDrawIcon(MAIZO_ICON_STAR, badgeX - 38,
+                              h - 75, 20, MAIZO_ACCENT);
         }
+        /* Source tag and library position stay secondary, right aligned. */
+        rmDrawRect(badgeX, h - 72, 183, 36, MAIZO_CARD);
+        maizoDrawIcon(support && support->mode == ETH_MODE ?
+                      MAIZO_ICON_NETWORK :
+                      support && support->mode == HDD_MODE ?
+                      MAIZO_ICON_HDD : MAIZO_ICON_USB,
+                      badgeX + 9, h - 64, 20, MAIZO_BRIGHT);
+        fntRenderString(elem->font, badgeX + 36, h - 64,
+                        ALIGN_NONE, 144, 25, origin, MAIZO_TEXT);
+        fntRenderString(elem->font, w - 30, h - 30,
+                        ALIGN_RIGHT, 190, 23, counter, MAIZO_MUTED);
     }
 }
 

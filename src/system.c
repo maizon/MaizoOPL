@@ -268,7 +268,7 @@ void sysReset(int modload_mask)
     sysLoadModuleBuffer(&audsrv_irx, size_audsrv_irx, 0, NULL);
 
 #ifdef PADEMU
-    int ds3pads = 3; // menu supports both P1/P2, including twin USB receiver
+    int ds3pads = 0x0F; // logical HID slots P1/P2 and multitap 1A..1D/2A..2D
 
     ds34usb_deinit();
     ds34bt_deinit();

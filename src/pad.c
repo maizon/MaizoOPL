@@ -8,6 +8,7 @@
 #include "include/pad.h"
 #include "include/ioman.h"
 #include <libpad.h>
+#include "include/maizo_menu_input.h"
 #include <timer.h>
 #include <time.h>
 
@@ -270,25 +271,9 @@ static int readPad(struct pad_data_t *pad)
         }
     }
 
-#ifdef PADEMU
-    if (ds34bt_get_status(pad->port) & DS34BT_STATE_RUNNING) {
-        ret = ds34bt_get_data(pad->port, (u8 *)&pad->buttons.btns);
-        ds34bt_set_rumble(pad->port, 0, 0);
-        if (ret != 0) {
-            newpdata |= 0xffff ^ pad->buttons.btns;
-            padsRead++;
-        }
-    }
-
-    if (ds34usb_get_status(pad->port) & DS34USB_STATE_RUNNING) {
-        ret = ds34usb_get_data(pad->port, (u8 *)&pad->buttons.btns);
-        ds34usb_set_rumble(pad->port, 0, 0);
-        if (ret != 0) {
-            newpdata |= 0xffff ^ pad->buttons.btns;
-            padsRead++;
-        }
-    }
-#endif
+    /* USB and Bluetooth controllers are polled once per GUI frame after
+     * all physical pads. Their lifetime must NOT depend on padPortOpen()
+     * nor on whether a physical DS2 happens to occupy slot P1/P2. */
     if (padsRead > 0) {
         if (newpdata != 0x0) // something
             rcode = 1;
@@ -340,6 +325,35 @@ int readPads()
     for (i = 0; i < pad_count; ++i) {
         rslt |= readPad(&pad_data[i]);
     }
+
+#ifdef PADEMU
+    /* A single RPC delivers the most recent USB HID reports of P1/P2 and
+     * multitap slots 1A..1D/2A..2D, even with no physical pad attached. */
+    {
+        u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE];
+        if (ds34usb_get_menu_state(snapshot)) {
+            u32 remote = maizoMenuPadMask(snapshot, gXSensitivity, gYSensitivity);
+            paddata |= remote;
+            if (remote)
+                rslt = 1;
+        }
+    }
+
+    /* Keep the existing Bluetooth PadEmu consumer, but no longer tie it to
+     * physical ports enumerated by libpad. Distinct reads on each BT slot. */
+    for (i = 0; i < 2; ++i) {
+        if (ds34bt_get_status(i) & DS34BT_STATE_RUNNING) {
+            u8 report[18];
+            if (ds34bt_get_data(i, report)) {
+                u16 buttons = report[0] | ((u16)report[1] << 8);
+                u32 remote = 0xffffu ^ buttons;
+                paddata |= remote;
+                if (remote)
+                    rslt = 1;
+            }
+        }
+    }
+#endif
 
     for (i = 0; i < 16; ++i) {
         if (getKeyPressed(i + 1))

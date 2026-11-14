@@ -58,3 +58,15 @@ for callback in required_callbacks:
     assert callback in menu, f"Lost callback: {callback}"
 assert "if (previous->owner == entry->owner)" in library
 print("MAIZO Supreme: menu wiring, licensed glyphs, HID, and settings contract passed")
+
+# One shared MAIZO renderer for original dialog models and callbacks.
+assert "maizoDialogLayout" in dia
+assert "maizoSettingsFooter" in menu
+assert "maizoSettingsActionIcon" in menu
+assert '"SELECIONADO"' not in art
+assert "rmDrawPixmap(caseBox" in art
+assert "rmDrawOverlayPixmap(caseBox" not in art
+assert "ds34usb_get_menu_state" in read("src/pad.c")
+assert "DS34USB_MENU_STATE" in driver
+assert "maizoMenuPadMask" in read("src/pad.c")
+assert "maizoMenuPadMask" in read("tests/maizo_menu_input_test.c")

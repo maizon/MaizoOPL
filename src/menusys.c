@@ -1058,53 +1058,180 @@ void menuSetSelectedItem(menu_item_t *item)
     }
 }
 
+/* Modern action footer shared by START, game and application settings.
+ * The original menu callbacks stay untouched; only presentation changes. */
+static void maizoSettingsFooter(const char *context)
+{
+    int h = gTheme->usedHeight;
+    rmDrawRect(0, h - 62, 640, 62, MAIZO_SURFACE);
+    rmDrawRect(0, h - 62, 640, 1, MAIZO_DIVIDER);
+    fntRenderString(gTheme->fonts[0], 28, h - 44, ALIGN_NONE, 450, 25,
+                    gSelectButton == KEY_CIRCLE ?
+                        "O ABRIR     X VOLTAR     L1/R1 CATEGORIA" :
+                        "X ABRIR     O VOLTAR     L1/R1 CATEGORIA",
+                    MAIZO_TEXT);
+    if (context)
+        fntRenderString(gTheme->fonts[0], 612, h - 27,
+                        ALIGN_RIGHT, 220, 23, context, MAIZO_MUTED);
+}
+
+static int maizoSettingsActionIcon(int id)
+{
+    switch (id) {
+        case MENU_PADEMU:
+        case MENU_BLUETOOTH:
+        case MENU_CONTROLLER_SETTINGS:
+            return MAIZO_ICON_PAD;
+        case MENU_USB_DIAG:
+        case MENU_STORAGE_SETTINGS:
+            return MAIZO_ICON_USB;
+        case MENU_NET_CONFIG:
+        case MENU_NET_UPDATE:
+        case MENU_START_NBD:
+            return MAIZO_ICON_NETWORK;
+        case MENU_GFX_SETTINGS:
+        case MENU_ANIMATIONS:
+        case MENU_COVER_MODE:
+            return MAIZO_ICON_VIDEO;
+        case MENU_AUDIO_SETTINGS:
+            return MAIZO_ICON_AUDIO;
+        case MENU_LIBRARY_REFRESH:
+            return MAIZO_ICON_REFRESH;
+        case MENU_LIBRARY_SORT:
+            return MAIZO_ICON_SORT;
+        case MENU_SAVE_CHANGES:
+            return MAIZO_ICON_CHECK;
+        case MENU_EXIT:
+        case MENU_POWER_OFF:
+            return MAIZO_ICON_POWER;
+        case MENU_DIAG_SYSTEM:
+        case MENU_ITEM_INFO:
+        case MENU_ABOUT:
+            return MAIZO_ICON_INFO;
+        default:
+            return MAIZO_ICON_SETTINGS;
+    }
+}
+
+static const char *const maizoSettingsDescriptions[] = {
+    "TEMAS, CAPAS, CORES E TRANSICOES",
+    "CONTROLES, BLUETOOTH, HID E PADEMU",
+    "BIBLIOTECA, PS1, IDIOMA E JOGOS",
+    "SAIDA DE VIDEO E PROPORCOES",
+    "EFEITOS E REPRODUCAO DE AUDIO",
+    "DISPOSITIVOS, USB E ARMAZENAMENTO",
+    "ETHERNET, SMB E ATUALIZACOES",
+    "SEGURANCA, SALVAMENTO E SISTEMA",
+    "RELATORIOS TECNICOS E PERIFERICOS"};
+
 void menuRenderMenu()
 {
     guiDrawBGPlasma();
     if (thmGetGuiValue() == 0) {
+        const int leftX = 24, rightX = 231, rightWidth = 387;
+        int y, active = 0, first, pos = 0;
+        submenu_list_t *it;
+
+        rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
         maizoDrawHeader(MAIZO_SETTINGS);
+        rmDrawRect(0, 66, 640, 1, MAIZO_DIVIDER);
+        fntRenderString(gTheme->fonts[0], 30, 77, ALIGN_NONE,
+                        345, 30, "CONFIGURACOES", MAIZO_TEXT);
+
+        /* Fixed nine-category navigation rail; input focus and content
+         * selection are independent. */
+        maizoDrawPanel(leftX, 120, 194, 280, 0);
         for (int i = 0; i < MAIZO_SETTING_CATEGORIES; i++) {
-            int y = 108 + i * 30;
-            maizoDrawRow(24, y, 204, settingsIcons[i], settingsNames[i],
-                         i == settingsCategory && !settingsFocus);
+            int rowY = 130 + i * 29;
+            int highlighted = i == settingsCategory;
+            if (highlighted)
+                rmDrawRect(leftX + 3, rowY - 2, 188, 29,
+                           settingsFocus ? MAIZO_DIVIDER : MAIZO_CARD);
+            if (highlighted)
+                rmDrawRect(leftX + 3, rowY - 2, 3, 29, MAIZO_ACCENT);
+            maizoDrawIcon(settingsIcons[i], leftX + 12, rowY + 1, 18,
+                          highlighted ? MAIZO_BRIGHT : MAIZO_MUTED);
+            fntRenderString(gTheme->fonts[0], leftX + 38, rowY + 1,
+                            ALIGN_NONE, 152, 24, settingsNames[i],
+                            highlighted ? MAIZO_TEXT : MAIZO_MUTED);
         }
-        maizoDrawPanel(236, 108, 380, 288, 0);
-        int y = 130;
-        int itemIndex = 0, activeIndex = 0, first;
-        for (submenu_list_t *it = mainMenu; it; it = it->next, itemIndex++)
+
+        maizoDrawPanel(rightX, 120, rightWidth, 280, 0);
+        fntRenderString(gTheme->fonts[0], rightX + 18, 127, ALIGN_NONE,
+                        rightWidth - 36, 26, settingsNames[settingsCategory],
+                        MAIZO_TEXT);
+        fntRenderString(gTheme->fonts[0], rightX + 18, 151, ALIGN_NONE,
+                        rightWidth - 36, 22,
+                        maizoSettingsDescriptions[settingsCategory],
+                        MAIZO_MUTED);
+        maizoDrawSeparator(rightX + 18, 178, rightWidth - 36);
+
+        for (it = mainMenu; it; it = it->next, pos++)
             if (it == mainMenuCurrent)
-                activeIndex = itemIndex;
-        first = activeIndex >= 8 ? activeIndex - 7 : 0;
-        itemIndex = 0;
-        for (submenu_list_t *it = mainMenu; it; it = it->next, itemIndex++) {
-            if (itemIndex < first || itemIndex >= first + 8)
+                active = pos;
+        first = active >= 7 ? active - 6 : 0;
+
+        pos = 0;
+        y = 188;
+        for (it = mainMenu; it; it = it->next, pos++) {
+            const char *value = NULL;
+            int focus;
+            if (pos < first || pos >= first + 6)
                 continue;
-            maizoDrawRow(244, y, 364, -1, submenuItemGetText(&it->item),
-                         it == mainMenuCurrent && settingsFocus);
-            y += 32;
+            focus = it == mainMenuCurrent && settingsFocus;
+            if (it->item.id == MENU_ANIMATIONS) {
+                static const char *const anim[] = {
+                    "OFF", "SUAVE", "COMPLETA"};
+                value = anim[maizoAnimationMode()];
+            } else if (it->item.id == MENU_COVER_MODE) {
+                int enabled = 1;
+                configGetInt(configGetByType(CONFIG_OPL),
+                             "maizo_cover_mode", &enabled);
+                value = enabled ? "ON" : "OFF";
+            } else if (it->item.id == MENU_LIBRARY_SORT) {
+                static const char *const sortNames[] = {
+                    "NOME", "PLATAFORMA", "ORIGEM"};
+                int sort = 0;
+                configGetInt(configGetByType(CONFIG_OPL),
+                             "maizo_sort_mode", &sort);
+                if (sort < 0 || sort > 2)
+                    sort = 0;
+                value = sortNames[sort];
+            }
+            rmDrawRect(rightX + 10, y, rightWidth - 20, 33,
+                       focus ? MAIZO_CARD : MAIZO_SURFACE);
+            if (focus)
+                rmDrawRect(rightX + 10, y, 3, 33, MAIZO_ACCENT);
+            maizoDrawIcon(maizoSettingsActionIcon(it->item.id),
+                          rightX + 18, y + 7, 20,
+                          focus ? MAIZO_BRIGHT : MAIZO_MUTED);
+            fntRenderString(gTheme->fonts[0], rightX + 49, y + 7,
+                            ALIGN_NONE, value ? 215 : rightWidth - 93, 24,
+                            submenuItemGetText(&it->item),
+                            focus ? MAIZO_TEXT : MAIZO_MUTED);
+            if (value)
+                fntRenderString(gTheme->fonts[0], rightX + rightWidth - 20,
+                                y + 7, ALIGN_RIGHT, 115, 25, value,
+                                focus ? MAIZO_BRIGHT : MAIZO_MUTED);
+            else
+                maizoDrawIcon(MAIZO_ICON_CONFIRM, rightX + rightWidth - 40,
+                              y + 8, 18, focus ? MAIZO_BRIGHT : MAIZO_DISABLED);
+            y += 35;
+        }
+        if (!mainMenu) {
+            fntRenderString(gTheme->fonts[0], rightX + 23, 220,
+                            ALIGN_NONE, 330, 48,
+                            "Sem opcoes nesta categoria", MAIZO_MUTED);
         }
 #ifndef PADEMU
-        if (settingsCategory == 1 || settingsCategory == 8)
-            fntRenderString(gTheme->fonts[0], 252, 380, ALIGN_NONE, 340, 28,
-                            "PadEmu indisponivel nesta compilacao", MAIZO_MUTED);
+        if (settingsCategory == 1)
+            fntRenderString(gTheme->fonts[0], rightX + 18, 363,
+                            ALIGN_NONE, 335, 25,
+                            "PadEmu nao incluido nesta compilacao.",
+                            MAIZO_WARNING);
 #endif
-        if (!mainMenu)
-            fntRenderString(gTheme->fonts[0], 254, 194, ALIGN_NONE, 346, 60,
-                            "Nenhuma opcao disponivel nesta compilacao.", MAIZO_MUTED);
-        if (settingsCategory == 0) {
-            static const char *const animationNames[] = {"Desativadas", "Suaves", "Completas"};
-            fntRenderString(gTheme->fonts[0], 252, 373, ALIGN_NONE, 340, 24,
-                            animationNames[maizoAnimationMode()], MAIZO_MUTED);
-        } else if (settingsCategory == 2) {
-            static const char *const sortNames[] = {"Nome", "Plataforma", "Ordem de origem"};
-            int sort = 0;
-            configGetInt(configGetByType(CONFIG_OPL), "maizo_sort_mode", &sort);
-            if (sort < 0 || sort > 2)
-                sort = 0;
-            fntRenderString(gTheme->fonts[0], 252, 373, ALIGN_NONE, 340, 24,
-                            sortNames[sort], MAIZO_MUTED);
-        }
-        guiDrawSubMenuHints();
+        maizoSettingsFooter(settingsFocus ?
+                            "OPCOES" : "SELECIONE A CATEGORIA");
         return;
     }
 
@@ -1801,7 +1928,7 @@ void menuRenderGameMenu()
                          it == gameMenuCurrent);
             y += 35;
         }
-        guiDrawSubMenuHints();
+        maizoSettingsFooter("MENU DO ITEM");
         return;
     }
 
@@ -1943,7 +2070,7 @@ void menuRenderAppMenu()
                          item == appMenuCurrent);
             y += 36;
         }
-        guiDrawSubMenuHints();
+        maizoSettingsFooter("MENU DO ITEM");
         return;
     }
 
