@@ -46,6 +46,13 @@ static u32 curtime = 0;
 static u32 time_since_last = 0;
 
 static unsigned short pad_count;
+#ifdef PADEMU
+/* Input safety: a new/untrusted HID or BT stream must publish one clean
+ * neutral state before it is allowed to issue dashboard navigation. */
+static unsigned int maizoUsbArmed;
+static unsigned int maizoBtArmed;
+static int maizoPhysicalRescueMode;
+#endif
 static struct pad_data_t pad_data[MAX_PADS];
 
 // gathered pad data
@@ -308,6 +315,62 @@ static int getKeyDelay(int id, int repeat)
     return delay;
 }
 
+#ifdef PADEMU
+/* The untrusted USB/BT path never writes over physical libpad state. */
+static int maizoReadRemotePads(void)
+{
+    int rslt = 0;
+    int i;
+
+    /* Do not let an uninitialised, disconnected or version-mismatched
+     * USB RPC snapshot synthesize 0xffff pressed buttons. It previously
+     * locked all physical controllers out while scrolling DOWN forever. */
+    {
+        u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE];
+        if (ds34usb_get_menu_state(snapshot)) {
+            unsigned int valid = maizoMenuPadValidMask(snapshot);
+            u32 remote;
+            maizoUsbArmed &= valid;
+            maizoUsbArmed |= maizoMenuPadNeutralMask(snapshot);
+            remote = maizoMenuPadMask(snapshot, gXSensitivity,
+                                      gYSensitivity, maizoUsbArmed);
+            paddata |= remote;
+            if (remote)
+                rslt = 1;
+        } else {
+            maizoUsbArmed = 0;
+        }
+    }
+
+    /* Bluetooth has exactly two real IOP slots. A stale/empty RPC
+     * response must not generate every PS2 button simultaneously. */
+    for (i = 0; i < 2; ++i) {
+        unsigned int bit = 1u << i;
+        if (ds34bt_get_status(i) & DS34BT_STATE_RUNNING) {
+            u8 report[18];
+            if (ds34bt_get_data(i, report)) {
+                u16 buttons = report[0] | ((u16)report[1] << 8);
+                if (buttons == 0)
+                    continue;
+                if (buttons == 0xffff &&
+                    report[4] >= 105 && report[4] <= 150 &&
+                    report[5] >= 105 && report[5] <= 150)
+                    maizoBtArmed |= bit;
+                if (maizoBtArmed & bit) {
+                    u32 remote = 0xffffu ^ buttons;
+                    paddata |= remote;
+                    if (remote)
+                        rslt = 1;
+                }
+            }
+        } else {
+            maizoBtArmed &= ~bit;
+        }
+    }
+    return rslt;
+}
+#endif
+
 /** polling method. Call every frame. */
 int readPads()
 {
@@ -327,32 +390,15 @@ int readPads()
     }
 
 #ifdef PADEMU
-    /* A single RPC delivers the most recent USB HID reports of P1/P2 and
-     * multitap slots 1A..1D/2A..2D, even with no physical pad attached. */
-    {
-        u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE];
-        if (ds34usb_get_menu_state(snapshot)) {
-            u32 remote = maizoMenuPadMask(snapshot, gXSensitivity, gYSensitivity);
-            paddata |= remote;
-            if (remote)
-                rslt = 1;
-        }
-    }
-
-    /* Keep the existing Bluetooth PadEmu consumer, but no longer tie it to
-     * physical ports enumerated by libpad. Distinct reads on each BT slot. */
-    for (i = 0; i < 2; ++i) {
-        if (ds34bt_get_status(i) & DS34BT_STATE_RUNNING) {
-            u8 report[18];
-            if (ds34bt_get_data(i, report)) {
-                u16 buttons = report[0] | ((u16)report[1] << 8);
-                u32 remote = 0xffffu ^ buttons;
-                paddata |= remote;
-                if (remote)
-                    rslt = 1;
-            }
-        }
-    }
+    /* Emergency input bypass: on a REAL P1/P2 DualShock, L1+R1+START
+     * stops remote controllers from injecting menu input until reboot.
+     * It is checked BEFORE USB/BT are merged, so a corrupt USB report
+     * can never falsely trigger or prevent the rescue combo. */
+    if ((paddata & (PAD_L1 | PAD_R1 | PAD_START)) ==
+        (PAD_L1 | PAD_R1 | PAD_START))
+        maizoPhysicalRescueMode = 1;
+    if (!maizoPhysicalRescueMode)
+        rslt |= maizoReadRemotePads();
 #endif
 
     for (i = 0; i < 16; ++i) {
@@ -504,6 +550,10 @@ int startPads()
 {
     // scan for pads that exist... at least one has to be present
     pad_count = 0;
+#ifdef PADEMU
+    maizoUsbArmed = 0;
+    maizoBtArmed = 0;
+#endif
 
     int maxports = padGetPortMax();
 
@@ -553,4 +603,13 @@ void padRestoreSettings(int *buffer)
 
     for (i = 0; i < 16; i++)
         paddelay[i] = buffer[i];
+}
+
+int maizoIsPhysicalRescueMode(void)
+{
+#ifdef PADEMU
+    return maizoPhysicalRescueMode;
+#else
+    return 0;
+#endif
 }

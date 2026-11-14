@@ -13,6 +13,7 @@
 #include "../../pademu/maizohid.h"
 #include "../../pademu/maizohid_usb.h"
 #include "../../pademu/maizohid_latch.h"
+#include "../../../include/maizo_menu_input.h"
 
 IRX_ID("ds34usb", 1, 1);
 
@@ -124,6 +125,7 @@ static u8 maizo_usb_stage, maizo_usb_class, maizo_usb_endpoints;
 static volatile u8 hid_stream_state[MAX_PADS];
 static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
 static volatile unsigned int hid_stream_generation[MAX_PADS];
+static volatile u8 hid_report_ready[MAX_PADS];
 static u16 hid_pending[MAX_PADS];
 static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
 static int hid_stream_thread_id = -1;
@@ -372,6 +374,7 @@ static void usb_release(int pad)
     hid_stream_generation[pad]++;
     hid_stream_state[pad] = 0;
     hid_pending[pad] = 0;
+    hid_report_ready[pad] = 0;
     CpuResumeIntr(state);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
@@ -528,6 +531,7 @@ static void readReport(u8 *data, int bytes, int pad)
         if (player >= 0) {
             u16 oldButtons = ds34pad[player].ds2.nButtonState;
             if (maizotwin_decode(data, bytes, &ds34pad[player].ds2)) {
+                hid_report_ready[player] = 1;
                 hid_pending[player] |=
                     maizohid_press_edges(oldButtons, ds34pad[player].ds2.nButtonState);
                 twin_report_counts[data[0] - 1]++;
@@ -538,6 +542,7 @@ static void readReport(u8 *data, int bytes, int pad)
     if (ds34pad[pad].type == MAIZOHID) {
         u16 oldButtons = ds34pad[pad].ds2.nButtonState;
         if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2)) {
+            hid_report_ready[pad] = 1;
             hid_pending[pad] |=
                 maizohid_press_edges(oldButtons, ds34pad[pad].ds2.nButtonState);
             if (maizo_usb_reports < 255)
@@ -545,7 +550,10 @@ static void readReport(u8 *data, int bytes, int pad)
         }
         return;
     }
-    if (data[0]) {
+    /* Reject truncated Sony reports before interpreting their controls.
+     * A newly connected pad must publish a complete report first. */
+    if (data[0] && bytes >= 48) {
+        hid_report_ready[pad] = 1;
 
         if (ds34pad[pad].type == DS3) {
             struct ds3report *report;
@@ -769,7 +777,6 @@ static void hid_stream_thread(void *arg)
             if (!device->enabled || device->devId < 0 ||
                 device->interruptEndp < 0 ||
                 !(device->status & DS34USB_STATE_RUNNING) ||
-                (device->type != MAIZOHID && device->type != TWINHID) ||
                 (device->type == TWINHID && pad != twin_root))
                 continue;
 
@@ -789,7 +796,10 @@ static void hid_stream_thread(void *arg)
             hid_stream_state[pad] = 1;
             ret = UsbInterruptTransfer(device->interruptEndp,
                                        hid_stream_buffers[pad],
-                                       device->hid_packet_size,
+                                       (device->type == MAIZOHID ||
+                                        device->type == TWINHID) ?
+                                           device->hid_packet_size :
+                                           MAX_BUFFER_SIZE,
                                        hid_stream_callback, (void *)token);
             if (ret != USB_RC_OK)
                 hid_stream_state[pad] = 0;
@@ -890,9 +900,7 @@ void ds34usb_get_data(char *dst, int size, int port)
                      port;
 
     /* A menu frame must never wait for a USB low-speed report. */
-    if (hid_stream_thread_id > 0 &&
-        (ds34pad[port].type == MAIZOHID ||
-         ds34pad[port].type == TWINHID)) {
+    if (hid_stream_thread_id > 0) {
         int oldstate;
         if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
             return;
@@ -1120,26 +1128,36 @@ void *rpc_sf(int cmd, void *data, int size)
             break;
         case DS34USB_MENU_STATE: {
             u8 *snapshot = (u8 *)data;
-            int port, oldstate;
+            int port;
+            /* One stateless 16-byte reply. No UsbInterruptTransfer waits in
+             * the GUI RPC path, no stale stack report and no phantom P3/P4.
+             * Only mark a slot valid after a real running device has
+             * published a complete DS2 state. */
+            mips_memset(snapshot, 0, MAIZO_MENU_SNAPSHOT_SIZE);
+            snapshot[8] = MAIZO_MENU_MAGIC0;
+            snapshot[9] = MAIZO_MENU_MAGIC1;
+            snapshot[10] = MAIZO_MENU_VERSION;
             for (port = 0; port < MAX_PADS; port++) {
-                u8 report[18];
                 unsigned int pos = port * 4;
-                snapshot[pos] = snapshot[pos + 1] = 0xFF;
-                snapshot[pos + 2] = snapshot[pos + 3] = 0x7F;
-                if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
+                int oldstate;
+                snapshot[pos] = snapshot[pos + 1] = 0xff;
+                snapshot[pos + 2] = snapshot[pos + 3] = 0x7f;
+                if (!ds34pad[port].enabled ||
+                    ds34pad[port].devId < 0 || !hid_report_ready[port] ||
+                    !(ds34pad[port].status & DS34USB_STATE_RUNNING))
                     continue;
-                if (ds34pad[port].type == MAIZOHID ||
-                    ds34pad[port].type == TWINHID) {
-                    CpuSuspendIntr(&oldstate);
+                CpuSuspendIntr(&oldstate);
+                /* Deliver one observed short USB press once per EE poll. */
+                {
+                    u8 report[18];
                     hid_copy_snapshot(report, sizeof(report), port);
-                    CpuResumeIntr(oldstate);
-                } else {
-                    ds34usb_get_data((char *)report, sizeof(report), port);
+                    snapshot[pos] = report[0];
+                    snapshot[pos + 1] = report[1];
+                    snapshot[pos + 2] = report[4];
+                    snapshot[pos + 3] = report[5];
                 }
-                snapshot[pos] = report[0];
-                snapshot[pos + 1] = report[1];
-                snapshot[pos + 2] = report[4];
-                snapshot[pos + 3] = report[5];
+                CpuResumeIntr(oldstate);
+                snapshot[11] |= 1u << port;
             }
             break;
         }
@@ -1204,6 +1222,7 @@ int _start(int argc, char *argv[])
         ds34pad[pad].outEndp = -1;
         ds34pad[pad].enabled = (enable >> pad) & 1;
         ds34pad[pad].type = 0;
+        hid_report_ready[pad] = 0;
 
         ds34pad[pad].data[0] = 0xFF;
         ds34pad[pad].data[1] = 0xFF;

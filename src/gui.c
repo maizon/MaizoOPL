@@ -209,7 +209,10 @@ void guiShowSupremeDiagnostics(void)
     snprintf(video, sizeof(video), "Area da interface: %d x %d",
              screenWidth, gTheme ? gTheme->usedHeight : screenHeight);
 #ifdef PADEMU
-    snprintf(features, sizeof(features), "PadEmu: incluido nesta compilacao");
+    snprintf(features, sizeof(features),
+             maizoIsPhysicalRescueMode() ?
+                 "Entrada: seguranca L1+R1+START; somente controles PS2" :
+                 "PadEmu: incluido; emergencia PS2: L1+R1+START");
 #else
     snprintf(features, sizeof(features), "PadEmu: nao incluido nesta compilacao");
 #endif
@@ -1890,14 +1893,40 @@ int guiConfirmVideoMode(void)
 
         guiShow();
 
-        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
-
-        rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
-        rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
-
-        fntRenderString(gTheme->fonts[0], screenWidth >> 1, gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0, _l(_STR_CFM_VMODE_CHG), gTheme->textColor);
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_BACK, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_ACCEPT, gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+        if (thmGetGuiValue() == 0) {
+            int top = (gTheme->usedHeight >> 1) - 95;
+            rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
+            maizoDrawBrand();
+            maizoDrawPanel(52, top, screenWidth - 104, 191, 0);
+            maizoDrawIcon(MAIZO_ICON_VIDEO, 73, top + 22, 31, MAIZO_ACCENT);
+            fntRenderString(gTheme->fonts[0], 112, top + 29,
+                            ALIGN_NONE, screenWidth - 174, 32,
+                            "CONFIRMAR VIDEO", MAIZO_TEXT);
+            fntRenderString(gTheme->fonts[0], 74, top + 88,
+                            ALIGN_NONE, screenWidth - 150, 46,
+                            _l(_STR_CFM_VMODE_CHG), MAIZO_MUTED);
+            fntRenderString(gTheme->fonts[0], 74, top + 154,
+                            ALIGN_NONE, screenWidth - 151, 29,
+                            "CONFIRMAR     |     VOLTAR / CANCELAR",
+                            MAIZO_BRIGHT);
+        } else {
+            rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+            rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
+            rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
+            fntRenderString(gTheme->fonts[0], screenWidth >> 1,
+                            gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0,
+                            _l(_STR_CFM_VMODE_CHG), gTheme->textColor);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
+                                   CROSS_ICON :
+                                   CIRCLE_ICON,
+                               _STR_BACK,
+                               gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
+                                   CIRCLE_ICON :
+                                   CROSS_ICON,
+                               _STR_ACCEPT,
+                               gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+        }
 
         guiEndFrame();
     }
@@ -1935,17 +1964,59 @@ int guiGameShowRemoveSettings(config_set_t *configSet, config_set_t *configGame)
 
         guiShow();
 
-        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
-
-        rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
-        rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
-
-        fntRenderString(gTheme->fonts[0], screenWidth >> 1, gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0, _l(_STR_GAME_SETTINGS_PROMPT), gTheme->textColor);
-
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_BACK, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
-        guiDrawIconAndText(SQUARE_ICON, _STR_GLOBAL_SETTINGS, gTheme->fonts[0], 213, 417, gTheme->selTextColor);
-        guiDrawIconAndText(TRIANGLE_ICON, _STR_ALL_SETTINGS, gTheme->fonts[0], 356, 417, gTheme->selTextColor);
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_PERGAME_SETTINGS, gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+        if (thmGetGuiValue() == 0) {
+            int top = (gTheme->usedHeight >> 1) - 146;
+            const char *const choices[] = {
+                "X/O: remover configuracoes deste jogo",
+                "QUADRADO: remover configuracoes globais",
+                "TRIANGULO: remover todas as configuracoes",
+                "VOLTAR: cancelar sem alterar arquivos"};
+            rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
+            maizoDrawBrand();
+            maizoDrawPanel(36, top, screenWidth - 72, 290, 0);
+            maizoDrawIcon(MAIZO_ICON_DELETE, 57, top + 23,
+                          31, MAIZO_WARNING);
+            fntRenderString(gTheme->fonts[0], 103, top + 26,
+                            ALIGN_NONE, screenWidth - 147, 33,
+                            "REMOVER CONFIGURACOES", MAIZO_TEXT);
+            fntRenderString(gTheme->fonts[0], 53, top + 65,
+                            ALIGN_NONE, screenWidth - 109, 46,
+                            _l(_STR_GAME_SETTINGS_PROMPT), MAIZO_MUTED);
+            for (int j = 0; j < 4; ++j) {
+                int y = top + 120 + j * 39;
+                rmDrawRect(53, y, screenWidth - 106, 34,
+                           j == 2 ? MAIZO_CARD : MAIZO_SURFACE);
+                maizoDrawIcon(j == 2 ? MAIZO_ICON_WARNING :
+                              j == 3 ? MAIZO_ICON_BACK :
+                                       MAIZO_ICON_SETTINGS,
+                              63, y + 7, 20,
+                              j == 2 ? MAIZO_WARNING : MAIZO_BRIGHT);
+                fntRenderString(gTheme->fonts[0], 95, y + 6,
+                                ALIGN_NONE, screenWidth - 153, 26,
+                                choices[j], j == 2 ? MAIZO_WARNING : MAIZO_TEXT);
+            }
+        } else {
+            rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+            rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
+            rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
+            fntRenderString(gTheme->fonts[0], screenWidth >> 1,
+                            gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0,
+                            _l(_STR_GAME_SETTINGS_PROMPT), gTheme->textColor);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
+                                   CROSS_ICON :
+                                   CIRCLE_ICON,
+                               _STR_BACK,
+                               gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+            guiDrawIconAndText(SQUARE_ICON, _STR_GLOBAL_SETTINGS,
+                               gTheme->fonts[0], 213, 417, gTheme->selTextColor);
+            guiDrawIconAndText(TRIANGLE_ICON, _STR_ALL_SETTINGS,
+                               gTheme->fonts[0], 356, 417, gTheme->selTextColor);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
+                                   CIRCLE_ICON :
+                                   CROSS_ICON,
+                               _STR_PERGAME_SETTINGS,
+                               gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+        }
 
         guiEndFrame();
     }
@@ -1976,7 +2047,7 @@ void guiManageCheats(config_set_t *configSet)
     int terminate = 0;
     int cheatCount = 0;
     int selectedCheat = 0;
-    int visibleCheats = 10; // Maximum number of cheats visible on screen
+    int visibleCheats = thmGetGuiValue() == 0 ? 7 : 10;
 
     while (cheatCount < MAX_CODES && strlen(gCheats[cheatCount].name) > 0)
         cheatCount++;
@@ -1999,7 +2070,7 @@ void guiManageCheats(config_set_t *configSet)
                 offset = selectedCheat - visibleCheats + 1;
         }
 
-        if (getKeyOn(gSelectButton)) {
+        if (getKeyOn(gSelectButton) && cheatCount > 0) {
             if (!cheatConfigIsMasterCode(gCheats[selectedCheat].name))
                 gCheats[selectedCheat].enabled = !gCheats[selectedCheat].enabled;
         }
@@ -2009,35 +2080,92 @@ void guiManageCheats(config_set_t *configSet)
 
         guiShow();
 
-        rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
-        rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
-        rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
-
-        fntRenderString(gTheme->fonts[0], screenWidth >> 1, 60, ALIGN_CENTER, 0, 0, _l(_STR_CHEAT_SELECTION), gTheme->textColor);
+        if (thmGetGuiValue() == 0) {
+            rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
+            maizoDrawBrand();
+            maizoDrawPanel(29, 102, screenWidth - 58, 300, 0);
+            maizoDrawIcon(MAIZO_ICON_CHEATS, 44, 112, 31, MAIZO_BRIGHT);
+            fntRenderString(gTheme->fonts[0], 87, 119, ALIGN_NONE,
+                            screenWidth - 121, 29, _l(_STR_CHEAT_SELECTION),
+                            MAIZO_TEXT);
+            maizoDrawSeparator(47, 148, screenWidth - 94);
+            if (cheatCount == 0)
+                fntRenderString(gTheme->fonts[0], 52, 211, ALIGN_NONE,
+                                screenWidth - 104, 33,
+                                "Nenhum cheat encontrado.", MAIZO_MUTED);
+        } else {
+            rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
+            rmDrawLine(50, 75, screenWidth - 50, 75, gColWhite);
+            rmDrawLine(50, 410, screenWidth - 50, 410, gColWhite);
+            fntRenderString(gTheme->fonts[0], screenWidth >> 1, 60,
+                            ALIGN_CENTER, 0, 0,
+                            _l(_STR_CHEAT_SELECTION), gTheme->textColor);
+        }
 
         int renderedCheats = 0;
         for (int i = offset; renderedCheats < visibleCheats && i < cheatCount; i++) {
             if (strlen(gCheats[i].name) == 0)
                 continue;
 
-            int enabled = gCheats[i].enabled;
-            int boxX = 50;
-            int boxY = 100 + (renderedCheats * 30);
-            int boxWidth = rmWideScale(25);
-            int boxHeight = 17;
-
-            if (enabled) {
-                rmDrawRect(boxX, boxY + 3, boxWidth, boxHeight, gTheme->textColor);
-                rmDrawRect(boxX + 2, boxY + 5, boxWidth - 4, boxHeight - 4, gTheme->selTextColor);
+            if (thmGetGuiValue() == 0) {
+                int y = 162 + renderedCheats * 33;
+                int focused = i == selectedCheat;
+                rmDrawRect(45, y, screenWidth - 90, 31,
+                           focused ? MAIZO_CARD : MAIZO_SURFACE);
+                if (focused)
+                    rmDrawRect(45, y, 3, 31, MAIZO_ACCENT);
+                fntRenderString(gTheme->fonts[0], 60, y + 6,
+                                ALIGN_NONE, screenWidth - 205, 25,
+                                gCheats[i].name,
+                                focused ? MAIZO_TEXT : MAIZO_MUTED);
+                rmDrawRect(screenWidth - 139, y + 7, 70, 19,
+                           gCheats[i].enabled ? MAIZO_ACCENT :
+                                                MAIZO_DIVIDER);
+                fntRenderString(gTheme->fonts[0], screenWidth - 104, y + 5,
+                                ALIGN_CENTER, 63, 22,
+                                gCheats[i].enabled ? "ON" : "OFF",
+                                MAIZO_TEXT);
+            } else {
+                int enabled = gCheats[i].enabled;
+                int boxX = 50;
+                int boxY = 100 + (renderedCheats * 30);
+                int boxWidth = rmWideScale(25);
+                int boxHeight = 17;
+                if (enabled) {
+                    rmDrawRect(boxX, boxY + 3,
+                               boxWidth, boxHeight, gTheme->textColor);
+                    rmDrawRect(boxX + 2, boxY + 5,
+                               boxWidth - 4, boxHeight - 4,
+                               gTheme->selTextColor);
+                }
+                u32 textColour = (i == selectedCheat) ?
+                                     gTheme->selTextColor :
+                                     gTheme->textColor;
+                fntRenderString(gTheme->fonts[0], boxX + 35, boxY + 3,
+                                ALIGN_LEFT, 0, 0, gCheats[i].name,
+                                textColour);
             }
-
-            u32 textColour = (i == selectedCheat) ? gTheme->selTextColor : gTheme->textColor;
-            fntRenderString(gTheme->fonts[0], boxX + 35, boxY + 3, ALIGN_LEFT, 0, 0, gCheats[i].name, textColour);
             renderedCheats++;
         }
 
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_SELECT, gTheme->fonts[0], 70, 417, gTheme->selTextColor);
-        guiDrawIconAndText(START_ICON, _STR_RUN, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+        if (thmGetGuiValue() == 0) {
+            rmDrawRect(0, gTheme->usedHeight - 60,
+                       screenWidth, 60, MAIZO_SURFACE);
+            fntRenderString(gTheme->fonts[0], 34,
+                            gTheme->usedHeight - 38,
+                            ALIGN_NONE, screenWidth - 70, 25,
+                            "X/O ATIVAR   |   START SALVAR E VOLTAR",
+                            MAIZO_MUTED);
+        } else {
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
+                                   CIRCLE_ICON :
+                                   CROSS_ICON,
+                               _STR_SELECT,
+                               gTheme->fonts[0], 70, 417, gTheme->selTextColor);
+            guiDrawIconAndText(START_ICON, _STR_RUN,
+                               gTheme->fonts[0], 500, 417,
+                               gTheme->selTextColor);
+        }
         guiEndFrame();
     }
 

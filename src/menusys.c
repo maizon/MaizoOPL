@@ -1907,29 +1907,73 @@ void menuRenderGameMenu()
 
     if (thmGetGuiValue() == 0) {
         submenu_list_t *it;
-        int index = 0, active = 0, first, y;
+        int index = 0, active = 0, first, y = 164;
+        const int rx = 236, rw = 382;
+        const char *title = selected_item->item->current->item.text;
         if (!gameMenuCurrent)
             gameMenuCurrent = gameMenu;
         for (it = gameMenu; it; it = it->next, index++)
             if (it == gameMenuCurrent)
                 active = index;
-        first = active >= 8 ? active - 7 : 0;
+        first = active >= 7 ? active - 6 : 0;
+        rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
         maizoDrawHeader(MAIZO_SETTINGS);
-        fntRenderString(gTheme->fonts[0], 36, 105, ALIGN_NONE, 194, 50,
-                        selected_item->item->current->item.text, MAIZO_TEXT);
-        fntRenderString(gTheme->fonts[0], 36, 167, ALIGN_NONE, 194, 38,
-                        gameConfigSource(), MAIZO_MUTED);
-        maizoDrawPanel(236, 100, 380, 304, 0);
+        rmDrawRect(0, 70, 640, 1, MAIZO_DIVIDER);
+
+        maizoDrawPanel(25, 106, 200, 302, 0);
+        maizoDrawIcon(MAIZO_ICON_PS2, 43, 125, 40, MAIZO_BRIGHT);
+        fntRenderString(gTheme->fonts[0], 44, 176, ALIGN_NONE,
+                        160, 70, title, MAIZO_TEXT);
+        maizoDrawSeparator(41, 257, 162);
+        fntRenderString(gTheme->fonts[0], 41, 276, ALIGN_NONE,
+                        170, 28, "CONFIGURACAO", MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], 41, 309, ALIGN_NONE,
+                        170, 58, gameConfigSource(), MAIZO_BRIGHT);
+
+        maizoDrawPanel(rx, 106, rw, 302, 0);
+        maizoDrawIcon(MAIZO_ICON_SETTINGS, rx + 13, 117, 26, MAIZO_BRIGHT);
+        fntRenderString(gTheme->fonts[0], rx + 48, 118,
+                        ALIGN_NONE, rw - 62, 29,
+                        "OPCOES DO JOGO", MAIZO_TEXT);
+        maizoDrawSeparator(rx + 13, 149, rw - 26);
         index = 0;
-        y = 120;
         for (it = gameMenu; it; it = it->next, index++) {
-            if (index < first || index >= first + 8)
+            int focused;
+            if (index < first || index >= first + 6)
                 continue;
-            maizoDrawRow(244, y, 364, -1, submenuItemGetText(&it->item),
-                         it == gameMenuCurrent);
-            y += 35;
+            focused = it == gameMenuCurrent;
+            rmDrawRect(rx + 10, y, rw - 20, 35,
+                       focused ? MAIZO_CARD : MAIZO_SURFACE);
+            if (focused)
+                rmDrawRect(rx + 10, y, 3, 35, MAIZO_ACCENT);
+            maizoDrawIcon(it->item.id == GAME_SAVE_CHANGES ?
+                              MAIZO_ICON_CHECK :
+                          it->item.id == GAME_DELETE_GAME ||
+                                  it->item.id == GAME_REMOVE_CHANGES ?
+                              MAIZO_ICON_DELETE :
+                          it->item.id == GAME_CHEAT_SETTINGS ?
+                              MAIZO_ICON_CHEATS :
+                          it->item.id == GAME_VMC_SETTINGS ?
+                              MAIZO_ICON_CARD :
+                          it->item.id == GAME_GSM_SETTINGS ?
+                              MAIZO_ICON_VIDEO :
+                              MAIZO_ICON_SETTINGS,
+                          rx + 22, y + 8, 19,
+                          focused ? MAIZO_BRIGHT : MAIZO_MUTED);
+            fntRenderString(gTheme->fonts[0], rx + 52, y + 8,
+                            ALIGN_NONE, rw - 93, 25,
+                            submenuItemGetText(&it->item),
+                            focused ? MAIZO_TEXT : MAIZO_MUTED);
+            maizoDrawIcon(MAIZO_ICON_CONFIRM, rx + rw - 35,
+                          y + 9, 16,
+                          focused ? MAIZO_BRIGHT : MAIZO_DISABLED);
+            y += 38;
         }
-        maizoSettingsFooter("MENU DO ITEM");
+        if (index > 6)
+            fntRenderString(gTheme->fonts[0], rx + rw - 18, 391,
+                            ALIGN_RIGHT, 230, 22, "MAIS OPCOES",
+                            MAIZO_MUTED);
+        maizoSettingsFooter("POR JOGO");
         return;
     }
 
@@ -2055,23 +2099,54 @@ void menuRenderAppMenu()
         return;
 
     if (thmGetGuiValue() == 0) {
-        submenu_list_t *item;
-        int index = 0, y = 144;
+        submenu_list_t *it;
+        int pos = 0, selected = 0, first, y = 177;
         if (!appMenuCurrent)
             appMenuCurrent = appMenu;
+        for (it = appMenu; it; it = it->next, pos++)
+            if (it == appMenuCurrent)
+                selected = pos;
+        first = selected >= 6 ? selected - 5 : 0;
+        rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
         maizoDrawHeader(MAIZO_APPS_TAB);
-        fntRenderString(gTheme->fonts[0], 42, 102, ALIGN_NONE, 548, 35,
+        maizoDrawPanel(28, 110, 202, 278, 0);
+        maizoDrawIcon(MAIZO_ICON_APPS, 45, 128, 40, MAIZO_BRIGHT);
+        fntRenderString(gTheme->fonts[0], 45, 183,
+                        ALIGN_NONE, 165, 90,
                         selected_item->item->current ?
                             selected_item->item->current->item.text :
                             "APLICATIVO",
                         MAIZO_TEXT);
-        maizoDrawPanel(30, 132, 582, 245, 0);
-        for (item = appMenu; item; item = item->next, index++) {
-            maizoDrawRow(48, y, 522, -1, submenuItemGetText(&item->item),
-                         item == appMenuCurrent);
-            y += 36;
+        maizoDrawSeparator(43, 295, 168);
+        fntRenderString(gTheme->fonts[0], 45, 317,
+                        ALIGN_NONE, 168, 26,
+                        "APLICATIVO / ELF", MAIZO_MUTED);
+        maizoDrawPanel(241, 110, 371, 278, 0);
+        fntRenderString(gTheme->fonts[0], 257, 128,
+                        ALIGN_NONE, 329, 30,
+                        "GERENCIAR APLICATIVO", MAIZO_TEXT);
+        maizoDrawSeparator(254, 161, 338);
+        pos = 0;
+        for (it = appMenu; it; it = it->next, pos++) {
+            int focused = it == appMenuCurrent;
+            if (pos < first || pos >= first + 5)
+                continue;
+            rmDrawRect(252, y, 350, 39,
+                       focused ? MAIZO_CARD : MAIZO_SURFACE);
+            if (focused)
+                rmDrawRect(252, y, 3, 39, MAIZO_ACCENT);
+            maizoDrawIcon(it->item.id == 1 ?
+                              MAIZO_ICON_DELETE :
+                              MAIZO_ICON_FILE,
+                          266, y + 9, 22,
+                          focused ? MAIZO_BRIGHT : MAIZO_MUTED);
+            fntRenderString(gTheme->fonts[0], 300, y + 10,
+                            ALIGN_NONE, 277, 28,
+                            submenuItemGetText(&it->item),
+                            focused ? MAIZO_TEXT : MAIZO_MUTED);
+            y += 42;
         }
-        maizoSettingsFooter("MENU DO ITEM");
+        maizoSettingsFooter("APLICATIVO");
         return;
     }
 

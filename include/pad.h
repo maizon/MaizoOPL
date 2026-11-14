@@ -22,6 +22,7 @@
 
 int startPads();
 int readPads();
+int maizoIsPhysicalRescueMode(void);
 void unloadPads();
 
 int getKey(int num);
