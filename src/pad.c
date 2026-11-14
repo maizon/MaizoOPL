@@ -322,7 +322,6 @@ static int maizoReadRemotePads(void)
     int rslt = 0;
     int i;
 
-
     /* Do not let an uninitialised, disconnected or version-mismatched
      * USB RPC snapshot synthesize 0xffff pressed buttons. It previously
      * locked all physical controllers out while scrolling DOWN forever. */
@@ -400,7 +399,6 @@ int readPads()
         maizoPhysicalRescueMode = 1;
     if (!maizoPhysicalRescueMode)
         rslt |= maizoReadRemotePads();
-
 #endif
 
     for (i = 0; i < 16; ++i) {

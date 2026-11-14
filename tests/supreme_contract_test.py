@@ -37,7 +37,8 @@ assert "saveConfig(CONFIG_GAME, 0)" in read("src/guigame.c")
 assert "maizoSio2SecondCommand" in read("modules/pademu/pademu.c")
 assert "MAIZO_BLACK" in gui and "SUPREME" in gui
 assert "maizoDrawPanel" in dia and "maizoDrawBrand" in dia
-assert "maizoDrawRow" in menu
+assert "maizoDrawPanel" in menu
+assert "maizoSettingsFooter" in menu
 assert "guiGameShowUsbDiagnostics" in menu
 assert "ds34usb_get_usb_diag" in read("src/guigame.c")
 assert "maizohid_report_length" in driver

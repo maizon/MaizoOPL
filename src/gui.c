@@ -1988,7 +1988,7 @@ int guiGameShowRemoveSettings(config_set_t *configSet, config_set_t *configGame)
                            j == 2 ? MAIZO_CARD : MAIZO_SURFACE);
                 maizoDrawIcon(j == 2 ? MAIZO_ICON_WARNING :
                               j == 3 ? MAIZO_ICON_BACK :
-                                      MAIZO_ICON_SETTINGS,
+                                       MAIZO_ICON_SETTINGS,
                               63, y + 7, 20,
                               j == 2 ? MAIZO_WARNING : MAIZO_BRIGHT);
                 fntRenderString(gTheme->fonts[0], 95, y + 6,
