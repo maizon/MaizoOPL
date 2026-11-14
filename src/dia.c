@@ -647,8 +647,8 @@ static int diaLayout(struct UIItem *ui, struct UIItem *cur, int haveFocus, int m
  * cheats, OSD, keyboard fields and confirmation actions. UIItem remains
  * the controller/model, so saved settings and per-game callbacks survive. */
 static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
-                            int haveFocus, int scroll, int *focusY,
-                            int measure)
+                             int haveFocus, int scroll, int *focusY,
+                             int measure)
 {
     const int x = 35, width = screenWidth - 70, rowHeight = 39;
     int y = 122 - scroll;
@@ -728,8 +728,7 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
             maizoDrawIcon(MAIZO_ICON_SETTINGS, x + 10, y + 10, 18,
                           selected ? MAIZO_BRIGHT : MAIZO_MUTED);
         fntRenderString(gTheme->fonts[0], x + 39, y + 8,
-                        ALIGN_NONE, controls ? width * 49 / 100 :
-                        width - 55, 25, caption ? caption : "",
+                        ALIGN_NONE, controls ? width * 49 / 100 : width - 55, 25, caption ? caption : "",
                         selected ? MAIZO_TEXT : MAIZO_MUTED);
 
         {
@@ -763,7 +762,8 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                         break;
                     case UI_STRING:
                         value = p->stringvalue.text[0] ?
-                                p->stringvalue.text : "--";
+                                    p->stringvalue.text :
+                                    "--";
                         break;
                     case UI_PASSWORD: {
                         size_t k, len = strlen(p->stringvalue.text);
@@ -799,7 +799,8 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                 if (p->type == UI_BOOL) {
                     rmDrawRect(vx + segment - 47, y + 10, 37, 19,
                                p->intvalue.current ?
-                               MAIZO_ACCENT : MAIZO_DIVIDER);
+                                   MAIZO_ACCENT :
+                                   MAIZO_DIVIDER);
                     rmDrawRect(vx + segment - (p->intvalue.current ? 27 : 43),
                                y + 13, 12, 13, MAIZO_TEXT);
                     value = NULL;
@@ -807,8 +808,7 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                 if (value)
                     fntRenderString(gTheme->fonts[0], vx, y + 8,
                                     ALIGN_NONE, segment - 7, 25,
-                                    value, p == cur ? MAIZO_BRIGHT :
-                                    MAIZO_TEXT);
+                                    value, p == cur ? MAIZO_BRIGHT : MAIZO_TEXT);
                 n++;
             }
         }
@@ -835,7 +835,7 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
         }
         if (ui->type == UI_LABEL) {
             const char *heading = diaGetLocalisedText(ui->label.text,
-                                                       ui->label.stringId);
+                                                      ui->label.stringId);
             if (heading && heading[0])
                 title = heading;
         }
@@ -874,8 +874,8 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
                         gTheme->usedHeight - 42, ALIGN_NONE,
                         screenWidth - 65, 28,
                         gSelectButton == KEY_CIRCLE ?
-                        "O SELECIONAR     X VOLTAR   |   MAIZO SUPREME" :
-                        "X SELECIONAR     O VOLTAR   |   MAIZO SUPREME",
+                            "O SELECIONAR     X VOLTAR   |   MAIZO SUPREME" :
+                            "X SELECIONAR     O VOLTAR   |   MAIZO SUPREME",
                         MAIZO_MUTED);
     } else {
         diaLayout(ui, cur, haveFocus, 0, 0, &focusY);

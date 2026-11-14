@@ -4,18 +4,20 @@
 /* 16-byte menu snapshot: 4 logical pad slots x [buttons LO, HI, LX, LY].
  * Digital buttons are PS2 active-low. A missing device publishes FFFF
  * and centered sticks; no false input edges can be generated. */
-#define MAIZO_MENU_SLOTS 4
+#define MAIZO_MENU_SLOTS         4
 #define MAIZO_MENU_SNAPSHOT_SIZE 16
 
 static unsigned int maizoMenuPadMask(const unsigned char snapshot[16],
-                                      int sensitivityX, int sensitivityY)
+                                     int sensitivityX, int sensitivityY)
 {
     unsigned int mask = 0;
     int slot, deadX, deadY;
     if (!snapshot)
         return 0;
-    deadX = sensitivityX == 0 ? 100 : sensitivityX == 2 ? 60 : 80;
-    deadY = sensitivityY == 0 ? 100 : sensitivityY == 2 ? 60 : 80;
+    deadX = sensitivityX == 0 ? 100 : sensitivityX == 2 ? 60 :
+                                                         80;
+    deadY = sensitivityY == 0 ? 100 : sensitivityY == 2 ? 60 :
+                                                         80;
     for (slot = 0; slot < 4; slot++) {
         unsigned int offset = slot * 4;
         unsigned int buttons = snapshot[offset] | ((unsigned int)snapshot[offset + 1] << 8);

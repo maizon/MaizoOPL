@@ -13,7 +13,7 @@
 
 #define DS34USB_TWIN_DIAG   9
 #define DS34USB_USB_DIAG    10
-#define DS34USB_MENU_STATE 11
+#define DS34USB_MENU_STATE  11
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 static SifRpcClientData_t ds34usb;

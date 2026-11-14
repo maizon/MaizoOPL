@@ -16,7 +16,7 @@ int main(void)
     s[8] = 0xBF; /* multitap slot 3 Down */
     assert((maizoMenuPadMask(s, 1, 1) & 0x40) != 0);
     s[8] = 0xFF;
-    s[14] = 5;  /* X axis on fourth slot */
+    s[14] = 5; /* X axis on fourth slot */
     assert((maizoMenuPadMask(s, 1, 1) & 0x80) != 0);
     s[14] = 0x7F;
     s[15] = 254;

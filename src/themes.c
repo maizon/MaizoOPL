@@ -772,7 +772,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                             badgeX - 47, 32, current->title, MAIZO_TEXT);
             maizoDrawIcon(current->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
                           current->platform == MAIZO_APP ? MAIZO_ICON_APPS :
-                                                          MAIZO_ICON_PS2,
+                                                           MAIZO_ICON_PS2,
                           34, h - 43, 21, MAIZO_ACCENT);
             fntRenderString(elem->font, 62, h - 43, ALIGN_NONE,
                             badgeX - 78, 22, platform, MAIZO_MUTED);
@@ -783,9 +783,10 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         /* Source tag and library position stay secondary, right aligned. */
         rmDrawRect(badgeX, h - 72, 183, 36, MAIZO_CARD);
         maizoDrawIcon(support && support->mode == ETH_MODE ?
-                      MAIZO_ICON_NETWORK :
+                          MAIZO_ICON_NETWORK :
                       support && support->mode == HDD_MODE ?
-                      MAIZO_ICON_HDD : MAIZO_ICON_USB,
+                          MAIZO_ICON_HDD :
+                          MAIZO_ICON_USB,
                       badgeX + 9, h - 64, 20, MAIZO_BRIGHT);
         fntRenderString(elem->font, badgeX + 36, h - 64,
                         ALIGN_NONE, 144, 25, origin, MAIZO_TEXT);

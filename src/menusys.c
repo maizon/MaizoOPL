@@ -1231,7 +1231,8 @@ void menuRenderMenu()
                             MAIZO_WARNING);
 #endif
         maizoSettingsFooter(settingsFocus ?
-                            "OPCOES" : "SELECIONE A CATEGORIA");
+                                "OPCOES" :
+                                "SELECIONE A CATEGORIA");
         return;
     }
 
