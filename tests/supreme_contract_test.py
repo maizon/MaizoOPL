@@ -70,3 +70,24 @@ assert "ds34usb_get_menu_state" in read("src/pad.c")
 assert "DS34USB_MENU_STATE" in driver
 assert "maizoMenuPadMask" in read("src/pad.c")
 assert "maizoMenuPadMask" in read("tests/maizo_menu_input_test.c")
+
+# Regression: an all-zero SIF RPC buffer must never synthesize DOWN/START
+# or suppress real PS2 Port 1 / Port 2 controls.
+menu_input = read("include/maizo_menu_input.h")
+menu_driver = read("modules/ds34usb/iop/ds34usb.c")
+pad_input = read("src/pad.c")
+assert "MAIZO_MENU_SLOTS         2" in menu_input
+assert "MAIZO_MENU_MAGIC0" in menu_input
+assert "maizoMenuPadValidMask" in menu_input
+assert "maizoMenuPadNeutralMask" in menu_input
+assert "hid_report_ready[port]" in menu_driver
+assert "snapshot[11] |= 1u << port" in menu_driver
+assert "maizoUsbArmed &= valid" in pad_input
+assert "maizoPhysicalRescueMode" in pad_input
+assert "PAD_L1 | PAD_R1 | PAD_START" in pad_input
+assert "maizoIsPhysicalRescueMode" in gui
+assert "GERENCIAR APLICATIVO" in menu
+assert "OPCOES DO JOGO" in menu
+assert "CONFIRMAR VIDEO" in gui
+assert "REMOVER CONFIGURACOES" in gui
+assert "Nenhum cheat encontrado." in gui
