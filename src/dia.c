@@ -148,7 +148,8 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
                     w = fntRenderString(gTheme->fonts[0], x,
                                         170 + 3 * UI_SPACING_H * j,
                                         ALIGN_NONE, 0, 0, c,
-                                        gTheme->uiTextColor) - x;
+                                        gTheme->uiTextColor) -
+                        x;
                     if ((i + j * KEYB_WIDTH) == selchar)
                         diaDrawBoundingBox(x,
                                            170 + 3 * UI_SPACING_H * j,
@@ -179,7 +180,8 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
                 w = fntRenderString(gTheme->fonts[0], x,
                                     170 + 3 * UI_SPACING_H * i,
                                     ALIGN_NONE, 0, 0, commands[i],
-                                    gTheme->uiTextColor) - x;
+                                    gTheme->uiTextColor) -
+                    x;
                 if (i == selcommand)
                     diaDrawBoundingBox(x, 170 + 3 * UI_SPACING_H * i,
                                        w, UI_SPACING_H, 0);
@@ -385,8 +387,7 @@ static int diaShowColSel(unsigned char *r, unsigned char *g, unsigned char *b)
             }
             rmDrawRect(x, y, thmGetGuiValue() == 0 ? 328 : 200, 20,
                        selc == co ? MAIZO_CARD : MAIZO_DIVIDER);
-            rmDrawRect(x + 2, y + 2, (thmGetGuiValue() == 0 ? 324 : 190) *
-                       col[co] / 255, 16, dcol);
+            rmDrawRect(x + 2, y + 2, (thmGetGuiValue() == 0 ? 324 : 190) * col[co] / 255, 16, dcol);
         }
 
         // target color itself

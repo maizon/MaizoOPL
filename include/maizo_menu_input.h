@@ -14,10 +14,16 @@ static unsigned int maizoMenuPadMask(const unsigned char snapshot[16],
     int slot, deadX, deadY;
     if (!snapshot)
         return 0;
-    deadX = sensitivityX == 0 ? 100 : sensitivityX == 2 ? 60 :
-                                                         80;
-    deadY = sensitivityY == 0 ? 100 : sensitivityY == 2 ? 60 :
-                                                         80;
+    deadX = 80;
+    deadY = 80;
+    if (sensitivityX == 0)
+        deadX = 100;
+    else if (sensitivityX == 2)
+        deadX = 60;
+    if (sensitivityY == 0)
+        deadY = 100;
+    else if (sensitivityY == 2)
+        deadY = 60;
     for (slot = 0; slot < 4; slot++) {
         unsigned int offset = slot * 4;
         unsigned int buttons = snapshot[offset] | ((unsigned int)snapshot[offset + 1] << 8);
