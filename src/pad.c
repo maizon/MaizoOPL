@@ -315,33 +315,13 @@ static int getKeyDelay(int id, int repeat)
     return delay;
 }
 
-/** polling method. Call every frame. */
-int readPads()
-{
-    int i;
-    oldpaddata = paddata;
-    paddata = 0;
-
-    // in ms.
-    u32 newtime = cpu_ticks() / CLOCKS_PER_MILISEC;
-    time_since_last = newtime - curtime;
-    curtime = newtime;
-
-    int rslt = 0;
-
-    for (i = 0; i < pad_count; ++i) {
-        rslt |= readPad(&pad_data[i]);
-    }
-
 #ifdef PADEMU
-    /* Emergency input bypass: on a REAL P1/P2 DualShock, L1+R1+START
-     * stops remote controllers from injecting menu input until reboot.
-     * It is checked BEFORE USB/BT are merged, so a corrupt USB report
-     * can never falsely trigger or prevent the rescue combo. */
-    if ((paddata & (PAD_L1 | PAD_R1 | PAD_START)) ==
-        (PAD_L1 | PAD_R1 | PAD_START))
-        maizoPhysicalRescueMode = 1;
-    if (!maizoPhysicalRescueMode) {
+/* The untrusted USB/BT path never writes over physical libpad state. */
+static int maizoReadRemotePads(void)
+{
+    int rslt = 0;
+    int i;
+
 
     /* Do not let an uninitialised, disconnected or version-mismatched
      * USB RPC snapshot synthesize 0xffff pressed buttons. It previously
@@ -388,7 +368,39 @@ int readPads()
             maizoBtArmed &= ~bit;
         }
     }
-    } /* Remote input bypass; physical ports always remain responsive. */
+    return rslt;
+}
+#endif
+
+/** polling method. Call every frame. */
+int readPads()
+{
+    int i;
+    oldpaddata = paddata;
+    paddata = 0;
+
+    // in ms.
+    u32 newtime = cpu_ticks() / CLOCKS_PER_MILISEC;
+    time_since_last = newtime - curtime;
+    curtime = newtime;
+
+    int rslt = 0;
+
+    for (i = 0; i < pad_count; ++i) {
+        rslt |= readPad(&pad_data[i]);
+    }
+
+#ifdef PADEMU
+    /* Emergency input bypass: on a REAL P1/P2 DualShock, L1+R1+START
+     * stops remote controllers from injecting menu input until reboot.
+     * It is checked BEFORE USB/BT are merged, so a corrupt USB report
+     * can never falsely trigger or prevent the rescue combo. */
+    if ((paddata & (PAD_L1 | PAD_R1 | PAD_START)) ==
+        (PAD_L1 | PAD_R1 | PAD_START))
+        maizoPhysicalRescueMode = 1;
+    if (!maizoPhysicalRescueMode)
+        rslt |= maizoReadRemotePads();
+
 #endif
 
     for (i = 0; i < 16; ++i) {

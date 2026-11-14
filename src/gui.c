@@ -1917,10 +1917,14 @@ int guiConfirmVideoMode(void)
                             gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0,
                             _l(_STR_CFM_VMODE_CHG), gTheme->textColor);
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
-                               CROSS_ICON : CIRCLE_ICON, _STR_BACK,
+                                   CROSS_ICON :
+                                   CIRCLE_ICON,
+                               _STR_BACK,
                                gTheme->fonts[0], 500, 417, gTheme->selTextColor);
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
-                               CIRCLE_ICON : CROSS_ICON, _STR_ACCEPT,
+                                   CIRCLE_ICON :
+                                   CROSS_ICON,
+                               _STR_ACCEPT,
                                gTheme->fonts[0], 70, 417, gTheme->selTextColor);
         }
 
@@ -1984,13 +1988,12 @@ int guiGameShowRemoveSettings(config_set_t *configSet, config_set_t *configGame)
                            j == 2 ? MAIZO_CARD : MAIZO_SURFACE);
                 maizoDrawIcon(j == 2 ? MAIZO_ICON_WARNING :
                               j == 3 ? MAIZO_ICON_BACK :
-                              MAIZO_ICON_SETTINGS,
+                                      MAIZO_ICON_SETTINGS,
                               63, y + 7, 20,
                               j == 2 ? MAIZO_WARNING : MAIZO_BRIGHT);
                 fntRenderString(gTheme->fonts[0], 95, y + 6,
                                 ALIGN_NONE, screenWidth - 153, 26,
-                                choices[j], j == 2 ?
-                                MAIZO_WARNING : MAIZO_TEXT);
+                                choices[j], j == 2 ? MAIZO_WARNING : MAIZO_TEXT);
             }
         } else {
             rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
@@ -2000,14 +2003,18 @@ int guiGameShowRemoveSettings(config_set_t *configSet, config_set_t *configGame)
                             gTheme->usedHeight >> 1, ALIGN_CENTER, 0, 0,
                             _l(_STR_GAME_SETTINGS_PROMPT), gTheme->textColor);
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
-                               CROSS_ICON : CIRCLE_ICON, _STR_BACK,
+                                   CROSS_ICON :
+                                   CIRCLE_ICON,
+                               _STR_BACK,
                                gTheme->fonts[0], 500, 417, gTheme->selTextColor);
             guiDrawIconAndText(SQUARE_ICON, _STR_GLOBAL_SETTINGS,
                                gTheme->fonts[0], 213, 417, gTheme->selTextColor);
             guiDrawIconAndText(TRIANGLE_ICON, _STR_ALL_SETTINGS,
                                gTheme->fonts[0], 356, 417, gTheme->selTextColor);
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
-                               CIRCLE_ICON : CROSS_ICON, _STR_PERGAME_SETTINGS,
+                                   CIRCLE_ICON :
+                                   CROSS_ICON,
+                               _STR_PERGAME_SETTINGS,
                                gTheme->fonts[0], 70, 417, gTheme->selTextColor);
         }
 
@@ -2132,8 +2139,8 @@ void guiManageCheats(config_set_t *configSet)
                                gTheme->selTextColor);
                 }
                 u32 textColour = (i == selectedCheat) ?
-                                    gTheme->selTextColor :
-                                    gTheme->textColor;
+                                     gTheme->selTextColor :
+                                     gTheme->textColor;
                 fntRenderString(gTheme->fonts[0], boxX + 35, boxY + 3,
                                 ALIGN_LEFT, 0, 0, gCheats[i].name,
                                 textColour);
@@ -2151,7 +2158,9 @@ void guiManageCheats(config_set_t *configSet)
                             MAIZO_MUTED);
         } else {
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
-                               CIRCLE_ICON : CROSS_ICON, _STR_SELECT,
+                                   CIRCLE_ICON :
+                                   CROSS_ICON,
+                               _STR_SELECT,
                                gTheme->fonts[0], 70, 417, gTheme->selTextColor);
             guiDrawIconAndText(START_ICON, _STR_RUN,
                                gTheme->fonts[0], 500, 417,

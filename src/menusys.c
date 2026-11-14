@@ -2136,7 +2136,8 @@ void menuRenderAppMenu()
             if (focused)
                 rmDrawRect(252, y, 3, 39, MAIZO_ACCENT);
             maizoDrawIcon(it->item.id == 1 ?
-                              MAIZO_ICON_DELETE : MAIZO_ICON_FILE,
+                              MAIZO_ICON_DELETE :
+                              MAIZO_ICON_FILE,
                           266, y + 9, 22,
                           focused ? MAIZO_BRIGHT : MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 300, y + 10,
