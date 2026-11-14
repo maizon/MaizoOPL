@@ -63,7 +63,8 @@ static unsigned int maizoMenuPadMask(const unsigned char snapshot[16],
 
     for (slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
         unsigned int offset = slot * 4;
-        unsigned int buttons, x, y;
+        unsigned int buttons;
+        int x, y;
         if (!(valid & (1u << slot)))
             continue;
         buttons = snapshot[offset] |
