@@ -20,6 +20,11 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iinclude -Imodules/pademu \
             tests/maizo_pademu_test.c -o /tmp/maizo_pademu_test
           /tmp/maizo_pademu_test
+      - name: Test menu routing for P1, P2 and multitap USB HID
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iinclude \
+            tests/maizo_menu_input_test.c -o /tmp/maizo_menu_input_test
+          /tmp/maizo_menu_input_test
       - name: Test dual-player 0810:0001 receiver packets
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iinclude -Imodules/pademu \

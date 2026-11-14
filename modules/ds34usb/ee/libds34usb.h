@@ -11,6 +11,7 @@ int ds34usb_init();
 int ds34usb_deinit();
 int ds34usb_reinit_ports(u8 ports);
 int ds34usb_get_status(int port);
+int ds34usb_get_menu_state(u8 snapshot[16]);
 int ds34usb_get_twin_diag(u8 info[8]);
 int ds34usb_get_usb_diag(u8 info[16]);
 int ds34usb_get_bdaddr(int port, u8 *bdaddr);

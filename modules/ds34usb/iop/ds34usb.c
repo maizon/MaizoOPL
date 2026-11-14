@@ -1083,6 +1083,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 
 #define DS34USB_TWIN_DIAG   9
 #define DS34USB_USB_DIAG    10
+#define DS34USB_MENU_STATE  11
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)
@@ -1117,6 +1118,31 @@ void *rpc_sf(int cmd, void *data, int size)
         case DS34USB_GET_DATA:
             ds34usb_get_data((char *)data, 18, *(u8 *)data);
             break;
+        case DS34USB_MENU_STATE: {
+            u8 *snapshot = (u8 *)data;
+            int port, oldstate;
+            for (port = 0; port < MAX_PADS; port++) {
+                u8 report[18];
+                unsigned int pos = port * 4;
+                snapshot[pos] = snapshot[pos + 1] = 0xFF;
+                snapshot[pos + 2] = snapshot[pos + 3] = 0x7F;
+                if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
+                    continue;
+                if (ds34pad[port].type == MAIZOHID ||
+                    ds34pad[port].type == TWINHID) {
+                    CpuSuspendIntr(&oldstate);
+                    hid_copy_snapshot(report, sizeof(report), port);
+                    CpuResumeIntr(oldstate);
+                } else {
+                    ds34usb_get_data((char *)report, sizeof(report), port);
+                }
+                snapshot[pos] = report[0];
+                snapshot[pos + 1] = report[1];
+                snapshot[pos + 2] = report[4];
+                snapshot[pos + 3] = report[5];
+            }
+            break;
+        }
         case DS34USB_RESET:
             ds34usb_reset();
             break;

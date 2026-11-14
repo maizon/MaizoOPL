@@ -101,53 +101,103 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
         rmStartFrame();
         guiDrawBGPlasma();
         if (thmGetGuiValue() == 0) {
-            maizoDrawPanel(24, 78, screenWidth - 48,
-                           gTheme->usedHeight - 133, 0);
+            rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
+            maizoDrawPanel(28, 88, screenWidth - 56,
+                           gTheme->usedHeight - 153, 0);
             maizoDrawBrand();
+            fntRenderString(gTheme->fonts[0], screenWidth - 32, 20,
+                            ALIGN_RIGHT, 190, 27, "TECLADO", MAIZO_MUTED);
         } else
             rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
 
         // Title
         if (title != NULL) {
-            fntRenderString(gTheme->fonts[0], 25, 20, ALIGN_NONE, 0, 0, title, gTheme->textColor);
-            // separating line
-            rmDrawLine(25, 38, 615, 38, gColWhite);
+            fntRenderString(gTheme->fonts[0], thmGetGuiValue() == 0 ? 35 : 25,
+                            thmGetGuiValue() == 0 ? 71 : 20, ALIGN_NONE,
+                            520, 30, title,
+                            thmGetGuiValue() == 0 ? MAIZO_TEXT : gTheme->textColor);
+            if (thmGetGuiValue() != 0)
+                rmDrawLine(25, 38, 615, 38, gColWhite);
         }
 
-        // Text
-        fntRenderString(gTheme->fonts[0], 50, 120, ALIGN_NONE, 0, 0,
+        if (thmGetGuiValue() == 0) {
+            rmDrawRect(41, 105, screenWidth - 82, 36, MAIZO_CARD);
+            rmDrawRect(41, 105, 3, 36, MAIZO_ACCENT);
+        }
+        fntRenderString(gTheme->fonts[0], 51, 114, ALIGN_NONE,
+                        screenWidth - 108, 28,
                         hide_text ? (mask_buffer ? mask_buffer : "") : text,
                         thmGetGuiValue() == 0 ? MAIZO_TEXT : gTheme->textColor);
-
-        // separating line for simpler orientation
-        rmDrawLine(25, 138, 615, 138, gColWhite);
+        if (thmGetGuiValue() != 0)
+            rmDrawLine(25, 145, 615, 145, gColWhite);
 
         for (j = 0; j < KEYB_HEIGHT; j++) {
             for (i = 0; i < KEYB_WIDTH; i++) {
                 c[0] = keyb[i + j * KEYB_WIDTH];
 
                 x = 50 + i * 31;
-                w = fntRenderString(gTheme->fonts[0], x, 170 + 3 * UI_SPACING_H * j, ALIGN_NONE, 0, 0, c, gTheme->uiTextColor) - x;
-                if ((i + j * KEYB_WIDTH) == selchar)
-                    diaDrawBoundingBox(x, 170 + 3 * UI_SPACING_H * j, w, UI_SPACING_H, 0);
+                if (thmGetGuiValue() == 0) {
+                    int y = 165 + 34 * j;
+                    int selected = (i + j * KEYB_WIDTH) == selchar;
+                    rmDrawRect(x - 4, y - 4, 27, 29,
+                               selected ? MAIZO_ACCENT : MAIZO_CARD);
+                    fntRenderString(gTheme->fonts[0], x + 5, y,
+                                    ALIGN_NONE, 17, 24, c,
+                                    selected ? MAIZO_TEXT : MAIZO_MUTED);
+                } else {
+                    w = fntRenderString(gTheme->fonts[0], x,
+                                        170 + 3 * UI_SPACING_H * j,
+                                        ALIGN_NONE, 0, 0, c,
+                                        gTheme->uiTextColor) -
+                        x;
+                    if ((i + j * KEYB_WIDTH) == selchar)
+                        diaDrawBoundingBox(x,
+                                           170 + 3 * UI_SPACING_H * j,
+                                           w, UI_SPACING_H, 0);
+                }
             }
         }
 
         // Commands
         for (i = 0; i < KEYB_HEIGHT; i++) {
-            if (cmdicons[i]) {
+            if (cmdicons[i] && thmGetGuiValue() != 0) {
                 int w = (cmdicons[i]->Width * 20) / cmdicons[i]->Height;
                 int h = 20;
                 rmDrawPixmap(cmdicons[i], 436, 170 + 3 * UI_SPACING_H * i, ALIGN_NONE, w, h, SCALING_RATIO, gDefaultCol);
             }
 
             x = 477;
-            w = fntRenderString(gTheme->fonts[0], x, 170 + 3 * UI_SPACING_H * i, ALIGN_NONE, 0, 0, commands[i], gTheme->uiTextColor) - x;
-            if (i == selcommand)
-                diaDrawBoundingBox(x, 170 + 3 * UI_SPACING_H * i, w, UI_SPACING_H, 0);
+            if (thmGetGuiValue() == 0) {
+                int y = 165 + 34 * i;
+                rmDrawRect(430, y - 4, 166, 29,
+                           i == selcommand ? MAIZO_CARD : MAIZO_SURFACE);
+                if (i == selcommand)
+                    rmDrawRect(430, y - 4, 3, 29, MAIZO_ACCENT);
+                fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE,
+                                116, 24, commands[i],
+                                i == selcommand ? MAIZO_BRIGHT : MAIZO_MUTED);
+            } else {
+                w = fntRenderString(gTheme->fonts[0], x,
+                                    170 + 3 * UI_SPACING_H * i,
+                                    ALIGN_NONE, 0, 0, commands[i],
+                                    gTheme->uiTextColor) -
+                    x;
+                if (i == selcommand)
+                    diaDrawBoundingBox(x, 170 + 3 * UI_SPACING_H * i,
+                                       w, UI_SPACING_H, 0);
+            }
         }
 
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+        if (thmGetGuiValue() == 0) {
+            rmDrawRect(0, gTheme->usedHeight - 62,
+                       screenWidth, 62, MAIZO_SURFACE);
+            fntRenderString(gTheme->fonts[0], 33,
+                            gTheme->usedHeight - 39, ALIGN_NONE,
+                            screenWidth - 65, 26,
+                            "SELECIONAR LETRA   |   START CONFIRMAR   |   VOLTAR",
+                            MAIZO_MUTED);
+        } else
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
 
         rmEndFrame();
 
@@ -302,14 +352,18 @@ static int diaShowColSel(unsigned char *r, unsigned char *g, unsigned char *b)
         rmStartFrame();
         guiDrawBGPlasma();
         if (thmGetGuiValue() == 0) {
-            maizoDrawPanel(24, 38, screenWidth - 48,
-                           gTheme->usedHeight - 98, 0);
+            rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
             maizoDrawBrand();
-        } else
+            maizoDrawPanel(33, 100, screenWidth - 66, 285, 0);
+            fntRenderString(gTheme->fonts[0], 34, 73,
+                            ALIGN_NONE, 540, 28,
+                            "PERSONALIZAR / COR RGB", MAIZO_TEXT);
+        } else {
             rmDrawRect(0, 0, screenWidth, screenHeight, gColDarker);
-
-        // "Color selection"
-        fntRenderString(gTheme->fonts[0], 50, 50, ALIGN_NONE, 0, 0, _l(_STR_COLOR_SELECTION), GS_SETREG_RGBA(0x60, 0x60, 0x60, 0x80));
+            fntRenderString(gTheme->fonts[0], 50, 50, ALIGN_NONE, 0, 0,
+                            _l(_STR_COLOR_SELECTION),
+                            GS_SETREG_RGBA(0x60, 0x60, 0x60, 0x80));
+        }
 
         // 3 bars representing the colors...
         size_t co;
@@ -319,30 +373,44 @@ static int diaShowColSel(unsigned char *r, unsigned char *g, unsigned char *b)
             unsigned char cc[3] = {0, 0, 0};
             cc[co] = col[co];
 
-            x = 75;
-            y = 75 + co * 25;
-
+            x = 76;
+            y = thmGetGuiValue() == 0 ? 162 + co * 67 : 75 + co * 25;
             u64 dcol = GS_SETREG_RGBA(cc[0], cc[1], cc[2], 0x80);
-
-            if (selc == co)
-                rmDrawRect(x, y, 200, 20, GS_SETREG_RGBA(0x60, 0x60, 0x60, 0x80));
-            else
-                rmDrawRect(x, y, 200, 20, GS_SETREG_RGBA(0x20, 0x20, 0x20, 0x80));
-
-            rmDrawRect(x + 2, y + 2, 190.0f * (cc[co] * 100 / 255) / 100, 16, dcol);
+            if (thmGetGuiValue() == 0) {
+                static const char *const labels[] = {"VERMELHO", "VERDE", "AZUL"};
+                char value[12];
+                snprintf(value, sizeof(value), "%d", col[co]);
+                fntRenderString(gTheme->fonts[0], x, y - 27, ALIGN_NONE,
+                                145, 24, labels[co], MAIZO_MUTED);
+                fntRenderString(gTheme->fonts[0], x + 322, y - 27,
+                                ALIGN_RIGHT, 50, 24, value, MAIZO_TEXT);
+            }
+            rmDrawRect(x, y, thmGetGuiValue() == 0 ? 328 : 200, 20,
+                       selc == co ? MAIZO_CARD : MAIZO_DIVIDER);
+            rmDrawRect(x + 2, y + 2, (thmGetGuiValue() == 0 ? 324 : 190) * col[co] / 255, 16, dcol);
         }
 
         // target color itself
         u64 dcol = GS_SETREG_RGBA(col[0], col[1], col[2], 0x80);
 
-        x = 300;
-        y = 75;
+        x = thmGetGuiValue() == 0 ? 453 : 300;
+        y = thmGetGuiValue() == 0 ? 162 : 75;
 
-        rmDrawRect(x, y, 70, 70, GS_SETREG_RGBA(0x60, 0x60, 0x60, 0x80));
-        rmDrawRect(x + 5, y + 5, 60, 60, dcol);
+        rmDrawRect(x, y, 90, 90, MAIZO_DIVIDER);
+        rmDrawRect(x + 5, y + 5, 80, 80, dcol);
 
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_OK, gTheme->fonts[0], 420, 417, gTheme->selTextColor);
-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+        if (thmGetGuiValue() == 0) {
+            rmDrawRect(0, gTheme->usedHeight - 62,
+                       screenWidth, 62, MAIZO_SURFACE);
+            fntRenderString(gTheme->fonts[0], 32,
+                            gTheme->usedHeight - 39, ALIGN_NONE,
+                            screenWidth - 64, 26,
+                            "ESQUERDA/DIREITA AJUSTAR   |   CONFIRMAR / VOLTAR",
+                            MAIZO_MUTED);
+        } else {
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, _STR_OK, gTheme->fonts[0], 420, 417, gTheme->selTextColor);
+            guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
+        }
 
         rmEndFrame();
 
@@ -641,6 +709,182 @@ static int diaLayout(struct UIItem *ui, struct UIItem *cur, int haveFocus, int m
     return y + scroll + hmax;
 }
 
+/* Every stock OPL dialog uses UIItem IDs and callbacks. Instead of
+ * remapping or throwing out legacy options, Supreme uses one new row-based
+ * layout for every dialog: Config, controls, PadEmu, VMC, GSM, network,
+ * cheats, OSD, keyboard fields and confirmation actions. UIItem remains
+ * the controller/model, so saved settings and per-game callbacks survive. */
+static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
+                             int haveFocus, int scroll, int *focusY,
+                             int measure)
+{
+    const int x = 35, width = screenWidth - 70, rowHeight = 39;
+    int y = 122 - scroll;
+    struct UIItem *item = ui;
+
+    while (item->type != UI_TERMINATOR) {
+        struct UIItem *begin, *end, *p, *firstLabel = NULL;
+        const char *caption = NULL;
+        int controls = 0, selected = 0, visible = 0;
+
+        if (item == ui && item->type == UI_LABEL &&
+            (item + 1)->type == UI_SPLITTER) {
+            item += 2; /* Heading already displayed by the header. */
+            continue;
+        }
+        if (item->type == UI_BREAK) {
+            item++;
+            continue;
+        }
+        if (item->type == UI_SPLITTER) {
+            if (!measure && y >= 112 && y < gTheme->usedHeight - 88)
+                maizoDrawSeparator(x + 8, y + 5, width - 16);
+            y += 16;
+            item++;
+            continue;
+        }
+
+        begin = item;
+        while (item->type != UI_TERMINATOR &&
+               item->type != UI_BREAK && item->type != UI_SPLITTER)
+            item++;
+        end = item;
+
+        for (p = begin; p < end; ++p) {
+            if (!p->visible || p->type == UI_SPACER)
+                continue;
+            visible++;
+            if (p->type == UI_LABEL && !firstLabel)
+                firstLabel = p;
+            if (diaIsControllable(p))
+                controls++;
+            if (p == cur)
+                selected = 1;
+        }
+        if (!visible)
+            continue;
+
+        if (firstLabel)
+            caption = diaGetLocalisedText(firstLabel->label.text,
+                                          firstLabel->label.stringId);
+        else if (begin->type == UI_BUTTON)
+            caption = diaGetLocalisedText(begin->label.text,
+                                          begin->label.stringId);
+        else if (begin->type == UI_OK)
+            caption = _l(_STR_OK);
+
+        if (selected)
+            *focusY = y + scroll + 12;
+        if (measure || y + rowHeight < 115 ||
+            y > gTheme->usedHeight - 92) {
+            y += rowHeight + 3;
+            continue;
+        }
+
+        rmDrawRect(x, y, width, rowHeight,
+                   selected ? MAIZO_CARD : MAIZO_SURFACE);
+        if (selected) {
+            rmDrawRect(x, y, 3, rowHeight, MAIZO_ACCENT);
+            rmDrawRect(x + 3, y, width - 3, 1, MAIZO_DIVIDER);
+        }
+        if (controls == 0)
+            maizoDrawIcon(MAIZO_ICON_INFO, x + 10, y + 10, 18, MAIZO_MUTED);
+        else if (begin->type == UI_BUTTON || begin->type == UI_OK)
+            maizoDrawIcon(MAIZO_ICON_CONFIRM, x + 10, y + 10, 18,
+                          selected ? MAIZO_BRIGHT : MAIZO_MUTED);
+        else
+            maizoDrawIcon(MAIZO_ICON_SETTINGS, x + 10, y + 10, 18,
+                          selected ? MAIZO_BRIGHT : MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], x + 39, y + 8,
+                        ALIGN_NONE, controls ? width * 49 / 100 : width - 55, 25, caption ? caption : "",
+                        selected ? MAIZO_TEXT : MAIZO_MUTED);
+
+        {
+            int n = 0, valueLeft = x + width * 57 / 100;
+            int valueWidth = x + width - 11 - valueLeft;
+            for (p = begin; p < end; ++p) {
+                char numeric[24];
+                char hidden[32];
+                const char *value = NULL;
+                int vx, segment, count = controls ? controls : 1;
+                if (!p->visible || p->type < UI_OK || !diaIsControllable(p))
+                    continue;
+                segment = valueWidth / count;
+                vx = valueLeft + segment * n;
+                numeric[0] = '\0';
+                hidden[0] = '\0';
+                switch (p->type) {
+                    case UI_BOOL:
+                        value = p->intvalue.current ? "ON" : "OFF";
+                        break;
+                    case UI_ENUM:
+                        if (p->intvalue.enumvalues)
+                            value = p->intvalue.enumvalues[p->intvalue.current];
+                        if (!value)
+                            value = "--";
+                        break;
+                    case UI_INT:
+                        snprintf(numeric, sizeof(numeric), "%d",
+                                 p->intvalue.current);
+                        value = numeric;
+                        break;
+                    case UI_STRING:
+                        value = p->stringvalue.text[0] ?
+                                    p->stringvalue.text :
+                                    "--";
+                        break;
+                    case UI_PASSWORD: {
+                        size_t k, len = strlen(p->stringvalue.text);
+                        if (len >= sizeof(hidden))
+                            len = sizeof(hidden) - 1;
+                        for (k = 0; k < len; k++)
+                            hidden[k] = '*';
+                        hidden[len] = '\0';
+                        value = len ? hidden : "--";
+                        break;
+                    }
+                    case UI_COLOUR:
+                        rmDrawRect(vx + segment - 35, y + 11, 26, 17,
+                                   GS_SETREG_RGBA(p->colourvalue.r,
+                                                  p->colourvalue.g,
+                                                  p->colourvalue.b, 0x80));
+                        break;
+                    case UI_BUTTON:
+                        value = "ABRIR";
+                        break;
+                    case UI_OK:
+                        value = "SALVAR";
+                        break;
+                    default:
+                        break;
+                }
+                if (p == cur) {
+                    rmDrawRect(vx - 4, y + 5, segment - 1, 30,
+                               haveFocus ? MAIZO_ACCENT : MAIZO_DIVIDER);
+                    rmDrawRect(vx - 2, y + 7, segment - 5, 26,
+                               MAIZO_CARD);
+                }
+                if (p->type == UI_BOOL) {
+                    rmDrawRect(vx + segment - 47, y + 10, 37, 19,
+                               p->intvalue.current ?
+                                   MAIZO_ACCENT :
+                                   MAIZO_DIVIDER);
+                    rmDrawRect(vx + segment - (p->intvalue.current ? 27 : 43),
+                               y + 13, 12, 13, MAIZO_TEXT);
+                    value = NULL;
+                }
+                if (value)
+                    fntRenderString(gTheme->fonts[0], vx, y + 8,
+                                    ALIGN_NONE, segment - 7, 25,
+                                    value, p == cur ? MAIZO_BRIGHT : MAIZO_TEXT);
+                n++;
+            }
+        }
+        y += rowHeight + 3;
+    }
+    return y + scroll + 7;
+}
+
 /// renders whole ui screen (for given dialog setup)
 void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFocus)
 {
@@ -650,46 +894,63 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
     static int scroll;
     int focusY = 0;
     if (thmGetGuiValue() == 0) {
+        int total, maxScroll;
+        const int top = 126, bottom = gTheme->usedHeight - 98;
+        const char *title = "MAIZO / CONFIGURACOES";
         if (lastUI != ui) {
             scroll = 0;
             lastUI = ui;
         }
-        const char *title = "OPCOES";
-        int total = diaLayout(ui, cur, haveFocus, 1, 0, &focusY);
-        int top = 110, bottom = gTheme->usedHeight - 94;
-        int maxScroll = total > bottom ? total - bottom : 0;
         if (ui->type == UI_LABEL) {
-            const char *label = diaGetLocalisedText(ui->label.text, ui->label.stringId);
-            if (label && label[0])
-                title = label;
+            const char *heading = diaGetLocalisedText(ui->label.text,
+                                                      ui->label.stringId);
+            if (heading && heading[0])
+                title = heading;
         }
+        total = maizoDialogLayout(ui, cur, haveFocus, 0, &focusY, 1);
+        maxScroll = total > bottom ? total - bottom : 0;
         if (cur && focusY - scroll < top)
             scroll = focusY - top;
-        if (cur && focusY - scroll > bottom)
-            scroll = focusY - bottom;
+        if (cur && focusY - scroll > bottom - 21)
+            scroll = focusY - (bottom - 21);
         if (scroll < 0)
             scroll = 0;
         if (scroll > maxScroll)
             scroll = maxScroll;
-        maizoDrawPanel(24, 94, screenWidth - 48,
-                       gTheme->usedHeight - 178, 0);
+
+        rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
+        rmDrawRect(0, 70, screenWidth, 1, MAIZO_DIVIDER);
         maizoDrawBrand();
-        fntRenderString(gTheme->fonts[0], screenWidth - 30, 20,
-                        ALIGN_RIGHT, screenWidth - 210, 30, title, MAIZO_MUTED);
-        diaLayout(ui, cur, haveFocus, 0, scroll, &focusY);
+        fntRenderString(gTheme->fonts[0], 35, 79, ALIGN_NONE,
+                        screenWidth - 70, 30, title, MAIZO_TEXT);
+        maizoDialogLayout(ui, cur, haveFocus, scroll, &focusY, 0);
         if (maxScroll > 0) {
-            int track = gTheme->usedHeight - 210;
+            int track = gTheme->usedHeight - 222;
             int thumb = track * (bottom - top) / (total - top);
             if (thumb < 12)
                 thumb = 12;
-            rmDrawRect(screenWidth - 31, 108, 2, track, MAIZO_DIVIDER);
-            rmDrawRect(screenWidth - 31,
-                       108 + scroll * (track - thumb) / maxScroll,
+            rmDrawRect(screenWidth - 25, 122, 2, track, MAIZO_DIVIDER);
+            rmDrawRect(screenWidth - 25,
+                       122 + scroll * (track - thumb) / maxScroll,
                        2, thumb, MAIZO_ACCENT);
         }
+        rmDrawRect(0, gTheme->usedHeight - 65,
+                   screenWidth, 65, MAIZO_SURFACE);
+        rmDrawRect(0, gTheme->usedHeight - 65,
+                   screenWidth, 1, MAIZO_DIVIDER);
+        fntRenderString(gTheme->fonts[0], 38,
+                        gTheme->usedHeight - 42, ALIGN_NONE,
+                        screenWidth - 65, 28,
+                        gSelectButton == KEY_CIRCLE ?
+                            "O SELECIONAR     X VOLTAR   |   MAIZO SUPREME" :
+                            "X SELECIONAR     O VOLTAR   |   MAIZO SUPREME",
+                        MAIZO_MUTED);
     } else {
         diaLayout(ui, cur, haveFocus, 0, 0, &focusY);
     }
+
+    if (thmGetGuiValue() == 0)
+        return; /* Supreme has its own persistent footer and row hints. */
 
     if ((cur != NULL) && (!haveFocus) && (cur->hintId != -1)) {
         diaDrawHint(cur->hintId);
