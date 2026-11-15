@@ -112,7 +112,7 @@ assert "maizo_filemgr.o" in read("Makefile")
 
 assert "maizoUsbCenters" in read("src/pad.c")
 assert "rmDrawOverlayPixmap(caseBox" in read("src/themes.c")
-assert "ch * 9 / refH" in read("src/themes.c")
+assert "frontRight = cw * 92 / 100" in read("src/themes.c")
 assert "snapshot[12] |= 1u << port" in read("modules/ds34usb/iop/ds34usb.c")
 assert "READY:%02X SLOT:%02X" in read("src/guigame.c")
 

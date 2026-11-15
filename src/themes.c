@@ -699,7 +699,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
             /*
              * The original 3D-case artwork and its front-cover window are
              * different shapes. The previous implementation stretched the
-             * inlay over 100%% of the case (0..cw), leaking the cover past
+             * inlay over 100% of the case (0..cw), leaking the cover past
              * the transparent plastic rim and creating the apparent second
              * cover behind every game in the CRT photos.
              *
