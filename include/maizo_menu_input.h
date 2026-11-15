@@ -36,10 +36,9 @@ static unsigned int maizoMenuPadNeutralMask(const unsigned char snapshot[16])
     unsigned int valid = maizoMenuPadValidMask(snapshot);
     for (slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
         unsigned int offset = slot * 4;
+        /* Digital-neutral is sufficient even if raw sticks idle at zero. */
         if ((valid & (1u << slot)) &&
-            snapshot[offset] == 0xff && snapshot[offset + 1] == 0xff &&
-            snapshot[offset + 2] >= 105 && snapshot[offset + 2] <= 150 &&
-            snapshot[offset + 3] >= 105 && snapshot[offset + 3] <= 150)
+            snapshot[offset] == 0xff && snapshot[offset + 1] == 0xff)
             mask |= 1u << slot;
     }
     return mask;
@@ -47,7 +46,8 @@ static unsigned int maizoMenuPadNeutralMask(const unsigned char snapshot[16])
 
 static unsigned int maizoMenuPadMask(const unsigned char snapshot[16],
                                      int sensitivityX, int sensitivityY,
-                                     unsigned int armedMask)
+                                     unsigned int armedMask,
+                                     const unsigned char centers[4])
 {
     unsigned int slot, mask = 0;
     unsigned int valid = maizoMenuPadValidMask(snapshot) & armedMask;
@@ -72,13 +72,16 @@ static unsigned int maizoMenuPadMask(const unsigned char snapshot[16],
         x = snapshot[offset + 2];
         y = snapshot[offset + 3];
         mask |= 0xffffu ^ buttons;
-        if (x < 127 - deadX)
+        /* Per-device stick origin is captured from a neutral report. */
+        x -= centers ? centers[slot * 2] : 127;
+        y -= centers ? centers[slot * 2 + 1] : 127;
+        if (x < -deadX)
             mask |= 0x0080u;
-        else if (x > 127 + deadX)
+        else if (x > deadX)
             mask |= 0x0020u;
-        if (y < 127 - deadY)
+        if (y < -deadY)
             mask |= 0x0010u;
-        else if (y > 127 + deadY)
+        else if (y > deadY)
             mask |= 0x0040u;
     }
     return mask;

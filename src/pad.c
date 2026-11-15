@@ -50,6 +50,7 @@ static unsigned short pad_count;
 /* Input safety: a new/untrusted HID or BT stream must publish one clean
  * neutral state before it is allowed to issue dashboard navigation. */
 static unsigned int maizoUsbArmed;
+static u8 maizoUsbCenters[4] = {127, 127, 127, 127};
 static unsigned int maizoBtArmed;
 static int maizoPhysicalRescueMode;
 #endif
@@ -330,10 +331,20 @@ static int maizoReadRemotePads(void)
         if (ds34usb_get_menu_state(snapshot)) {
             unsigned int valid = maizoMenuPadValidMask(snapshot);
             u32 remote;
+            unsigned int neutral = maizoMenuPadNeutralMask(snapshot);
+            unsigned int fresh;
             maizoUsbArmed &= valid;
-            maizoUsbArmed |= maizoMenuPadNeutralMask(snapshot);
+            fresh = neutral & ~maizoUsbArmed;
+            for (int slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
+                if (fresh & (1u << slot)) {
+                    maizoUsbCenters[slot * 2] = snapshot[slot * 4 + 2];
+                    maizoUsbCenters[slot * 2 + 1] = snapshot[slot * 4 + 3];
+                }
+            }
+            maizoUsbArmed |= neutral;
             remote = maizoMenuPadMask(snapshot, gXSensitivity,
-                                      gYSensitivity, maizoUsbArmed);
+                                      gYSensitivity, maizoUsbArmed,
+                                      maizoUsbCenters);
             paddata |= remote;
             if (remote)
                 rslt = 1;

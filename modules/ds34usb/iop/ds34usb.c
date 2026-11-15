@@ -1140,6 +1140,8 @@ void *rpc_sf(int cmd, void *data, int size)
             for (port = 0; port < MAX_PADS; port++) {
                 unsigned int pos = port * 4;
                 int oldstate;
+                if (hid_report_ready[port])
+                    snapshot[12] |= 1u << port;
                 snapshot[pos] = snapshot[pos + 1] = 0xff;
                 snapshot[pos + 2] = snapshot[pos + 3] = 0x7f;
                 if (!ds34pad[port].enabled ||
@@ -1159,6 +1161,8 @@ void *rpc_sf(int cmd, void *data, int size)
                 CpuResumeIntr(oldstate);
                 snapshot[11] |= 1u << port;
             }
+            snapshot[13] = maizo_usb_stage;
+            snapshot[14] = maizo_usb_reports;
             break;
         }
         case DS34USB_RESET:

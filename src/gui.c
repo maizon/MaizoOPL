@@ -1,3 +1,4 @@
+#include "include/maizo_filemgr.h"
 #include "include/cheatconfig.h"
 /*
  Copyright 2010, Volca
@@ -633,7 +634,51 @@ void guiShowConfig(void)
 
 void guiShowStorageConfig(void)
 {
-    guiShowConfigWithFocus(CFG_BDMMODE);
+    if (thmGetGuiValue() != 0) {
+        guiShowConfigWithFocus(CFG_BDMMODE);
+        return;
+    }
+    for (;;) {
+        int selected;
+        struct UIItem options[] = {
+            {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MAIZO / ARMAZENAMENTO", -1}}},
+            {UI_BREAK},
+            {UI_BUTTON, 301, 1, 1, -1, 0, 0, {.label = {"Fontes e dispositivos OPL", -1}}},
+            {UI_BREAK},
+            {UI_BUTTON, 302, 1, 1, -1, 0, 0, {.label = {"Gerenciar arquivos USB / MC / SMB", -1}}},
+            {UI_BREAK},
+            {UI_BUTTON, 303, 1, 1, -1, 0, 0, {.label = {"SMB / configuracao existente", -1}}},
+            {UI_BREAK},
+            {UI_BUTTON, 304, 1, 1, -1, 0, 0, {.label = {"wLaunchELF / operacoes avancadas", -1}}},
+            {UI_BREAK},
+            {UI_TERMINATOR}};
+        selected = diaExecuteDialog(options, -1, 1, NULL);
+        if (selected == 0)
+            break;
+        if (selected == 301)
+            guiShowConfigWithFocus(CFG_BDMMODE);
+        else if (selected == 302 || selected == 304)
+            maizoFileManagerOpen();
+        else if (selected == 303) {
+            char status[248];
+            if (gNetworkStartup == 0 && gPCShareName[0]) {
+                if (gPCShareAddressIsNetBIOS)
+                    snprintf(status, sizeof(status),
+                             "SMB OPL ja conectado.\nServidor: %s:%d\nCompartilhamento: %s\nUsuario: %s\nNenhuma senha sera solicitada.",
+                             gPCShareNBAddress, gPCPort, gPCShareName,
+                             gPCUserName);
+                else
+                    snprintf(status, sizeof(status),
+                             "SMB OPL ja conectado.\nServidor: %d.%d.%d.%d:%d\nCompartilhamento: %s\nUsuario: %s\nNenhuma senha sera solicitada.",
+                             pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3],
+                             gPCPort, gPCShareName, gPCUserName);
+            } else {
+                snprintf(status, sizeof(status),
+                         "SMB ainda nao conectado. Configure a rede em MAIZO / Rede e inicie ETH Games. Os dados ja salvos no OPL serao reutilizados.");
+            }
+            guiMsgBox(status, 0, NULL);
+        }
+    }
 }
 
 void guiShowPS1Config(void)

@@ -658,7 +658,6 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         int index = order[slot], selected = index == 2;
         int hPct = selected ? 50 : (index == 0 || index == 4 ? 28 : 39);
         int ch, cw, cx, cy, x, y;
-        int frontX, frontW, frontY, frontH;
         GSTEXTURE *cover, *caseBox;
         maizo_entry_t *entry = visible[index];
 
@@ -680,66 +679,43 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         x = cx - cw / 2;
         y = cy - ch / 2;
 
-        /* The 3D case is a BACKGROUND, not an overlay. OPL's original
-         * case.png is partly opaque: compositing it OVER the user cover
-         * hid the picture and generated the doubled image seen on CRT. */
+        /* The original OPL theme draws case.png AFTER its warped front
+         * cover, using the case's transparent border / plastic spine.
+         * Restore that compositor instead of a guessed black inset. */
         rmDrawRect(x + 6, y + 7, cw, ch, GS_SETREG_RGBA(0, 0, 0, 0x55));
-        rmDrawRect(x, y, cw, ch, MAIZO_CARD);
 
         cover = textures[index];
         if (!cover || !cover->Mem)
-            cover = covers && art->defaultTexture ? &art->defaultTexture->source : NULL;
+            cover = covers && art->defaultTexture ?
+                        &art->defaultTexture->source :
+                        NULL;
         if (!cover || !cover->Mem)
             cover = thmGetTexture(COVER_DEFAULT);
         caseBox = thmGetTexture(entry->platform == MAIZO_APP ?
                                     APPS_CASE_OVERLAY :
                                     CASE_OVERLAY);
 
-        /* Spine / plastic rim stay visible, while the artwork fits the
-         * FRONT window without distortion. All figures are relative to
-         * the same card dimensions for the centre and neighbours. */
-        frontX = cw * 13 / 100;
-        frontW = cw * 83 / 100;
-        frontY = ch * 6 / 100;
-        frontH = ch * 88 / 100;
-
-        if (caseBox && caseBox->Mem)
-            rmDrawPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
+        if (caseBox && caseBox->Mem && cover && cover->Mem) {
+            int refH = entry->platform == MAIZO_APP ? 180 : 254;
+            /* OPL conf_theme_OPL.cfg original:
+             * PS2: (0,9), (168,19), (0,244), (168,254)
+             * APPS: (0,9), (168,19), (0,170), (168,180).
+             * Scale offsets with the moving case to preserve proportions. */
+            rmDrawOverlayPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
+                                SCALING_NONE, gDefaultCol, cover,
+                                0, ch * 9 / refH, cw, ch * 19 / refH,
+                                0, ch * (refH - 10) / refH, cw, ch);
+        } else if (cover && cover->Mem) {
+            rmDrawPixmap(cover, cx, cy, ALIGN_CENTER, cw, ch,
                          SCALING_NONE, gDefaultCol);
-        else {
-            rmDrawRect(x + 1, y + 1, cw - 2, ch - 2, MAIZO_DIVIDER);
-            rmDrawRect(x + 2, y + 2, cw / 10, ch - 4, MAIZO_ACCENT);
-        }
-        rmDrawRect(x + frontX - 1, y + frontY - 1,
-                   frontW + 2, frontH + 2, MAIZO_BLACK);
-
-        if (cover && cover->Mem && cover->Width && cover->Height) {
-            int artW = frontW, artH = frontH;
-            if ((unsigned long)cover->Width * frontH >
-                (unsigned long)cover->Height * frontW)
-                artH = (int)((unsigned long)frontW * cover->Height /
-                             cover->Width);
-            else
-                artW = (int)((unsigned long)frontH * cover->Width /
-                             cover->Height);
-            rmDrawPixmap(cover, x + frontX + frontW / 2,
-                         y + frontY + frontH / 2, ALIGN_CENTER,
-                         artW, artH, SCALING_NONE, gDefaultCol);
         } else {
+            rmDrawRect(x, y, cw, ch, MAIZO_CARD);
             maizoDrawIcon(entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
                           entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
                                                          MAIZO_ICON_PS2,
                           cx - 16, cy - 20, 32, MAIZO_BRIGHT);
         }
 
-        /* Plastic edge and a narrow reflective strip are drawn LAST.
-         * Do not draw a full-size case sprite over the cover. */
-        rmDrawRect(x + frontX - 1, y + frontY,
-                   1, frontH, MAIZO_DIVIDER);
-        rmDrawRect(x + frontX + frontW, y + frontY,
-                   1, frontH, MAIZO_DIVIDER);
-        rmDrawRect(x + frontX, y + frontY,
-                   frontW, 1, MAIZO_DIVIDER);
         if (selected) {
             rmDrawRect(x + cw / 8, y + ch + 5,
                        cw * 3 / 4, 2, MAIZO_ACCENT);

@@ -65,8 +65,8 @@ assert "maizoDialogLayout" in dia
 assert "maizoSettingsFooter" in menu
 assert "maizoSettingsActionIcon" in menu
 assert '"SELECIONADO"' not in art
-assert "rmDrawPixmap(caseBox" in art
-assert "rmDrawOverlayPixmap(caseBox" not in art
+assert "rmDrawOverlayPixmap(caseBox" in art
+assert "rmDrawPixmap(caseBox" not in art
 assert "ds34usb_get_menu_state" in read("src/pad.c")
 assert "DS34USB_MENU_STATE" in driver
 assert "maizoMenuPadMask" in read("src/pad.c")
@@ -92,3 +92,26 @@ assert "OPCOES DO JOGO" in menu
 assert "CONFIRMAR VIDEO" in gui
 assert "REMOVER CONFIGURACOES" in gui
 assert "Nenhum cheat encontrado." in gui
+
+# Supreme Storage > file manager and wLaunchELF-inspired native browser.
+assert "maizoFileManagerOpen" in menu
+assert "MENU_FILE_MANAGER" in menu
+fm = read("src/maizo_filemgr.c")
+assert "fileXioDopen" in fm
+assert "fileXioDread" in fm
+assert "fileXioMkdir" in fm
+assert "fileXioRename" in fm
+assert "fm_copy_tree" in fm
+assert "fm_remove_tree" in fm
+assert "LoadELFFromFileWithPartition" in fm
+assert "ethGetObject(1)" in fm
+assert "gNetworkStartup == 0" in fm
+assert "gPCPort" in fm and "gPCShareName" in fm
+assert "fm_exists(dest)" in fm
+assert "maizo_filemgr.o" in read("Makefile")
+
+assert "maizoUsbCenters" in read("src/pad.c")
+assert "rmDrawOverlayPixmap(caseBox" in read("src/themes.c")
+assert "ch * 9 / refH" in read("src/themes.c")
+assert "snapshot[12] |= 1u << port" in read("modules/ds34usb/iop/ds34usb.c")
+assert "READY:%02X SLOT:%02X" in read("src/guigame.c")
