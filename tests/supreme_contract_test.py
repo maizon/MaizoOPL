@@ -65,8 +65,8 @@ assert "maizoDialogLayout" in dia
 assert "maizoSettingsFooter" in menu
 assert "maizoSettingsActionIcon" in menu
 assert '"SELECIONADO"' not in art
-assert "rmDrawPixmap(caseBox" in art
-assert "rmDrawOverlayPixmap(caseBox" not in art
+assert "rmDrawOverlayPixmap(caseBox" in art
+assert "rmDrawPixmap(caseBox" not in art
 assert "ds34usb_get_menu_state" in read("src/pad.c")
 assert "DS34USB_MENU_STATE" in driver
 assert "maizoMenuPadMask" in read("src/pad.c")

@@ -1138,11 +1138,10 @@ void *rpc_sf(int cmd, void *data, int size)
             snapshot[9] = MAIZO_MENU_MAGIC1;
             snapshot[10] = MAIZO_MENU_VERSION;
             for (port = 0; port < MAX_PADS; port++) {
-                if (hid_report_ready[port])
-                    snapshot[12] |= 1u << port;
-            }
                 unsigned int pos = port * 4;
                 int oldstate;
+                if (hid_report_ready[port])
+                    snapshot[12] |= 1u << port;
                 snapshot[pos] = snapshot[pos + 1] = 0xff;
                 snapshot[pos + 2] = snapshot[pos + 3] = 0x7f;
                 if (!ds34pad[port].enabled ||

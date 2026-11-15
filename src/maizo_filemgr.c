@@ -15,12 +15,13 @@
 #include "include/themes.h"
 #include "include/fntsys.h"
 #include "include/renderman.h"
+#define NEWLIB_PORT_AWARE
 #include <fileXio_rpc.h>
 #include <elf-loader.h>
 #include <strings.h>
 
-#define FM_PATH 384
-#define FM_NAME 256
+#define FM_PATH  384
+#define FM_NAME  256
 #define FM_ITEMS 128
 #define FM_DEPTH 9
 #define FM_CHUNK 16384
@@ -47,6 +48,8 @@ static struct
     unsigned char clipboardDir;
 } fm;
 
+static int screenWidth;
+
 static const char *const fm_devices[] = {
     "mass0:/", "mass1:/", "mc0:/", "mc1:/"};
 
@@ -69,7 +72,8 @@ static int fm_join(char *out, size_t len, const char *base,
              n && base[n - 1] != slash && base[n - 1] != ':' ?
                  (slash == '/' ? "/" : "\\") :
                  (n && base[n - 1] == ':' ?
-                      (slash == '/' ? "/" : "\\") : ""),
+                      (slash == '/' ? "/" : "\\") :
+                      ""),
              name);
     return 1;
 }
@@ -513,6 +517,8 @@ static void fm_options(void)
 
 void maizoFileManagerOpen(void)
 {
+    int screenHeight;
+    rmGetScreenExtents(&screenWidth, &screenHeight);
     memset(&fm, 0, sizeof(fm));
     fm_set_root(&fm.pane[0], "mass0:/");
     fm_set_root(&fm.pane[1], "mc0:/");
@@ -520,10 +526,10 @@ void maizoFileManagerOpen(void)
     for (;;) {
         fm_pane_t *pane = &fm.pane[fm.current];
         int select, back;
-        guiStartFrame();
+        rmStartFrame();
         readPads();
         fm_draw();
-        guiEndFrame();
+        rmEndFrame();
 
         back = gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE;
         select = getKeyOn(gSelectButton);
