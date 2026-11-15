@@ -112,6 +112,15 @@ assert "maizo_filemgr.o" in read("Makefile")
 
 assert "maizoUsbCenters" in read("src/pad.c")
 assert "rmDrawOverlayPixmap(caseBox" in read("src/themes.c")
-assert "ch * 9 / refH" in read("src/themes.c")
+assert "frontRight = cw * 92 / 100" in read("src/themes.c")
 assert "snapshot[12] |= 1u << port" in read("modules/ds34usb/iop/ds34usb.c")
 assert "READY:%02X SLOT:%02X" in read("src/guigame.c")
+
+# Cover is confined to the front panel, not projected across the full case.
+case = read("src/themes.c")
+assert "frontLeft = cw * 9 / 100" in case
+assert "frontRight = cw * 92 / 100" in case
+assert "frontLeft, topLeft, frontRight, topRight" in case
+assert "frontLeft, bottomLeft, frontRight, bottomRight" in case
+assert "rmDrawOverlayPixmap(caseBox" in case
+assert 'badgeX - 47, 32, current->title' not in case

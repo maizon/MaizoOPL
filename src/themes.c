@@ -696,15 +696,29 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                                     CASE_OVERLAY);
 
         if (caseBox && caseBox->Mem && cover && cover->Mem) {
-            int refH = entry->platform == MAIZO_APP ? 180 : 254;
-            /* OPL conf_theme_OPL.cfg original:
-             * PS2: (0,9), (168,19), (0,244), (168,254)
-             * APPS: (0,9), (168,19), (0,170), (168,180).
-             * Scale offsets with the moving case to preserve proportions. */
+            /*
+             * The original 3D-case artwork and its front-cover window are
+             * different shapes. The previous implementation stretched the
+             * inlay over 100% of the case (0..cw), leaking the cover past
+             * the transparent plastic rim and creating the apparent second
+             * cover behind every game in the CRT photos.
+             *
+             * Place the inlay INSIDE the physical front panel. Keep a
+             * real spine on the left and translucent plastic on the right.
+             * All offsets are in local virtual-screen pixels because
+             * rmDrawOverlayPixmap scales them in renderman.c. Relative
+             * geometry preserves the approved centre/side animations.
+             */
+            int frontLeft = cw * 9 / 100;
+            int frontRight = cw * 92 / 100;
+            int topLeft = ch * 5 / 100;
+            int topRight = ch * 7 / 100;
+            int bottomLeft = ch * 92 / 100;
+            int bottomRight = ch * 94 / 100;
             rmDrawOverlayPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
                                 SCALING_NONE, gDefaultCol, cover,
-                                0, ch * 9 / refH, cw, ch * 19 / refH,
-                                0, ch * (refH - 10) / refH, cw, ch);
+                                frontLeft, topLeft, frontRight, topRight,
+                                frontLeft, bottomLeft, frontRight, bottomRight);
         } else if (cover && cover->Mem) {
             rmDrawPixmap(cover, cx, cy, ALIGN_CENTER, cw, ch,
                          SCALING_NONE, gDefaultCol);
@@ -744,19 +758,18 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
          * without inventing game genre, player count or display mode. */
         snprintf(counter, sizeof(counter), "%d de %d", position, total);
         if (current) {
-            fntRenderString(elem->font, 34, h - 80, ALIGN_NONE,
-                            badgeX - 47, 32, current->title, MAIZO_TEXT);
             maizoDrawIcon(current->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 :
                           current->platform == MAIZO_APP ? MAIZO_ICON_APPS :
                                                            MAIZO_ICON_PS2,
-                          34, h - 43, 21, MAIZO_ACCENT);
-            fntRenderString(elem->font, 62, h - 43, ALIGN_NONE,
-                            badgeX - 78, 22, platform, MAIZO_MUTED);
+                          34, h - 59, 21, MAIZO_ACCENT);
+            fntRenderString(elem->font, 62, h - 59, ALIGN_NONE,
+                            badgeX - 78, 25, platform, MAIZO_MUTED);
             if (current->favorite)
                 maizoDrawIcon(MAIZO_ICON_STAR, badgeX - 38,
                               h - 75, 20, MAIZO_ACCENT);
         }
-        /* Source tag and library position stay secondary, right aligned. */
+        /* The name appears once: centered under the selected case.
+         * The footer carries only the platform, source and position. */
         rmDrawRect(badgeX, h - 72, 183, 36, MAIZO_CARD);
         maizoDrawIcon(support && support->mode == ETH_MODE ?
                           MAIZO_ICON_NETWORK :
