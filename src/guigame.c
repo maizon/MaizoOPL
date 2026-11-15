@@ -638,7 +638,7 @@ void guiGameShowBluetoothManager(void)
 }
 
 
-static char twinDataLine[96];
+static char twinDataLine[128];
 
 static void maizoTwinRefresh(void)
 {
@@ -678,9 +678,20 @@ static void maizoTwinRefresh(void)
         unsigned int bits = d[10] | (d[11] << 8);
         diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
                     hid_status[d[0] < sizeof(hid_status) / sizeof(hid_status[0]) ? d[0] : 0]);
-        snprintf(twinDataLine, sizeof(twinDataLine),
-                 "VID:%04X PID:%04X CL:%02X EP:%u PK:%u BITS:%u IN:%u ER:%u",
-                 vid, pid, d[5], d[6], packet, bits, d[9], d[12]);
+        {
+            u8 menuReport[16] = {0};
+            if (ds34usb_get_menu_state(menuReport) &&
+                menuReport[8] == 0x4d && menuReport[9] == 0x5a) {
+                snprintf(twinDataLine, sizeof(twinDataLine),
+                         "VID:%04X PID:%04X PK:%u RX:%u READY:%02X SLOT:%02X BTN:%02X%02X",
+                         vid, pid, packet, d[9], menuReport[12],
+                         menuReport[11], menuReport[1], menuReport[0]);
+            } else {
+                snprintf(twinDataLine, sizeof(twinDataLine),
+                         "USB:%04X:%04X PK:%u BITS:%u RX:%u ERR:%u SEM RPC",
+                         vid, pid, packet, bits, d[9], d[12]);
+            }
+        }
     } else {
         u8 twin[8] = {0};
         if (!ds34usb_get_twin_diag(twin)) {

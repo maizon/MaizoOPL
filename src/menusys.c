@@ -21,6 +21,7 @@
 #include <time.h>
 #include "include/maizo_ui.h"
 #include "include/appsupport.h"
+#include "include/maizo_filemgr.h"
 
 enum MENU_IDs {
     MENU_SETTINGS = 0,
@@ -47,7 +48,8 @@ enum MENU_IDs {
     MENU_DIAG_SYSTEM,
     MENU_LIBRARY_SORT,
     MENU_COVER_MODE,
-    MENU_LIBRARY_REFRESH
+    MENU_LIBRARY_REFRESH,
+    MENU_FILE_MANAGER
 };
 
 enum GAME_MENU_IDs {
@@ -464,6 +466,7 @@ static int settingsItemCategory(int id)
         case MENU_AUDIO_SETTINGS:
             return 4;
         case MENU_STORAGE_SETTINGS:
+        case MENU_FILE_MANAGER:
             return 5;
         case MENU_NET_CONFIG:
         case MENU_NET_UPDATE:
@@ -491,6 +494,7 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Informacoes tecnicas", MENU_DIAG_SYSTEM, -1);
         submenuAppendItem(&mainMenu, -1, "Video da interface", MENU_VIDEO_SETTINGS, -1);
         submenuAppendItem(&mainMenu, -1, "Armazenamento e fontes", MENU_STORAGE_SETTINGS, -1);
+        submenuAppendItem(&mainMenu, -1, "Gerenciar arquivos (USB / MC / SMB)", MENU_FILE_MANAGER, -1);
         submenuAppendItem(&mainMenu, -1, "Configuracoes PlayStation 1", MENU_PS1_SETTINGS, -1);
     }
     submenuAppendItem(&mainMenu, -1, NULL, MENU_GFX_SETTINGS, _STR_GFX_SETTINGS);
@@ -1085,6 +1089,8 @@ static int maizoSettingsActionIcon(int id)
         case MENU_USB_DIAG:
         case MENU_STORAGE_SETTINGS:
             return MAIZO_ICON_USB;
+        case MENU_FILE_MANAGER:
+            return MAIZO_ICON_FOLDER;
         case MENU_NET_CONFIG:
         case MENU_NET_UPDATE:
         case MENU_START_NBD:
@@ -1483,6 +1489,9 @@ void menuHandleInputMenu()
         } else if (id == MENU_STORAGE_SETTINGS) {
             if (menuCheckParentalLock() == 0)
                 guiShowStorageConfig();
+        } else if (id == MENU_FILE_MANAGER) {
+            if (menuCheckParentalLock() == 0)
+                maizoFileManagerOpen();
         } else if (id == MENU_PS1_SETTINGS) {
             if (menuCheckParentalLock() == 0)
                 guiShowPS1Config();
