@@ -137,6 +137,8 @@ void guiShowNetConfig();
 void guiShowParentalLockConfig();
 
 void guiCheckNotifications(int checkTheme, int checkLang);
+void guiNotifyController(const char *name, int slot);
+void guiDrawControllerNotification(void);
 
 /** Renders the given string on screen for the given function until it's io finishes
  * @note The ptr pointer is watched for it's value. The IO is considered finished when the value becomes zero.

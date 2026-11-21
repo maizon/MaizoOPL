@@ -24,6 +24,7 @@ int ds34bt_deinit();
 int ds34bt_reinit_ports(u8 ports);
 int ds34bt_init_charging();
 int ds34bt_get_status(int port);
+int ds34bt_get_pad_type(int port);
 int ds34bt_get_bdaddr(u8 *bdaddr);
 int ds34bt_set_rumble(int port, u8 lrum, u8 rrum);
 int ds34bt_set_led(int port, u8 *led); // rgb for ds4

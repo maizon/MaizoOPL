@@ -398,11 +398,9 @@ static void usb_release(int pad)
     hid_stream_generation[pad]++;
     hid_stream_state[pad] = 0;
     hid_pending[pad] = 0;
-    if (ds34pad[pad].type == MAIZOX360) {
-        ds34pad[pad].ds2.nButtonState = 0xffff;
-        mips_memset(&ds34pad[pad].data[2], 0x7f, 4);
-        mips_memset(&ds34pad[pad].data[6], 0, 12);
-    }
+    ds34pad[pad].ds2.nButtonState = 0xffff;
+    mips_memset(&ds34pad[pad].data[2], 0x7f, 4);
+    mips_memset(&ds34pad[pad].data[6], 0, 12);
     hid_report_ready[pad] = 0;
     CpuResumeIntr(state);
     if (pad == twin_root) {
@@ -851,7 +849,7 @@ static void hid_stream_thread(void *arg)
             if (ret != USB_RC_OK)
                 hid_stream_state[pad] = 0;
         }
-        DelayThread(2000);
+        DelayThread(1000);
     }
 }
 
@@ -1208,6 +1206,9 @@ void *rpc_sf(int cmd, void *data, int size)
                 }
                 CpuResumeIntr(oldstate);
                 snapshot[11] |= 1u << port;
+                /* Packed per-slot protocol metadata. Existing button
+                 * payload and diagnostic offsets remain unchanged. */
+                snapshot[15] |= ((ds34pad[port].type + 1) & 7) << (port * 3);
             }
             snapshot[13] = maizo_usb_stage;
             snapshot[14] = maizo_usb_reports;

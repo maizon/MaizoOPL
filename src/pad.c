@@ -7,6 +7,7 @@
 #include "include/opl.h"
 #include "include/pad.h"
 #include "include/ioman.h"
+#include "include/gui.h"
 #include <libpad.h>
 #include "include/maizo_menu_input.h"
 #include <timer.h>
@@ -29,6 +30,7 @@ struct pad_data_t
 {
     int port, slot;
     int state;
+    int notified;
     u32 paddata;
     u32 oldpaddata;
     struct padButtonStatus buttons;
@@ -50,6 +52,7 @@ static unsigned short pad_count;
 /* Input safety: a new/untrusted HID or BT stream must publish one clean
  * neutral state before it is allowed to issue dashboard navigation. */
 static unsigned int maizoUsbArmed;
+static unsigned int maizoUsbNotified, maizoBtNotified;
 static u8 maizoUsbCenters[4] = {127, 127, 127, 127};
 static unsigned int maizoBtArmed;
 static int maizoPhysicalRescueMode;
@@ -267,13 +270,18 @@ static int readPad(struct pad_data_t *pad)
     // The pad may transit from any state to disconnected. So check only for the disconnected state.
     else if ((oldState != PAD_STATE_DISCONN) && (pad->state == PAD_STATE_DISCONN)) {
         LOG("PAD pad %d,%d disconnected\n", pad->port, pad->slot);
+        pad->notified = 0;
     }
 
     if ((pad->state == PAD_STATE_STABLE) || (pad->state == PAD_STATE_FINDCTP1)) {
         // pad is connected. Read pad button information.
         ret = padRead(pad->port, pad->slot, &pad->buttons); // port, slot, buttons
 
-        if (ret != 0) {
+        if (ret != 0 && pad->buttons.btns != 0) {
+            if (!pad->notified) {
+                guiNotifyController("Controle PS2", pad->port + 1);
+                pad->notified = 1;
+            }
             newpdata = 0xffff ^ pad->buttons.btns;
             padsRead++;
         }
@@ -333,6 +341,18 @@ static int maizoReadRemotePads(void)
             u32 remote;
             unsigned int neutral = maizoMenuPadNeutralMask(snapshot);
             unsigned int fresh;
+            maizoUsbNotified &= valid;
+            for (unsigned int slot = 0; slot < MAIZO_MENU_SLOTS; slot++) {
+                unsigned int bit = 1u << slot;
+                if ((valid & bit) && !(maizoUsbNotified & bit)) {
+                    static const char *const names[] = {
+                        "USB", "DualShock 3 USB", "DualShock 4 USB",
+                        "Guitarra USB", "Guitarra USB", "USB HID",
+                        "Twin USB", "Xbox 360 USB"};
+                    guiNotifyController(names[maizoMenuPadType(snapshot, slot)], slot + 1);
+                    maizoUsbNotified |= bit;
+                }
+            }
             maizoUsbArmed &= valid;
             fresh = neutral & ~maizoUsbArmed;
             for (int slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
@@ -350,6 +370,7 @@ static int maizoReadRemotePads(void)
                 rslt = 1;
         } else {
             maizoUsbArmed = 0;
+            maizoUsbNotified = 0;
         }
     }
 
@@ -359,6 +380,16 @@ static int maizoReadRemotePads(void)
         unsigned int bit = 1u << i;
         if (ds34bt_get_status(i) & DS34BT_STATE_RUNNING) {
             u8 report[18];
+            if (!(maizoBtNotified & bit)) {
+                int type = ds34bt_get_pad_type(i);
+                const char *name = "Bluetooth";
+                if (type == 1)
+                    name = "DualShock 3 Bluetooth";
+                else if (type == 2)
+                    name = "DualShock 4 Bluetooth";
+                guiNotifyController(name, i + 1);
+                maizoBtNotified |= bit;
+            }
             if (ds34bt_get_data(i, report)) {
                 u16 buttons = report[0] | ((u16)report[1] << 8);
                 if (buttons == 0)
@@ -376,6 +407,7 @@ static int maizoReadRemotePads(void)
             }
         } else {
             maizoBtArmed &= ~bit;
+            maizoBtNotified &= ~bit;
         }
     }
     return rslt;
@@ -564,6 +596,8 @@ int startPads()
 #ifdef PADEMU
     maizoUsbArmed = 0;
     maizoBtArmed = 0;
+    maizoUsbNotified = 0;
+    maizoBtNotified = 0;
 #endif
 
     int maxports = padGetPortMax();
@@ -574,13 +608,14 @@ int startPads()
     for (port = 0; port < maxports; ++port) {
         int maxslots = padGetSlotMax(port);
 
-        for (slot = 0; slot < maxslots; ++slot) {
+        for (slot = 0; slot < maxslots && pad_count < MAX_PADS; ++slot) {
 
             struct pad_data_t *cpad = &pad_data[pad_count];
 
             cpad->port = port;
             cpad->slot = slot;
             cpad->state = PAD_STATE_DISCONN;
+            cpad->notified = 0;
 
             if (startPad(cpad))
                 ++pad_count;

@@ -3,13 +3,19 @@
 
 /* Explicit, versioned RPC snapshot. IOP USB driver only supports two
  * physical pad slots: 0-3 = P1, 4-7 = P2, [8,9] = magic,
- * [10] = version, [11] = connected/valid bitmask, [12-15] reserved.
+ * [10] = version, [11] = valid bitmask, [12-14] diagnostic,
+ * [15] = two 3-bit controller type codes (0 absent, type+1 otherwise).
  * A missing/incompatible response must NEVER become a pressed key. */
 #define MAIZO_MENU_SLOTS         2
 #define MAIZO_MENU_SNAPSHOT_SIZE 16
 #define MAIZO_MENU_MAGIC0        0x4d
 #define MAIZO_MENU_MAGIC1        0x5a
 #define MAIZO_MENU_VERSION       1
+
+static inline unsigned int maizoMenuPadType(const unsigned char snapshot[16], unsigned int slot)
+{
+    return slot < MAIZO_MENU_SLOTS ? (snapshot[15] >> (slot * 3)) & 7u : 0;
+}
 
 static unsigned int maizoMenuPadValidMask(const unsigned char snapshot[16])
 {

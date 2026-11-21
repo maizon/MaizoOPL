@@ -19,6 +19,7 @@
 #define DS34BT_SCAN_CONNECT 13
 
 #define DS34BT_PAIR_GET    14
+#define DS34BT_PAD_TYPE    15
 #define DS34BT_BIND_RPC_ID 0x18E3878F
 
 static SifRpcClientData_t ds34bt;
@@ -76,6 +77,16 @@ int ds34bt_get_status(int port)
     if (SifCallRpc(&ds34bt, DS34BT_GET_STATUS, 0, rpcbuf, 1, rpcbuf, 1, NULL, NULL) == 0)
         return rpcbuf[0];
 
+    return 0;
+}
+
+int ds34bt_get_pad_type(int port)
+{
+    if (!ds34bt_inited)
+        return 0;
+    rpcbuf[0] = port;
+    if (SifCallRpc(&ds34bt, DS34BT_PAD_TYPE, 0, rpcbuf, 1, rpcbuf, 1, NULL, NULL) == 0)
+        return rpcbuf[0];
     return 0;
 }
 
