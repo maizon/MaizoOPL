@@ -248,67 +248,97 @@ static void hookSio2man51_2(sio2_transfer_data_t *sd)
     pademu_hookSio2man(sd, pSio2man51[1]);
 }
 
+/* Map physical SIO2 port to the corresponding enabled emulated slot.
+ * Multitap slots belong only to the selected physical connector. */
+static int pademu_slot(unsigned int physical)
+{
+    return maizoSio2Slot(physical, pad_enable, mtap_inited, mtap_port, mtap_slot);
+}
+
 void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
 {
-    register u32 ctrl, port1, port2;
-    int second;
+    unsigned int physical, other, firstLen, secondLen = 0;
+    unsigned int firstIn, firstOut, secondIn, secondOut, emulated;
+    int first, second = -1, offset = -1;
+    u8 savedFirst = 0, savedSecond = 0;
 
-    if (!td || !td->in || !td->out || td->in_size < 3 || td->out_size < 3) {
-        sio2proc(td);
+    if (!td || !td->in || !td->out || td->in_size < 3 ||
+        td->out_size < 3)
+        goto native;
+    physical = td->regdata[0] & 3;
+    other = td->regdata[1] & 3;
+    if (physical > 1 || (td->regdata[0] & 0xf0) != 0x40)
+        goto native;
+    if (td->port_ctrl2[physical] == 0x00030064 &&
+        td->in[0] == 0x21 && mtap_enabled && physical == mtap_port) {
+        pademu_mtap(td);
         return;
     }
-    ctrl = td->regdata[0];
-    port1 = td->regdata[0] & 0x03;
-    port2 = td->regdata[1] & 0x03;
+    if (td->in[0] != 1)
+        goto native;
 
-    if ((ctrl & 0xF0) == 0x40) {
-        if (td->port_ctrl2[port1] == 0x00030064 && td->in[0] == 0x21 && mtap_enabled) {
-            sio2proc = pademu_mtap;
-        } else if (td->in[0] == 0x01) {
-            if (port2 == 1) { // 2 sio cmds
-                second = maizoSio2SecondCommand(td->in, td->in_size,
-                                                td->out_size);
-                if (second < 0) {
-                    /* An uncommon/short SIO2 packet is left to the original
-                     * handler. Never return silently with no pad response. */
-                    sio2proc(td);
-                    return;
-                }
-                if (mtap_inited) {
-                    if (pad[0].enabled) {
-                        td->in[0] = 0x00;
-                        sio2proc(td);
-                        sio2proc = pademu;
-                    }
-                } else {
-                    if (pad[0].enabled && pad[1].enabled) { // emulating 2 pads
-                        sio2proc = pademu;
-                    } else if (pad[0].enabled || pad[1].enabled) { // only one
-                        if (pad[0].enabled) {
-                            ctrl = 0;
-                        } else if (pad[1].enabled) {
-                            ctrl = second;
-                        }
-                        td->in[ctrl] = 0x00;
-                        sio2proc(td);
-                        td->in[ctrl] = 0x01;
-                        sio2proc = pademu;
-                    }
-                }
-            } else {
-                if (mtap_inited) {
-                    if (mtap_port == port1) {
-                        sio2proc = pademu;
-                    }
-                } else {
-                    if (pad[port1].enabled) { // emulating this port
-                        sio2proc = pademu;
-                    }
-                }
-            }
+    firstIn = td->in_size;
+    firstOut = td->out_size;
+    if (other <= 1 && other != physical &&
+        (td->regdata[1] & 0xf0) == 0x40) {
+        if (maizoSio2PacketLengths(td->regdata[0], td->regdata[1],
+                                   td->in_size, td->out_size, &firstIn, &firstOut)) {
+            offset = firstIn;
+            if (td->in[offset] != 1 || (td->in[offset + 1] & 0xf0) != 0x40)
+                goto native;
+        } else {
+            offset = maizoSio2SecondCommand(td->in, td->in_size, td->out_size);
+            if (offset < 0)
+                goto native;
+            firstIn = firstOut = offset;
         }
+        secondIn = td->in_size - firstIn;
+        secondOut = td->out_size - firstOut;
+        secondLen = secondIn < secondOut ? secondIn : secondOut;
+        second = pademu_slot(other);
     }
+    firstLen = firstIn < firstOut ? firstIn : firstOut;
+    first = pademu_slot(physical);
+    if ((first < 0 && second < 0) || firstLen > 255 ||
+        secondLen > 255)
+        goto native;
 
+    if (!pad_inited)
+        pad_inited = PAD_INIT(pad_enable, pad_options);
+    if (!pad_inited)
+        goto native;
+
+    /* Keep the original SIO2 response for non-emulated physical ports.
+     * Only mask and overwrite the emulated command's own byte range. */
+    if (first < 0 || (offset >= 0 && second < 0)) {
+        if (first >= 0) {
+            savedFirst = td->in[0];
+            td->in[0] = 0;
+        }
+        if (second >= 0) {
+            savedSecond = td->in[offset];
+            td->in[offset] = 0;
+        }
+        sio2proc(td);
+        if (first >= 0)
+            td->in[0] = savedFirst;
+        if (second >= 0)
+            td->in[offset] = savedSecond;
+        /* A virtual device deliberately masked on the bus is no longer
+         * a missing physical controller from PADMAN's point of view. */
+        emulated = (first >= 0 ? 1u : 0u) | (second >= 0 ? 2u : 0u);
+        td->stat6c = maizoSio2MixedStatus(td->stat6c, emulated);
+    } else {
+        td->stat6c = 0x1100;
+        td->stat70 = 0x0f;
+    }
+    if (first >= 0)
+        pademu_cmd(first, td->in, td->out, firstLen);
+    if (second >= 0)
+        pademu_cmd(second, td->in + firstIn, td->out + firstOut, secondLen);
+    return;
+
+native:
     sio2proc(td);
 }
 
@@ -420,7 +450,12 @@ void pademu_cmd(int port, u8 *in, u8 *out, u8 out_size)
 {
     u8 i;
 
-    if (port < 0 || port >= MAX_PORTS || !in || !out || out_size < 3)
+    if (port < 0 || port >= MAX_PORTS || !pad[port].enabled ||
+        !in || !out || out_size < 3)
+        return;
+    /* Configuration commands reference bytes 3..8. Reject short packets
+     * instead of writing into the adjacent physical player's response. */
+    if (out_size < maizoSio2MinCommand(in[1]))
         return;
     mips_memset(out, 0x00, out_size);
 
@@ -459,12 +494,13 @@ void pademu_cmd(int port, u8 *in, u8 *out, u8 out_size)
             pad[port].mode_cfg = in[3];
         case 0x42: // read data
             if (in[1] == 0x42) {
-                if (pad[port].vibration) { // disable/enable vibration
+                if (pad[port].vibration && pad[port].lrum < out_size &&
+                    pad[port].rrum < out_size) { // disable/enable vibration
                     PAD_SET_RUMBLE(in[pad[port].lrum], in[pad[port].rrum], port);
                 }
             }
 
-            i = PAD_GET_DATA(&out[3], out_size - 3, port);
+            i = PAD_GET_DATA(&out[3], out_size > 21 ? 18 : out_size - 3, port);
 
             if (pad[port].mode_lock == 0) { // mode unlocked
                 if (pad[port].mode != i) {

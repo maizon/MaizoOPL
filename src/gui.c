@@ -54,6 +54,49 @@ static int showLngPopup;
 
 static clock_t popupTimer;
 
+/* Bounded FIFO, so connecting two controllers in one frame does not
+ * overwrite the first notification. No heap allocation or modal dialog. */
+#define MAIZO_PAD_TOASTS 8
+static char padToasts[MAIZO_PAD_TOASTS][80];
+static unsigned int padToastHead, padToastCount;
+static clock_t padToastEnd;
+
+void guiNotifyController(const char *name, int slot)
+{
+    unsigned int index;
+    if (padToastCount >= MAIZO_PAD_TOASTS)
+        return;
+    index = (padToastHead + padToastCount) % MAIZO_PAD_TOASTS;
+    snprintf(padToasts[index], sizeof(padToasts[index]),
+             "Controle conectado - %s (P%d)", name, slot);
+    padToastCount++;
+}
+
+void guiDrawControllerNotification(void)
+{
+    int x, y, width;
+    if (!padToastCount || !gTheme || screenWidth < 100)
+        return;
+    if (!padToastEnd)
+        padToastEnd = clock() + 3 * CLOCKS_PER_SEC;
+    if (clock() >= padToastEnd) {
+        padToastHead = (padToastHead + 1) % MAIZO_PAD_TOASTS;
+        padToastCount--;
+        padToastEnd = 0;
+        return;
+    }
+    width = screenWidth - 48;
+    if (width > 488)
+        width = 488;
+    x = screenWidth - width - 24;
+    y = 72;
+    maizoDrawPanel(x, y, width, 42, 0);
+    rmDrawRect(x, y, 3, 42, MAIZO_ACCENT);
+    maizoDrawIcon(MAIZO_ICON_PAD, x + 10, y + 10, 22, MAIZO_ACCENT);
+    fntRenderString(gTheme->fonts[0], x + 40, y + 11, ALIGN_NONE,
+                    width - 52, 26, padToasts[padToastHead], MAIZO_TEXT);
+}
+
 // forward decl.
 static void guiShow();
 
@@ -193,6 +236,7 @@ void guiStartFrame(void)
 
 void guiEndFrame(void)
 {
+    guiDrawControllerNotification();
     rmEndFrame();
 #ifdef __DEBUG
     // Measure time directly after vsync

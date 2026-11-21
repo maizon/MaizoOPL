@@ -88,7 +88,7 @@ static int twin_slots[2] = {-1, -1};
  * An IOP worker keeps one URB in flight per connected HID receiver and
  * publishes the latest completed snapshot; DS3/DS4 keep their established
  * synchronous path for compatibility. */
-#define HID_STREAM_POLL_US 2000
+#define HID_STREAM_POLL_US 1000
 static volatile u8 hid_stream_state[MAX_PADS]; /* 0=idle, 1=inflight, 2=complete */
 static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
 static volatile unsigned int hid_stream_generation[MAX_PADS];
@@ -303,11 +303,9 @@ static void usb_release(int pad)
     hid_stream_generation[pad]++;
     hid_stream_state[pad] = 0;
     hid_pending[pad] = 0;
-    if (ds34pad[pad].type == MAIZOX360) {
-        ds34pad[pad].ds2.nButtonState = 0xffff;
-        mips_memset(&ds34pad[pad].data[2], 0x7f, 4);
-        mips_memset(&ds34pad[pad].data[6], 0, 12);
-    }
+    ds34pad[pad].ds2.nButtonState = 0xffff;
+    mips_memset(&ds34pad[pad].data[2], 0x7f, 4);
+    mips_memset(&ds34pad[pad].data[6], 0, 12);
     CpuResumeIntr(oldstate);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
@@ -722,6 +720,10 @@ static void TransferWait(int sema)
 
 void ds34usb_set_rumble(u8 lrum, u8 rrum, int port)
 {
+    if (port < 0 || port >= MAX_PADS ||
+        ds34pad[port].type == MAIZOHID || ds34pad[port].type == TWINHID ||
+        ds34pad[port].type == MAIZOX360)
+        return; /* These receivers have no verified output protocol. */
     WaitSema(ds34pad[port].sema);
 
     ds34pad[port].update_rum = 1;
@@ -842,6 +844,11 @@ void ds34usb_reset()
 int ds34usb_get_status(int port)
 {
     int ret;
+    if (port < 0 || port >= MAX_PADS || !ds34pad[port].enabled)
+        return 0;
+    if (ds34pad[port].type == MAIZOHID || ds34pad[port].type == TWINHID ||
+        ds34pad[port].type == MAIZOX360)
+        return ds34pad[port].status; /* Cached, no USB wait in SIO2. */
 
     WaitSema(ds34pad[port].sema);
     ret = ds34pad[port].status;

@@ -744,6 +744,7 @@ static char *ver_to_str(char *str, u8 ma, u16 mi)
 
 static int guiGamePadEmuUpdater(int modified)
 {
+    (void)modified;
     int PadEmuMode, PadPort, PadEmuVib, PadEmuPort, PadEmuMtap, PadEmuMtapPort, PadEmuWorkaround;
     int previousSource = gPadEmuSource;
 
@@ -755,6 +756,7 @@ static int guiGamePadEmuUpdater(int modified)
         config_set_t *configSet = gameMenuLoadConfig(diaPadEmuConfig);
         configRemoveKey(configSet, CONFIG_ITEM_PADEMUSOURCE);
         guiGameLoadPadEmuConfig(configSet, configGetByType(CONFIG_GAME));
+        maizoPadEmuEditPort = 0;
     } else if (!forceGlobalPadEmu && previousSource != gPadEmuSource &&
                gPadEmuSource == SETTINGS_PERGAME) {
         config_set_t *configSet = gameMenuLoadConfig(diaPadEmuConfig);
@@ -805,14 +807,13 @@ static int guiGamePadEmuUpdater(int modified)
         diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, 0);
     }
 
-    if (modified) {
+    {
         diaSetEnum(diaPadEmuConfig, PADCFG_PADPORT,
                    PadEmuPorts_enums[PadEmuMtap ? PadEmuMtapPort : 0]);
         diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_PORT, EnablePadEmu);
         if (PadPort != maizoPadEmuEditPort) {
-            PadEmuSettings = (int)maizoPademuSetSlot(
-                (unsigned int)PadEmuSettings, maizoPadEmuEditPort,
-                PadEmuPort, PadEmuVib);
+            /* Changing the selector is not an edit of the old checkbox.
+             * The previous frame already stored that slot's value. */
             maizoPadEmuEditPort = PadPort;
             PadEmuPort = ((unsigned int)PadEmuSettings >> (8 + PadPort)) & 1;
             PadEmuVib = ((unsigned int)PadEmuSettings >> (16 + PadPort)) & 1;
@@ -933,6 +934,12 @@ void guiGameShowPadEmuConfig(int forceGlobal)
 
     if (forceGlobalPadEmu)
         guiGameLoadPadEmuConfig(NULL, configGetByType(CONFIG_GAME));
+
+    /* Re-entering the dialog must match the selected slot and checkbox.
+     * The previous selected port could survive while editPort reset to P1. */
+    diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, 0);
+    diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, (PadEmuSettings >> 8) & 1);
+    diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, (PadEmuSettings >> 16) & 1);
 
     diaSetEnum(diaPadEmuConfig, PADCFG_PADEMU_SOURCE, settingsSource);
     diaSetEnum(diaPadEmuConfig, PADCFG_PADEMU_MODE, PadEmuModes);

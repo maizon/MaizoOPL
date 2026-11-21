@@ -199,6 +199,7 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
         } else
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
 
+        guiDrawControllerNotification();
         rmEndFrame();
 
         if (getKey(KEY_LEFT)) {
@@ -412,6 +413,7 @@ static int diaShowColSel(unsigned char *r, unsigned char *g, unsigned char *b)
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
         }
 
+        guiDrawControllerNotification();
         rmEndFrame();
 
         if (getKey(KEY_LEFT)) {
@@ -1228,6 +1230,7 @@ int diaExecuteDialog(struct UIItem *ui, int uiId, short inMenu, int (*updater)(i
     while (1) {
         rmStartFrame();
         diaRenderUI(ui, inMenu, cur, haveFocus);
+        guiDrawControllerNotification();
         rmEndFrame();
 
         readPads();

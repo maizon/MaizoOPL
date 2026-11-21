@@ -1854,6 +1854,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34BT_SCAN_CONNECT 13
 
 #define DS34BT_PAIR_GET    14
+#define DS34BT_PAD_TYPE    15
 #define DS34BT_BIND_RPC_ID 0x18E3878F
 
 void rpc_thread(void *data)
@@ -1876,6 +1877,13 @@ void *rpc_sf(int cmd, void *data, int size)
         case DS34BT_GET_STATUS:
             *(u8 *)data = ds34bt_get_status(*(u8 *)data);
             break;
+        case DS34BT_PAD_TYPE: {
+            u8 port = *(u8 *)data;
+            *(u8 *)data = 0;
+            if (port < MAX_PADS && (ds34bt_get_status(port) & DS34BT_STATE_RUNNING))
+                *(u8 *)data = ds34pad[port].type + 1;
+            break;
+        }
         case DS34BT_GET_BDADDR:
             *((u8 *)data + 6) = ds34bt_get_bdaddr((u8 *)data);
             break;

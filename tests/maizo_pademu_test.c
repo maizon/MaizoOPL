@@ -67,6 +67,34 @@ int main(void)
         maizohid_apply_press(&report, edges);
         assert(report.nButtonState == 0xFFFF);
     }
+    /* P2-only and P1-only must not shift a player's physical connector.
+     * Preserve the native response on the disabled connector. */
+    assert(maizoSio2Slot(0, 2, 0, 0, 0) == -1);
+    assert(maizoSio2Slot(1, 2, 0, 0, 0) == 1);
+    assert(maizoSio2Slot(0, 1, 0, 0, 0) == 0);
+    assert(maizoSio2Slot(1, 1, 0, 0, 0) == -1);
+    assert(maizoSio2Slot(0, 3, 0, 0, 0) == 0);
+    assert(maizoSio2Slot(1, 3, 0, 0, 0) == 1);
+    assert(maizoSio2Slot(0, 15, 1, 1, 3) == -1);
+    assert(maizoSio2Slot(1, 15, 1, 1, 3) == 3);
+    assert(maizoSio2Slot(1, 2, 1, 1, 0) == -1);
+    assert(maizoSio2Slot(1, 2, 1, 1, 1) == 1);
+    assert(maizoSio2MinCommand(0x43) <= 5);
+    assert(maizoSio2MinCommand(0x4d) == 9);
+    {
+        unsigned int tx, rx;
+        unsigned int p1 = (5u << 8) | (9u << 18) | 0x40;
+        unsigned int p2 = (21u << 8) | (21u << 18) | 0x41;
+        assert(maizoSio2PacketLengths(p1, p2, 26, 30, &tx, &rx));
+        assert(tx == 5 && rx == 9);
+        assert(!maizoSio2PacketLengths(p1, p2, 25, 30, &tx, &rx));
+        /* Both native transfers failed: the virtual P2 must still work. */
+        assert(maizoSio2MixedStatus(0x32000, 2) == 0x10000);
+        /* Native P1 success, virtual P2 masked on hardware. */
+        assert(maizoSio2MixedStatus(0x21100, 2) == 0x1100);
+        assert(maizoSio2MixedStatus(0x11100, 1) == 0x1100);
+    }
+
     puts("MAIZO: PadEmu P2, multitap, SIO2 and short USB press tests passed");
     return 0;
 }
