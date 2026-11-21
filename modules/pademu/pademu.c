@@ -258,6 +258,7 @@ static int pademu_slot(unsigned int physical)
 void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
 {
     unsigned int physical, other, firstLen, secondLen = 0;
+    unsigned int firstIn, firstOut, secondIn, secondOut, emulated;
     int first, second = -1, offset = -1;
     u8 savedFirst = 0, savedSecond = 0;
 
@@ -276,16 +277,27 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
     if (td->in[0] != 1)
         goto native;
 
-    firstLen = td->in_size < td->out_size ? td->in_size : td->out_size;
+    firstIn = td->in_size;
+    firstOut = td->out_size;
     if (other <= 1 && other != physical &&
         (td->regdata[1] & 0xf0) == 0x40) {
-        offset = maizoSio2SecondCommand(td->in, td->in_size, td->out_size);
-        if (offset < 0)
-            goto native;
-        secondLen = firstLen - offset;
-        firstLen = offset;
+        if (maizoSio2PacketLengths(td->regdata[0], td->regdata[1],
+                                  td->in_size, td->out_size, &firstIn, &firstOut)) {
+            offset = firstIn;
+            if (td->in[offset] != 1 || (td->in[offset + 1] & 0xf0) != 0x40)
+                goto native;
+        } else {
+            offset = maizoSio2SecondCommand(td->in, td->in_size, td->out_size);
+            if (offset < 0)
+                goto native;
+            firstIn = firstOut = offset;
+        }
+        secondIn = td->in_size - firstIn;
+        secondOut = td->out_size - firstOut;
+        secondLen = secondIn < secondOut ? secondIn : secondOut;
         second = pademu_slot(other);
     }
+    firstLen = firstIn < firstOut ? firstIn : firstOut;
     first = pademu_slot(physical);
     if ((first < 0 && second < 0) || firstLen > 255 ||
         secondLen > 255)
@@ -312,6 +324,10 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
             td->in[0] = savedFirst;
         if (second >= 0)
             td->in[offset] = savedSecond;
+        /* A virtual device deliberately masked on the bus is no longer
+         * a missing physical controller from PADMAN's point of view. */
+        emulated = (first >= 0 ? 1u : 0u) | (second >= 0 ? 2u : 0u);
+        td->stat6c = maizoSio2MixedStatus(td->stat6c, emulated);
     } else {
         td->stat6c = 0x1100;
         td->stat70 = 0x0f;
@@ -319,7 +335,7 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
     if (first >= 0)
         pademu_cmd(first, td->in, td->out, firstLen);
     if (second >= 0)
-        pademu_cmd(second, td->in + offset, td->out + offset, secondLen);
+        pademu_cmd(second, td->in + firstIn, td->out + firstOut, secondLen);
     return;
 
 native:

@@ -24,6 +24,38 @@ static int maizoSio2SecondCommand(const unsigned char *input,
     return -1;
 }
 
+/* PADMAN SIO2 register fields carry 9-bit TX and RX lengths. Use them
+ * instead of guessing a second command from arbitrary button payload.
+ * A legacy zero-length register can fall back to the known boundaries. */
+static inline int maizoSio2PacketLengths(unsigned int reg0, unsigned int reg1,
+                                         unsigned int inTotal, unsigned int outTotal,
+                                         unsigned int *firstIn, unsigned int *firstOut)
+{
+    unsigned int tx = (reg0 >> 8) & 0x1ff;
+    unsigned int rx = (reg0 >> 18) & 0x1ff;
+    unsigned int tx2 = (reg1 >> 8) & 0x1ff;
+    unsigned int rx2 = (reg1 >> 18) & 0x1ff;
+    if (tx < 3 || rx < 3 || tx2 < 3 || rx2 < 3 ||
+        tx + tx2 != inTotal || rx + rx2 != outTotal)
+        return 0;
+    *firstIn = tx;
+    *firstOut = rx;
+    return 1;
+}
+
+/* A masked virtual command may fail on the actual SIO2 bus. Keep the
+ * genuine port's status while clearing only the virtual command's error.
+ * PADMAN treats bit 13 as a global failure, and bits 16+n per command. */
+static inline unsigned int maizoSio2MixedStatus(unsigned int status, unsigned int emulated)
+{
+    unsigned int virtualErrors = ((emulated & 3u) << 16);
+    if (status & 0x2000u) {
+        status |= ((~emulated & 3u) << 16);
+        status &= ~0x2000u;
+    }
+    return status & ~virtualErrors;
+}
+
 /* Map the real connector, not the ordinal position of the enabled port.
  * With a multitap, only the chosen physical connector is emulated. */
 static inline int maizoSio2Slot(unsigned int physical, unsigned int enabled,
