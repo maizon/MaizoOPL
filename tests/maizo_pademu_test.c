@@ -67,6 +67,21 @@ int main(void)
         maizohid_apply_press(&report, edges);
         assert(report.nButtonState == 0xFFFF);
     }
+    /* P2-only and P1-only must not shift a player's physical connector.
+     * Preserve the native response on the disabled connector. */
+    assert(maizoSio2Slot(0, 2, 0, 0, 0) == -1);
+    assert(maizoSio2Slot(1, 2, 0, 0, 0) == 1);
+    assert(maizoSio2Slot(0, 1, 0, 0, 0) == 0);
+    assert(maizoSio2Slot(1, 1, 0, 0, 0) == -1);
+    assert(maizoSio2Slot(0, 3, 0, 0, 0) == 0);
+    assert(maizoSio2Slot(1, 3, 0, 0, 0) == 1);
+    assert(maizoSio2Slot(0, 15, 1, 1, 3) == -1);
+    assert(maizoSio2Slot(1, 15, 1, 1, 3) == 3);
+    assert(maizoSio2Slot(1, 2, 1, 1, 0) == -1);
+    assert(maizoSio2Slot(1, 2, 1, 1, 1) == 1);
+    assert(maizoSio2MinCommand(0x43) <= 5);
+    assert(maizoSio2MinCommand(0x4d) == 9);
+
     puts("MAIZO: PadEmu P2, multitap, SIO2 and short USB press tests passed");
     return 0;
 }

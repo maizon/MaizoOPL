@@ -252,16 +252,7 @@ static void hookSio2man51_2(sio2_transfer_data_t *sd)
  * Multitap slots belong only to the selected physical connector. */
 static int pademu_slot(unsigned int physical)
 {
-    int slot;
-    if (physical > 1)
-        return -1;
-    if (mtap_inited) {
-        if (physical != mtap_port)
-            return -1;
-        slot = mtap_slot;
-    } else
-        slot = physical;
-    return slot < MAX_PORTS && pad[slot].enabled ? slot : -1;
+    return maizoSio2Slot(physical, pad_enable, mtap_inited, mtap_port, mtap_slot);
 }
 
 void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
@@ -296,7 +287,8 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
         second = pademu_slot(other);
     }
     first = pademu_slot(physical);
-    if (first < 0 && second < 0)
+    if ((first < 0 && second < 0) || firstLen > 255 ||
+        secondLen > 255)
         goto native;
 
     if (!pad_inited)
@@ -447,7 +439,7 @@ void pademu_cmd(int port, u8 *in, u8 *out, u8 out_size)
         return;
     /* Configuration commands reference bytes 3..8. Reject short packets
      * instead of writing into the adjacent physical player's response. */
-    if (in[1] != 0x42 && out_size < 9)
+    if (out_size < maizoSio2MinCommand(in[1]))
         return;
     mips_memset(out, 0x00, out_size);
 

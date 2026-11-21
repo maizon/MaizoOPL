@@ -744,6 +744,7 @@ static char *ver_to_str(char *str, u8 ma, u16 mi)
 
 static int guiGamePadEmuUpdater(int modified)
 {
+    (void)modified;
     int PadEmuMode, PadPort, PadEmuVib, PadEmuPort, PadEmuMtap, PadEmuMtapPort, PadEmuWorkaround;
     int previousSource = gPadEmuSource;
 

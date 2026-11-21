@@ -24,4 +24,35 @@ static int maizoSio2SecondCommand(const unsigned char *input,
     return -1;
 }
 
+/* Map the real connector, not the ordinal position of the enabled port.
+ * With a multitap, only the chosen physical connector is emulated. */
+static inline int maizoSio2Slot(unsigned int physical, unsigned int enabled,
+                                int tapActive, unsigned int tapPort, unsigned int tapSlot)
+{
+    unsigned int slot = physical;
+    if (physical > 1)
+        return -1;
+    if (tapActive) {
+        if (physical != tapPort)
+            return -1;
+        slot = tapSlot;
+    }
+    return slot < 4 && (enabled & (1u << slot)) ? (int)slot : -1;
+}
+
+static inline unsigned int maizoSio2MinCommand(unsigned char command)
+{
+    switch (command) {
+        case 0x42:
+            return 3;
+        case 0x43:
+            return 4;
+        case 0x44:
+            return 5;
+        default:
+            /* Other configuration responses read/write bytes through 8. */
+            return 9;
+    }
+}
+
 #endif

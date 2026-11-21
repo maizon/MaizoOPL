@@ -75,7 +75,7 @@ void guiNotifyController(const char *name, int slot)
 void guiDrawControllerNotification(void)
 {
     int x, y, width;
-    if (!padToastCount || !gTheme)
+    if (!padToastCount || !gTheme || screenWidth < 100)
         return;
     if (!padToastEnd)
         padToastEnd = clock() + 3 * CLOCKS_PER_SEC;

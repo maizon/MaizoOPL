@@ -529,6 +529,7 @@ void maizoFileManagerOpen(void)
         rmStartFrame();
         readPads();
         fm_draw();
+        guiDrawControllerNotification();
         rmEndFrame();
 
         back = gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE;
