@@ -25,6 +25,11 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iinclude \
             tests/maizo_menu_input_test.c -o /tmp/maizo_menu_input_test
           /tmp/maizo_menu_input_test
+      - name: Test captured Xbox 360 045e:028e packets
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iinclude -Imodules/pademu \
+            tests/maizox360_test.c -o /tmp/maizox360_test
+          /tmp/maizox360_test
       - name: Test dual-player 0810:0001 receiver packets
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iinclude -Imodules/pademu \
