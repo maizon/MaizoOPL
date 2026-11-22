@@ -65,7 +65,7 @@ static int maizoRescueHeld;
 static u32 maizoRescueStart;
 static u32 maizoUsbLastRetry;
 static int maizoUsbRetried;
-static unsigned int maizoUsbFallbackSlots;
+static u8 maizoUsbDeviceTypes[MAIZO_MENU_SLOTS];
 static u32 maizoUsbLastProbe;
 #endif
 static struct pad_data_t pad_data[MAX_PADS];
@@ -336,62 +336,73 @@ static int getKeyDelay(int id, int repeat)
 }
 
 #ifdef PADEMU
-/* The compact snapshot is preferred, but the original per-port RPC is a
- * separate recovery route when the snapshot transport is unavailable. */
-static int maizoReadUsbSnapshot(u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE], unsigned int *known)
+/* Restore the original working OPL path: GET_STATUS + GET_DATA (18
+ * DS2 bytes) for each USB port, independent of native libpad handles.
+ * The compact protocol is metadata/diagnostics, never a prerequisite. */
+static int maizoReadUsbSnapshot(u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE],
+                                unsigned int *known, unsigned int *connected)
 {
-    unsigned int probe;
-    int compact;
-    *known = 0;
+    int refresh = 0;
+    *known = *connected = 0;
     memset(snapshot, 0, MAIZO_MENU_SNAPSHOT_SIZE);
-    compact = ds34usb_get_menu_state(snapshot) && maizoMenuSnapshotOK(snapshot);
-    probe = maizoMenuFallbackMask(snapshot);
-    if (!compact) {
-        memset(snapshot, 0, MAIZO_MENU_SNAPSHOT_SIZE);
-        snapshot[8] = MAIZO_MENU_MAGIC0;
-        snapshot[9] = MAIZO_MENU_MAGIC1;
-        snapshot[10] = MAIZO_MENU_VERSION;
-        probe = (1u << MAIZO_MENU_SLOTS) - 1;
-        if (!maizoUsbRetried || curtime - maizoUsbLastRetry >= 1000) {
-            maizoUsbRetried = 1;
-            maizoUsbLastRetry = curtime;
-            if (sysMenuUsbRecover()) {
-                unsigned char profiles[MAIZO_PROFILE_SIZE];
-                maizoLoadInputProfiles(profiles);
-                ds34usb_set_profiles(profiles);
-            }
-        }
-    } else {
-        *known = (1u << MAIZO_MENU_SLOTS) - 1;
-        maizoUsbFallbackSlots &= ~maizoMenuPadValidMask(snapshot);
-        probe |= maizoUsbFallbackSlots;
-        /* A plausible yet empty compact reply must not hide real devices.
-         * Check absent slots periodically even when there is no type nibble. */
-        if (curtime - maizoUsbLastProbe >= 250) {
-            maizoUsbLastProbe = curtime;
-            probe |= ((1u << MAIZO_MENU_SLOTS) - 1) &
-                     ~maizoMenuPadValidMask(snapshot);
-        }
-    }
-    /* Do not overwrite a good slot or consume its short-press queue twice. */
+    snapshot[8] = MAIZO_MENU_MAGIC0;
+    snapshot[9] = MAIZO_MENU_MAGIC1;
+    snapshot[10] = MAIZO_MENU_VERSION;
     for (int port = 0; port < MAIZO_MENU_SLOTS; port++) {
         unsigned int bit = 1u << port;
-        u8 reply[MAIZO_MENU_PORT_SIZE] = {0};
-        if (!(probe & bit))
+        u8 status = 0, report[18] = {0};
+        if (!ds34usb_get_status_checked(port, &status))
             continue;
-        if (!ds34usb_get_menu_port(port, reply) ||
-            !maizoMenuMergePort(snapshot, port, reply)) {
-            if (maizoUsbFallbackSlots & bit)
-                *known &= ~bit;
+        *known |= bit;
+        if (!(status & (DS34USB_STATE_CONNECTED | DS34USB_STATE_RUNNING))) {
+            maizoUsbDeviceTypes[port] = 0;
             continue;
         }
-        *known |= bit;
-        if (maizoMenuPadType(snapshot, port))
-            maizoUsbFallbackSlots |= bit;
-        else
-            maizoUsbFallbackSlots &= ~bit;
+        *connected |= bit;
+        if (!(maizoUsbNotified & bit))
+            refresh = 1;
+        if ((status & DS34USB_STATE_RUNNING) && ds34usb_get_data(port, report))
+            maizoMenuMergeFallback(snapshot, port, report);
     }
-    return compact || *known;
+    /* Recover the original RPC binding even if neither port is available. */
+    if (!*known && (!maizoUsbRetried || curtime - maizoUsbLastRetry >= 1000)) {
+        maizoUsbRetried = 1;
+        maizoUsbLastRetry = curtime;
+        if (sysMenuUsbRecover()) {
+            unsigned char profiles[MAIZO_PROFILE_SIZE];
+            maizoLoadInputProfiles(profiles);
+            ds34usb_set_profiles(profiles);
+        }
+    }
+    if (refresh || curtime - maizoUsbLastProbe >= 250) {
+        u8 diag[MAIZO_MENU_SNAPSHOT_SIZE] = {0};
+        maizoUsbLastProbe = curtime;
+        if (ds34usb_get_menu_state(diag) && maizoMenuSnapshotOK(diag)) {
+            for (int port = 0; port < MAIZO_MENU_SLOTS; port++)
+                if (*connected & (1u << port))
+                    maizoUsbDeviceTypes[port] = maizoMenuPadType(diag, port);
+        }
+    }
+    for (int port = 0; port < MAIZO_MENU_SLOTS; port++) {
+        unsigned int bit = 1u << port;
+        snapshot[15] |= maizoUsbDeviceTypes[port] << (port * 4);
+        /* The new typed port command is a secondary route only. It cannot
+         * displace good legacy data or consume the main press latch. */
+        if (!(*known & bit) ||
+            ((*connected & bit) && !(maizoMenuPadValidMask(snapshot) & bit))) {
+            u8 reply[MAIZO_MENU_PORT_SIZE] = {0};
+            if (ds34usb_get_menu_port(port, reply) &&
+                maizoMenuMergePort(snapshot, port, reply)) {
+                *known |= bit;
+                if (maizoMenuPadType(snapshot, port))
+                    *connected |= bit;
+                else
+                    *connected &= ~bit;
+                maizoUsbDeviceTypes[port] = maizoMenuPadType(snapshot, port);
+            }
+        }
+    }
+    return *known != 0;
 }
 
 /* The untrusted USB/BT path never writes over physical libpad state. */
@@ -439,8 +450,8 @@ static int maizoReadRemotePads(void)
      * locked all physical controllers out while scrolling DOWN forever. */
     {
         u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE];
-        unsigned int known;
-        if (maizoReadUsbSnapshot(snapshot, &known)) {
+        unsigned int known, connected;
+        if (maizoReadUsbSnapshot(snapshot, &known, &connected)) {
             unsigned int valid = maizoMenuPadValidMask(snapshot);
             u32 remote;
             unsigned int neutral = maizoMenuPadNeutralMask(snapshot);
@@ -448,7 +459,7 @@ static int maizoReadRemotePads(void)
             for (unsigned int slot = 0; slot < MAIZO_MENU_SLOTS; slot++) {
                 unsigned int type = maizoMenuPadType(snapshot, slot);
                 if (known & (1u << slot))
-                    maizoNoticeSlot(slot, type, type || (valid & (1u << slot)), 0);
+                    maizoNoticeSlot(slot, type, (connected & (1u << slot)) != 0, 0);
             }
             for (int slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
                 if (!(valid & (1u << slot))) {
@@ -723,7 +734,7 @@ int startPads()
     maizoUsbNotified = 0;
     maizoBtNotified = 0;
     maizoUsbRetried = 0;
-    maizoUsbFallbackSlots = 0;
+    memset(maizoUsbDeviceTypes, 0, sizeof(maizoUsbDeviceTypes));
     maizoUsbLastProbe = 0;
     maizoPhysicalRescueMode = maizoRescueHeld = 0;
     memset(maizoUsbType, 0, sizeof(maizoUsbType));

@@ -20,15 +20,11 @@
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 static SifRpcClientData_t ds34usb __attribute__((aligned(64)));
-static SifRpcClientData_t menuusb __attribute__((aligned(64)));
-
-static u8 rpc_request[64] __attribute__((aligned(64)));
-static u8 rpc_reply[64] __attribute__((aligned(64)));
-static u8 menu_request[64] __attribute__((aligned(64)));
-static u8 menu_reply[64] __attribute__((aligned(64)));
+/* Match the original OPL DS34 transport: one client and one aligned,
+ * in-place DMA staging buffer, serialized across menu and diagnostics. */
+static u8 rpcbuf[64] __attribute__((aligned(64)));
 static int rpc_lock = -1;
 static u8 ds34usb_inited;
-static u8 menuusb_inited;
 
 static int bind_client(SifRpcClientData_t *client)
 {
@@ -61,8 +57,6 @@ int ds34usb_init()
         return 0;
     if (!ds34usb_inited)
         ds34usb_inited = bind_client(&ds34usb);
-    if (ds34usb_inited && !menuusb_inited)
-        menuusb_inited = bind_client(&menuusb);
     SignalSema(rpc_lock);
     return ds34usb_inited;
 }
@@ -70,19 +64,17 @@ int ds34usb_init()
 int ds34usb_deinit()
 {
     ds34usb_inited = 0;
-    menuusb_inited = 0;
     return 1;
 }
 
-/* The IOP server has one shared command buffer. Serialize even distinct EE
- * clients and keep the DMA staging buffers private until the reply is copied. */
+/* Use the known OPL in-place RPC contract. The uncached alias observes
+ * the actual completed IOP DMA, not a cached copy of the zeroed buffer. */
 static int rpc_transaction(int cmd, const void *input, int input_size,
                            void *output, int output_size, int menu)
 {
-    SifRpcClientData_t *client;
-    u8 *tx, *rx;
     int ok;
-    if (rpc_lock < 0)
+    if (rpc_lock < 0 || input_size < 0 || input_size > (int)sizeof(rpcbuf) ||
+        output_size < 0 || output_size > (int)sizeof(rpcbuf))
         return 0;
     if ((menu ? PollSema(rpc_lock) : WaitSema(rpc_lock)) < 0)
         return 0;
@@ -90,26 +82,15 @@ static int rpc_transaction(int cmd, const void *input, int input_size,
         SignalSema(rpc_lock);
         return 0;
     }
-    client = menu && menuusb_inited ? &menuusb : &ds34usb;
-    tx = menu ? menu_request : rpc_request;
-    rx = menu ? menu_reply : rpc_reply;
-    memset(tx, 0, 64);
-    memset(rx, 0, 64);
+    memset(rpcbuf, 0, sizeof(rpcbuf));
     if (input_size)
-        memcpy(tx, input, input_size);
-    ok = SifCallRpc(client, cmd, 0, input_size ? tx : NULL, input_size,
-                    output_size ? rx : NULL, output_size, NULL, NULL) == 0;
+        memcpy(rpcbuf, input, input_size);
+    ok = SifCallRpc(&ds34usb, cmd, 0, input_size ? rpcbuf : NULL, input_size,
+                    output_size ? rpcbuf : NULL, output_size, NULL, NULL) == 0;
     if (ok && output_size)
-        memcpy(output, rx, output_size);
-    if (!ok) {
-        /* Rebind on the next recovery tick. Keep the other client if possible. */
-        if (client == &menuusb)
-            menuusb_inited = 0;
-        else {
-            ds34usb_inited = 0;
-            menuusb_inited = 0;
-        }
-    }
+        memcpy(output, UNCACHED_SEG(rpcbuf), output_size);
+    if (!ok)
+        ds34usb_inited = 0;
     SignalSema(rpc_lock);
     return ok;
 }
@@ -155,7 +136,8 @@ int ds34usb_get_menu_port(int port, u8 out[32])
 int ds34usb_get_status_checked(int port, u8 *status)
 {
     u8 input = port;
-    return status && rpc_transaction(DS34USB_GET_STATUS, &input, 1, status, 1, 0);
+    return status && port >= 0 && port < 2 &&
+           rpc_transaction(DS34USB_GET_STATUS, &input, 1, status, 1, 1);
 }
 
 int ds34usb_get_status(int port)
@@ -197,7 +179,8 @@ int ds34usb_set_led(int port, u8 led)
 int ds34usb_get_data(int port, u8 *data)
 {
     u8 input = port;
-    return rpc_transaction(DS34USB_GET_DATA, &input, 1, data, 18, 0);
+    return data && port >= 0 && port < 2 &&
+           rpc_transaction(DS34USB_GET_DATA, &input, 1, data, 18, 1);
 }
 
 int ds34usb_reset()

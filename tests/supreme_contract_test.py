@@ -129,8 +129,16 @@ assert "MaizoInputProfiles" in read("ee_core/src/iopmgr.c")
 assert "maizoRemapHid" in menu_driver
 assert "maizoRemapHid" in read("modules/pademu/ds34usb.c")
 
-# Menu USB has an independent SIF client and an always-available pump.
-assert "menuusb" in read("modules/ds34usb/ee/libds34usb.c")
+# Menu uses the known-working legacy per-port RPC with a single DMA buffer.
+ee_usb = read("modules/ds34usb/ee/libds34usb.c")
+assert "UNCACHED_SEG(rpcbuf)" in ee_usb
+assert "ds34usb_get_status_checked(port, &status)" in pad_input
+assert "ds34usb_get_data(port, report)" in pad_input
+assert "ds34usb_get_data((char *)data, 18, port)" in menu_driver
+assert "hid_stream_pump_port(reader)" in menu_driver
+# Diagnostic reads must not consume the legacy input latch.
+diagnostics = menu_driver.split("case DS34USB_MENU_PORT:", 1)[1].split("case DS34USB_RESET:", 1)[0]
+assert "hid_copy_snapshot" not in diagnostics
 assert "hid_stream_pump();" in menu_driver
 assert "ds34usb_reinit_ports(0x03)" in read("src/system.c")
 startup = read("src/opl.c").split("static void init(void)\n{", 1)[1].split("static void deferredInit", 1)[0]

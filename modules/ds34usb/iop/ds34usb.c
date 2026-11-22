@@ -135,7 +135,7 @@ static unsigned char maizoProfiles[MAIZO_PROFILE_SIZE];
 
 static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
 static int hid_stream_thread_id = -1;
-static int hid_pump_lock = -1;
+static volatile int hid_pump_busy;
 static void hid_stream_thread(void *arg);
 static void hid_stream_callback(int result, int bytes, void *arg);
 static u8 maizo_usb_reports, maizo_usb_error;
@@ -453,21 +453,6 @@ static void usb_release(int pad)
     SignalSema(ds34pad[pad].sema);
 }
 
-static int usb_resulCode;
-static int usb_rx_bytes;
-
-static void usb_data_cb(int resultCode, int bytes, void *arg)
-{
-    int pad = (int)arg;
-
-    // DPRINTF("DS34USB: usb_data_cb: res %d, bytes %d, arg %p \n", resultCode, bytes, arg);
-
-    usb_resulCode = resultCode;
-    usb_rx_bytes = bytes;
-
-    SignalSema(ds34pad[pad].sema);
-}
-
 static void usb_cmd_cb(int resultCode, int bytes, void *arg)
 {
     int pad = (int)arg;
@@ -660,6 +645,7 @@ static void readReport(u8 *data, int bytes, int pad)
     /* Reject truncated Sony reports before interpreting their controls.
      * A newly connected pad must publish a complete report first. */
     if (data[0] && bytes >= 48) {
+        u16 oldButtons = ds34pad[pad].ds2.nButtonState;
         hid_report_ready[pad] = 1;
 
         if (ds34pad[pad].type == DS3) {
@@ -690,7 +676,7 @@ static void readReport(u8 *data, int bytes, int pad)
             ds34pad[pad].data[16] = report->PressureL2; // L2
             ds34pad[pad].data[17] = report->PressureR2; // R2
 
-            if (report->PSButton && report->Power != 0xEE) // display battery level
+            if (report->PSButton && report->Power < sizeof(power_level)) // display battery level
                 ds34pad[pad].oldled[0] = power_level[report->Power];
             else
                 ds34pad[pad].oldled[0] = led_patterns[pad][1];
@@ -797,6 +783,8 @@ static void readReport(u8 *data, int bytes, int pad)
             else
                 ds34pad[pad].oldled[3] = 0;
         }
+        hid_pending[pad] |= maizohid_press_edges(oldButtons, ds34pad[pad].ds2.nButtonState);
+        maizo_usb_reports = maizo_usb_reports == 254 ? 1 : maizo_usb_reports + 1;
     }
 }
 
@@ -874,15 +862,25 @@ static void hid_stream_callback(int result, int bytes, void *arg)
 
 /* Both the worker and the GUI RPC can advance the same nonblocking
  * transfer queue. This also works if worker allocation/scheduling fails. */
-static void hid_stream_pump(void)
+static void hid_stream_pump_port(int requested)
 {
-    int pad;
-    if (hid_pump_lock < 0 || PollSema(hid_pump_lock) < 0)
+    int pad, intr;
+    CpuSuspendIntr(&intr);
+    if (hid_pump_busy) {
+        CpuResumeIntr(intr);
         return;
+    }
+    hid_pump_busy = 1;
+    CpuResumeIntr(intr);
     for (pad = 0; pad < MAX_PADS; pad++) {
         ds34usb_device *device = &ds34pad[pad];
         unsigned int token;
         int ret, oldstate, bytes;
+        /* Restore request-driven Sony input and the early HID worker.
+         * One owner per endpoint; a request can also drive a HID slot. */
+        if (requested >= 0 ? pad != requested :
+                            ((device->type == DS3 || device->type == DS4) && !hid_report_ready[pad]))
+            continue;
         if (!device->enabled || device->devId < 0 ||
             device->interruptEndp < 0 ||
             !(device->status & DS34USB_STATE_RUNNING) ||
@@ -914,7 +912,14 @@ static void hid_stream_pump(void)
         if (ret != USB_RC_OK)
             hid_stream_state[pad] = 0;
     }
-    SignalSema(hid_pump_lock);
+    CpuSuspendIntr(&intr);
+    hid_pump_busy = 0;
+    CpuResumeIntr(intr);
+}
+
+static void hid_stream_pump(void)
+{
+    hid_stream_pump_port(-1);
 }
 
 static void hid_stream_thread(void *arg)
@@ -942,7 +947,7 @@ static void TransferWait(int sema)
 
     if (SetAlarm(&cmd_timeout, timeout, (void *)sema) == 0) {
         WaitSema(sema);
-        CancelAlarm(timeout, NULL);
+        CancelAlarm(timeout, (void *)sema);
     }
 }
 
@@ -1008,56 +1013,18 @@ static void hid_copy_snapshot(void *dst, int size, int port)
 
 void ds34usb_get_data(char *dst, int size, int port)
 {
-    int ret;
-
-    if (port >= MAX_PADS)
+    int intr, reader;
+    if (port < 0 || port >= MAX_PADS || size != 18)
         return;
-
-    int reader = (ds34pad[port].type == TWINHID && twin_root >= 0) ?
-                     twin_root :
-                     port;
-
-    /* A menu frame must never wait for a USB low-speed report. */
-    if (hid_stream_thread_id > 0) {
-        int oldstate;
-        if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
-            return;
-        CpuSuspendIntr(&oldstate);
+    reader = (ds34pad[port].type == TWINHID && twin_root >= 0) ? twin_root : port;
+    /* The legacy per-port command actually advances the endpoint, even
+     * with no streaming thread or successful compact RPC. No USB wait. */
+    hid_stream_pump_port(reader);
+    CpuSuspendIntr(&intr);
+    if (ds34pad[port].devId >= 0 && ds34pad[port].enabled &&
+        (ds34pad[port].status & DS34USB_STATE_RUNNING) && hid_report_ready[port])
         hid_copy_snapshot(dst, size, port);
-        CpuResumeIntr(oldstate);
-        return;
-    }
-
-    if (ds34pad[reader].interruptEndp < 0)
-        return;
-
-    WaitSema(ds34pad[reader].sema);
-
-    PollSema(ds34pad[reader].sema);
-
-    usb_resulCode = 1;
-    usb_rx_bytes = 0;
-    ret = UsbInterruptTransfer(ds34pad[reader].interruptEndp, usb_buf,
-                               (ds34pad[reader].type == MAIZOHID ||
-                                ds34pad[reader].type == TWINHID ||
-                                ds34pad[reader].type == MAIZOX360 || ds34pad[reader].type == MAIZO_KEYBOARD) ?
-                                   ds34pad[reader].hid_packet_size :
-                                   MAX_BUFFER_SIZE,
-                               usb_data_cb, (void *)reader);
-
-    if (ret == USB_RC_OK) {
-        TransferWait(ds34pad[reader].sema);
-        if (!usb_resulCode && usb_rx_bytes > 0)
-            readReport(usb_buf, usb_rx_bytes, reader);
-
-        usb_resulCode = 1;
-    } else {
-        DPRINTF("DS34USB: ds34usb_get_data usb transfer error %d\n", ret);
-    }
-
-    mips_memcpy(dst, ds34pad[port].data, size);
-
-    SignalSema(ds34pad[reader].sema);
+    CpuResumeIntr(intr);
 }
 
 int ds34usb_get_bdaddr(u8 *data, int port)
@@ -1184,11 +1151,13 @@ void ds34usb_init(u8 pads)
 {
     u8 pad;
 
-    for (pad = 0; pad < MAX_PADS; pad++) {
-        WaitSema(ds34pad[pad].sema);
+    int intr;
+    /* This operation is only a slot mask, not USB I/O. Never wait on a
+     * device semaphore from the SIF initialization/recovery handler. */
+    CpuSuspendIntr(&intr);
+    for (pad = 0; pad < MAX_PADS; pad++)
         ds34pad[pad].enabled = (pads >> pad) & 1;
-        SignalSema(ds34pad[pad].sema);
-    }
+    CpuResumeIntr(intr);
 }
 
 static void rpc_thread(void *data);
@@ -1249,15 +1218,9 @@ void *rpc_sf(int cmd, void *data, int size)
             ds34usb_set_led(((u8 *)data + 1), *(u8 *)data);
             break;
         case DS34USB_GET_DATA: {
-            unsigned int port = *(u8 *)data;
-            int oldstate;
-            hid_stream_pump();
+            unsigned int port = size > 0 ? *(u8 *)data : MAX_PADS;
             mips_memset(data, 0, 18);
-            CpuSuspendIntr(&oldstate);
-            if (port < MAX_PADS && ds34pad[port].enabled && ds34pad[port].devId >= 0 &&
-                (ds34pad[port].status & DS34USB_STATE_RUNNING) && hid_report_ready[port])
-                hid_copy_snapshot(data, 18, port);
-            CpuResumeIntr(oldstate);
+            ds34usb_get_data((char *)data, 18, port);
             break;
         }
         case DS34USB_PROFILES: {
@@ -1327,7 +1290,7 @@ void *rpc_sf(int cmd, void *data, int size)
                 if ((ds34pad[port].status & DS34USB_STATE_RUNNING) &&
                     hid_report_ready[port]) {
                     out[5] = 1;
-                    hid_copy_snapshot(out + 8, 18, port);
+                    mips_memcpy(out + 8, ds34pad[port].data, 18);
                 }
             }
             CpuResumeIntr(intr);
@@ -1362,15 +1325,11 @@ void *rpc_sf(int cmd, void *data, int size)
                 snapshot[15] |= ((ds34pad[port].type + 1) & 15) << (port * 4);
                 if (!(ds34pad[port].status & DS34USB_STATE_RUNNING) || !hid_report_ready[port])
                     continue;
-                /* Deliver one observed short USB press once per EE poll. */
-                {
-                    u8 report[18];
-                    hid_copy_snapshot(report, sizeof(report), port);
-                    snapshot[pos] = report[0];
-                    snapshot[pos + 1] = report[1];
-                    snapshot[pos + 2] = report[4];
-                    snapshot[pos + 3] = report[5];
-                }
+                /* Diagnostics must never consume presses from GET_DATA. */
+                snapshot[pos] = ds34pad[port].data[0];
+                snapshot[pos + 1] = ds34pad[port].data[1];
+                snapshot[pos + 2] = ds34pad[port].data[4];
+                snapshot[pos + 3] = ds34pad[port].data[5];
                 snapshot[11] |= 1u << port;
             }
             snapshot[13] = maizo_usb_stage;
@@ -1460,10 +1419,6 @@ int _start(int argc, char *argv[])
         }
     }
 
-    hid_pump_lock = CreateMutex(IOP_MUTEX_UNLOCKED);
-    if (hid_pump_lock < 0)
-        return MODULE_NO_RESIDENT_END;
-
     if (UsbRegisterDriver(&usb_driver) != USB_RC_OK) {
         DPRINTF("DS34USB: Error registering USB devices\n");
         return MODULE_NO_RESIDENT_END;
@@ -1473,7 +1428,7 @@ int _start(int argc, char *argv[])
         iop_thread_t stream_th;
         stream_th.attr = TH_C;
         stream_th.thread = hid_stream_thread;
-        stream_th.priority = 42;
+        stream_th.priority = 39;
         stream_th.stacksize = 0x1000;
         stream_th.option = 0;
         hid_stream_thread_id = CreateThread(&stream_th);
@@ -1495,8 +1450,9 @@ int _start(int argc, char *argv[])
     int thid = CreateThread(&rpc_th);
 
     if (thid > 0) {
-        StartThread(thid, NULL);
-        return MODULE_RESIDENT_END;
+        if (StartThread(thid, NULL) >= 0)
+            return MODULE_RESIDENT_END;
+        DeleteThread(thid);
     }
 
     return MODULE_NO_RESIDENT_END;
