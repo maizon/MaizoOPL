@@ -133,6 +133,9 @@ assert "maizoRemapHid" in read("modules/pademu/ds34usb.c")
 assert "menuusb" in read("modules/ds34usb/ee/libds34usb.c")
 assert "hid_stream_pump();" in menu_driver
 assert "ds34usb_reinit_ports(0x03)" in read("src/system.c")
-assert "while (!padStatus)" not in read("src/opl.c")
+startup = read("src/opl.c").split("static void init(void)\n{", 1)[1].split("static void deferredInit", 1)[0]
+assert "while (!padStatus)" not in startup
+assert "maizoReadUsbSnapshot" in pad_input
+assert "rpc_transaction" in read("modules/ds34usb/ee/libds34usb.c")
 assert '"CREDITOS"' in menu
 assert "Instagram.com/Maicon_Nasciment0" in gui

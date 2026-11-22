@@ -327,6 +327,36 @@ static int getKeyDelay(int id, int repeat)
 }
 
 #ifdef PADEMU
+/* The compact snapshot is preferred, but the original per-port RPC is a
+ * separate recovery route when the snapshot transport is unavailable. */
+static int maizoReadUsbSnapshot(u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE])
+{
+    if (ds34usb_get_menu_state(snapshot) &&
+        snapshot[8] == MAIZO_MENU_MAGIC0 && snapshot[9] == MAIZO_MENU_MAGIC1 &&
+        snapshot[10] == MAIZO_MENU_VERSION)
+        return 1;
+
+    for (int i = 0; i < MAIZO_MENU_SNAPSHOT_SIZE; i++)
+        snapshot[i] = 0;
+    snapshot[8] = MAIZO_MENU_MAGIC0;
+    snapshot[9] = MAIZO_MENU_MAGIC1;
+    snapshot[10] = MAIZO_MENU_VERSION;
+    for (int port = 0; port < MAIZO_MENU_SLOTS; port++) {
+        u8 report[18] = {0};
+        int pos = port * 4;
+        if ((ds34usb_get_status(port) & DS34USB_STATE_RUNNING) &&
+            ds34usb_get_data(port, report) && (report[0] || report[1])) {
+            snapshot[pos] = report[0];
+            snapshot[pos + 1] = report[1];
+            snapshot[pos + 2] = report[4];
+            snapshot[pos + 3] = report[5];
+            snapshot[11] |= 1u << port;
+            snapshot[12] |= 1u << port;
+        }
+    }
+    return snapshot[11] != 0;
+}
+
 /* The untrusted USB/BT path never writes over physical libpad state. */
 static int maizoReadRemotePads(void)
 {
@@ -338,7 +368,7 @@ static int maizoReadRemotePads(void)
      * locked all physical controllers out while scrolling DOWN forever. */
     {
         u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE];
-        if (ds34usb_get_menu_state(snapshot)) {
+        if (maizoReadUsbSnapshot(snapshot)) {
             unsigned int valid = maizoMenuPadValidMask(snapshot);
             u32 remote;
             unsigned int neutral = maizoMenuPadNeutralMask(snapshot);
