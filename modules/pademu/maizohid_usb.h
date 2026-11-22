@@ -36,7 +36,7 @@ static int maizohid_find_interface_kind(int devId, int keyboard,
             candidate = NULL;
             if (length >= sizeof(UsbInterfaceDescriptor)) {
                 iface = (UsbInterfaceDescriptor *)cursor;
-                if (iface->bInterfaceClass == 0x03 &&
+                if (iface->bAlternateSetting == 0 && iface->bInterfaceClass == 0x03 &&
                     (keyboard ? (iface->bInterfaceSubClass == 1 && iface->bInterfaceProtocol == 1) :
                                 !(iface->bInterfaceSubClass == 1 &&
                                   (iface->bInterfaceProtocol == 1 || iface->bInterfaceProtocol == 2))))

@@ -1814,7 +1814,6 @@ static void init(void)
     setDefaults();
 
     padInit(0);
-    int padStatus = 0;
     configInit(NULL);
 
     rmInit();
@@ -1837,8 +1836,7 @@ static void init(void)
 
     gSelectButton = (InitConsoleRegionData() == CONSOLE_REGION_JAPAN) ? KEY_CIRCLE : KEY_CROSS;
 
-    while (!padStatus)
-        padStatus = startPads();
+    /* A USB-only console must not wait for a native DualShock. */
     readPads();
     if (!getKeyPressed(KEY_START)) {
         _loadConfig(); // only try to restore config if emergency key is not being pressed

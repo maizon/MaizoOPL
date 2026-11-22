@@ -121,9 +121,7 @@ int usb_probe(int devId)
         return 0;
     }
 
-    if (device->idVendor == MAIZOX360_VID && device->idProduct == MAIZOX360_PID) {
-        if (!maizox360_find_input(devId, device))
-            return 0;
+    if (maizox360_find_input(devId, device)) {
         return 1;
     }
 
@@ -182,16 +180,21 @@ int usb_connect(int devId)
     }
     interface = (UsbInterfaceDescriptor *)((char *)config + config->bLength);
     generic_hid = maizohid_find_interface(devId, &hid_interface, &hid_endpoint);
-    keyboard = !generic_hid && maizoKeyboardFind(devId, &hid_interface, &hid_endpoint);
-
-    if (device->idVendor == MAIZOX360_VID && device->idProduct == MAIZOX360_PID) {
-        endpoint = maizox360_find_input(devId, device);
-        if (!endpoint) {
-            usb_release(pad);
-            return 1;
+    {
+        UsbInterfaceDescriptor *key_interface = NULL;
+        UsbEndpointDescriptor *key_endpoint = NULL;
+        keyboard = maizoKeyboardFind(devId, &key_interface, &key_endpoint) &&
+                   (!generic_hid || key_interface->bInterfaceNumber < hid_interface->bInterfaceNumber);
+        if (keyboard) {
+            hid_interface = key_interface;
+            hid_endpoint = key_endpoint;
         }
+    }
+
+    endpoint = maizox360_find_input(devId, device);
+    if (endpoint) {
         ds34pad[pad].type = MAIZOX360;
-        ds34pad[pad].hid_packet_size = 32;
+        ds34pad[pad].hid_packet_size = endpoint->wMaxPacketSizeLB;
         hid_endpoint = endpoint;
         epCount = 0;
     } else if (device->idVendor == MAIZOTWIN_VID && device->idProduct == MAIZOTWIN_PID) {

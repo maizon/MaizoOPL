@@ -133,6 +133,7 @@ static unsigned char maizoProfiles[MAIZO_PROFILE_SIZE];
 
 static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
 static int hid_stream_thread_id = -1;
+static int hid_pump_lock = -1;
 static void hid_stream_thread(void *arg);
 static void hid_stream_callback(int result, int bytes, void *arg);
 static u8 maizo_usb_reports, maizo_usb_error;
@@ -156,9 +157,7 @@ int usb_probe(int devId)
         if (ds34pad[i].devId == devId && (ds34pad[i].status & DS34USB_STATE_RUNNING))
             return 1;
 
-    if (device->idVendor == MAIZOX360_VID && device->idProduct == MAIZOX360_PID) {
-        if (!maizox360_find_input(devId, device))
-            return 0;
+    if (maizox360_find_input(devId, device)) {
         maizo_usb_stage = MAIZO_USB_PROBED;
         maizo_usb_vid = device->idVendor;
         maizo_usb_pid = device->idProduct;
@@ -203,6 +202,10 @@ int usb_connect(int devId)
     DPRINTF("DS34USB: connect: devId=%i\n", devId);
 
     for (pad = 0; pad < MAX_PADS; pad++) {
+        if (ds34pad[pad].devId == devId)
+            return 0;
+    }
+    for (pad = 0; pad < MAX_PADS; pad++) {
         if (ds34pad[pad].devId == -1 && ds34pad[pad].enabled)
             break;
     }
@@ -237,7 +240,16 @@ int usb_connect(int devId)
     }
     interface = (UsbInterfaceDescriptor *)((char *)config + config->bLength);
     generic_hid = maizohid_find_interface(devId, &hid_interface, &hid_endpoint);
-    keyboard = !generic_hid && maizoKeyboardFind(devId, &hid_interface, &hid_endpoint);
+    {
+        UsbInterfaceDescriptor *key_interface = NULL;
+        UsbEndpointDescriptor *key_endpoint = NULL;
+        keyboard = maizoKeyboardFind(devId, &key_interface, &key_endpoint) &&
+                   (!generic_hid || key_interface->bInterfaceNumber < hid_interface->bInterfaceNumber);
+        if (keyboard) {
+            hid_interface = key_interface;
+            hid_endpoint = key_endpoint;
+        }
+    }
     if (maizo_usb_stage == MAIZO_USB_PROBED &&
         maizo_usb_vid == device->idVendor && maizo_usb_pid == device->idProduct) {
         maizo_usb_stage = MAIZO_USB_CONNECT;
@@ -247,19 +259,15 @@ int usb_connect(int devId)
         maizo_usb_endpoints = hid_interface ? hid_interface->bNumEndpoints : 0;
     }
 
-    if (device->idVendor == MAIZOX360_VID && device->idProduct == MAIZOX360_PID) {
-        endpoint = maizox360_find_input(devId, device);
-        if (!endpoint) {
-            usb_release(pad);
-            return 1;
-        }
+    endpoint = maizox360_find_input(devId, device);
+    if (endpoint) {
         ds34pad[pad].type = MAIZOX360;
-        ds34pad[pad].hid_packet_size = 32;
+        ds34pad[pad].hid_packet_size = endpoint->wMaxPacketSizeLB;
         hid_endpoint = endpoint;
         epCount = 0;
         maizo_usb_class = 0xff;
         maizo_usb_endpoints = 2;
-        maizo_usb_packet = 32;
+        maizo_usb_packet = ds34pad[pad].hid_packet_size;
         maizo_usb_report_bits = 160;
     } else if (device->idVendor == MAIZOTWIN_VID && device->idProduct == MAIZOTWIN_PID) {
         twin_stage = TWIN_STAGE_CONNECT;
@@ -858,47 +866,57 @@ static void hid_stream_callback(int result, int bytes, void *arg)
     hid_stream_state[port] = 2;
 }
 
-static void hid_stream_thread(void *arg)
+/* Both the worker and the GUI RPC can advance the same nonblocking
+ * transfer queue. This also works if worker allocation/scheduling fails. */
+static void hid_stream_pump(void)
 {
     int pad;
+    if (hid_pump_lock < 0 || PollSema(hid_pump_lock) < 0)
+        return;
+    for (pad = 0; pad < MAX_PADS; pad++) {
+        ds34usb_device *device = &ds34pad[pad];
+        unsigned int token;
+        int ret, oldstate, bytes;
+        if (!device->enabled || device->devId < 0 ||
+            device->interruptEndp < 0 ||
+            !(device->status & DS34USB_STATE_RUNNING) ||
+            (device->type == TWINHID && pad != twin_root))
+            continue;
+
+        if (hid_stream_state[pad] == 2) {
+            bytes = hid_stream_bytes[pad];
+            if (hid_stream_result[pad] == USB_RC_OK &&
+                bytes > 0 && bytes <= MAX_BUFFER_SIZE) {
+                CpuSuspendIntr(&oldstate);
+                readReport(hid_stream_buffers[pad], bytes, pad);
+                CpuResumeIntr(oldstate);
+            }
+            hid_stream_state[pad] = 0;
+        }
+        if (hid_stream_state[pad] != 0)
+            continue;
+        token = (hid_stream_generation[pad] << 2) | (unsigned int)pad;
+        hid_stream_state[pad] = 1;
+        ret = UsbInterruptTransfer(device->interruptEndp,
+                                   hid_stream_buffers[pad],
+                                   (device->type == MAIZOHID ||
+                                    device->type == TWINHID ||
+                                    device->type == MAIZOX360 || device->type == MAIZO_KEYBOARD) ?
+                                       device->hid_packet_size :
+                                       MAX_BUFFER_SIZE,
+                                   hid_stream_callback, (void *)token);
+        if (ret != USB_RC_OK)
+            hid_stream_state[pad] = 0;
+    }
+    SignalSema(hid_pump_lock);
+}
+
+static void hid_stream_thread(void *arg)
+{
     (void)arg;
     for (;;) {
-        for (pad = 0; pad < MAX_PADS; pad++) {
-            ds34usb_device *device = &ds34pad[pad];
-            unsigned int token;
-            int ret, oldstate, bytes;
-            if (!device->enabled || device->devId < 0 ||
-                device->interruptEndp < 0 ||
-                !(device->status & DS34USB_STATE_RUNNING) ||
-                (device->type == TWINHID && pad != twin_root))
-                continue;
-
-            if (hid_stream_state[pad] == 2) {
-                bytes = hid_stream_bytes[pad];
-                if (hid_stream_result[pad] == USB_RC_OK &&
-                    bytes > 0 && bytes <= MAX_BUFFER_SIZE) {
-                    CpuSuspendIntr(&oldstate);
-                    readReport(hid_stream_buffers[pad], bytes, pad);
-                    CpuResumeIntr(oldstate);
-                }
-                hid_stream_state[pad] = 0;
-            }
-            if (hid_stream_state[pad] != 0)
-                continue;
-            token = (hid_stream_generation[pad] << 2) | (unsigned int)pad;
-            hid_stream_state[pad] = 1;
-            ret = UsbInterruptTransfer(device->interruptEndp,
-                                       hid_stream_buffers[pad],
-                                       (device->type == MAIZOHID ||
-                                        device->type == TWINHID ||
-                                        device->type == MAIZOX360 || device->type == MAIZO_KEYBOARD) ?
-                                           device->hid_packet_size :
-                                           MAX_BUFFER_SIZE,
-                                       hid_stream_callback, (void *)token);
-            if (ret != USB_RC_OK)
-                hid_stream_state[pad] = 0;
-        }
-        DelayThread(2000);
+        hid_stream_pump();
+        DelayThread(1000);
     }
 }
 
@@ -1219,9 +1237,18 @@ void *rpc_sf(int cmd, void *data, int size)
         case DS34USB_SET_LED:
             ds34usb_set_led(((u8 *)data + 1), *(u8 *)data);
             break;
-        case DS34USB_GET_DATA:
-            ds34usb_get_data((char *)data, 18, *(u8 *)data);
+        case DS34USB_GET_DATA: {
+            unsigned int port = *(u8 *)data;
+            int oldstate;
+            hid_stream_pump();
+            mips_memset(data, 0, 18);
+            if (port < MAX_PADS && (ds34pad[port].status & DS34USB_STATE_RUNNING)) {
+                CpuSuspendIntr(&oldstate);
+                hid_copy_snapshot(data, 18, port);
+                CpuResumeIntr(oldstate);
+            }
             break;
+        }
         case DS34USB_PROFILES: {
             int oldstate;
             unsigned int i;
@@ -1253,6 +1280,7 @@ void *rpc_sf(int cmd, void *data, int size)
              * the GUI RPC path, no stale stack report and no phantom P3/P4.
              * Only mark a slot valid after a real running device has
              * published a complete DS2 state. */
+            hid_stream_pump();
             mips_memset(snapshot, 0, MAIZO_MENU_SNAPSHOT_SIZE);
             snapshot[8] = MAIZO_MENU_MAGIC0;
             snapshot[9] = MAIZO_MENU_MAGIC1;
@@ -1260,6 +1288,7 @@ void *rpc_sf(int cmd, void *data, int size)
             for (port = 0; port < MAX_PADS; port++) {
                 unsigned int pos = port * 4;
                 int oldstate;
+                /* Only decoded input may establish a stick center. */
                 if (hid_report_ready[port])
                     snapshot[12] |= 1u << port;
                 snapshot[pos] = snapshot[pos + 1] = 0xff;
@@ -1307,6 +1336,9 @@ void *rpc_sf(int cmd, void *data, int size)
             ((u8 *)data)[10] = maizo_usb_report_bits & 0xFF;
             ((u8 *)data)[11] = maizo_usb_report_bits >> 8;
             ((u8 *)data)[12] = maizo_usb_error;
+            ((u8 *)data)[13] = hid_stream_thread_id > 0;
+            ((u8 *)data)[14] = hid_stream_state[0];
+            ((u8 *)data)[15] = hid_stream_state[1];
             break;
         case DS34USB_TWIN_DIAG:
             mips_memset(data, 0, 8);
@@ -1368,6 +1400,10 @@ int _start(int argc, char *argv[])
         }
     }
 
+    hid_pump_lock = CreateMutex(IOP_MUTEX_UNLOCKED);
+    if (hid_pump_lock < 0)
+        return MODULE_NO_RESIDENT_END;
+
     if (UsbRegisterDriver(&usb_driver) != USB_RC_OK) {
         DPRINTF("DS34USB: Error registering USB devices\n");
         return MODULE_NO_RESIDENT_END;
@@ -1377,7 +1413,7 @@ int _start(int argc, char *argv[])
         iop_thread_t stream_th;
         stream_th.attr = TH_C;
         stream_th.thread = hid_stream_thread;
-        stream_th.priority = 39;
+        stream_th.priority = 42;
         stream_th.stacksize = 0x1000;
         stream_th.option = 0;
         hid_stream_thread_id = CreateThread(&stream_th);

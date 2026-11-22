@@ -13,6 +13,17 @@ int main(void)
         7, 5, 0x81, 3, 32, 0, 4};
     assert(maizox360_input_offset(cfg, sizeof(cfg)) == 26);
     assert(maizox360_input_offset(cfg, sizeof(cfg) - 1) == -1);
+    {
+        uint8_t other[sizeof(cfg)];
+        for (unsigned int i = 0; i < sizeof(cfg); i++)
+            other[i] = cfg[i];
+        other[11] = 3; /* different interface number */
+        other[28] = 0x84;
+        other[30] = 64;
+        assert(maizox360_input_offset(other, sizeof(other)) == 26);
+        other[16] = 0x81; /* wireless protocol, not wired XInput */
+        assert(maizox360_input_offset(other, sizeof(other)) == -1);
+    }
     assert(maizox360_decode(r, sizeof(r), &d));
     assert(d.nButtonState == 0xffff && d.LeftStickX == 128 && d.LeftStickY == 127);
     r[3] = 0x10;
@@ -29,6 +40,10 @@ int main(void)
     assert(d.nButtonState == (uint16_t) ~(DS2ButtonDown | DS2ButtonRight | DS2ButtonCross | DS2ButtonSquare | DS2ButtonL2));
     assert(d.LeftStickX == 0 && d.RightStickX == 255 && d.PressureL2 == 255);
     assert(!maizox360_decode(r, 19, &d));
+    {
+        uint8_t padded[32] = {0, 0x14};
+        assert(maizox360_decode(padded, sizeof(padded), &d));
+    }
     r[0] = 1;
     assert(!maizox360_decode(r, 20, &d));
     puts("Xbox 360 capture decoder and endpoint tests passed");

@@ -436,12 +436,12 @@ void menuSaveConfig()
     guiHandleDeferedIO(&actionStatus, _l(_STR_SAVING_SETTINGS), IO_CUSTOM_SIMPLEACTION, &_menuSaveConfig);
 }
 
-static const char *settingsNames[] = {"INTERFACE", "CONTROLES", "JOGOS", "VIDEO", "AUDIO", "ARMAZENAMENTO", "REDE", "SISTEMA", "DIAGNOSTICO"};
+static const char *settingsNames[] = {"INTERFACE", "CONTROLES", "JOGOS", "VIDEO", "AUDIO", "ARMAZENAMENTO", "REDE", "SISTEMA", "DIAGNOSTICO", "CREDITOS"};
 static const int settingsIcons[] = {
     MAIZO_ICON_SETTINGS, MAIZO_ICON_PAD, MAIZO_ICON_PS2,
     MAIZO_ICON_VIDEO, MAIZO_ICON_AUDIO, MAIZO_ICON_HDD,
-    MAIZO_ICON_NETWORK, MAIZO_ICON_INFO, MAIZO_ICON_USB};
-#define MAIZO_SETTING_CATEGORIES 9
+    MAIZO_ICON_NETWORK, MAIZO_ICON_INFO, MAIZO_ICON_USB, MAIZO_ICON_INFO};
+#define MAIZO_SETTING_CATEGORIES 10
 
 static int settingsItemCategory(int id)
 {
@@ -475,6 +475,8 @@ static int settingsItemCategory(int id)
         case MENU_USB_DIAG:
         case MENU_DIAG_SYSTEM:
             return 8;
+        case MENU_ABOUT:
+            return 9;
         default:
             return 7;
     }
@@ -505,7 +507,7 @@ static void menuInitMainMenu(void)
     submenuAppendItem(&mainMenu, -1, NULL, MENU_NET_CONFIG, _STR_NETCONFIG);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_NET_UPDATE, _STR_NET_UPDATE);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_START_NBD, _STR_STARTNBD);
-    submenuAppendItem(&mainMenu, -1, NULL, MENU_ABOUT, _STR_ABOUT);
+    submenuAppendItem(&mainMenu, -1, "Creditos OPL e MAIZON", MENU_ABOUT, -1);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_SAVE_CHANGES, _STR_SAVE_CHANGES);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_EXIT, _STR_EXIT);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_POWER_OFF, _STR_POWEROFF);
@@ -1128,7 +1130,8 @@ static const char *const maizoSettingsDescriptions[] = {
     "DISPOSITIVOS, USB E ARMAZENAMENTO",
     "ETHERNET, SMB E ATUALIZACOES",
     "SEGURANCA, SALVAMENTO E SISTEMA",
-    "RELATORIOS TECNICOS E PERIFERICOS"};
+    "RELATORIOS TECNICOS E PERIFERICOS",
+    "EQUIPE ORIGINAL DO OPL E MAIZON"};
 
 void menuRenderMenu()
 {
@@ -1144,17 +1147,17 @@ void menuRenderMenu()
         fntRenderString(gTheme->fonts[0], 30, 77, ALIGN_NONE,
                         345, 30, "CONFIGURACOES", MAIZO_TEXT);
 
-        /* Fixed nine-category navigation rail; input focus and content
+        /* Fixed category navigation rail; input focus and content
          * selection are independent. */
         maizoDrawPanel(leftX, 120, 194, 280, 0);
         for (int i = 0; i < MAIZO_SETTING_CATEGORIES; i++) {
-            int rowY = 130 + i * 29;
+            int rowY = 130 + i * 26;
             int highlighted = i == settingsCategory;
             if (highlighted)
-                rmDrawRect(leftX + 3, rowY - 2, 188, 29,
+                rmDrawRect(leftX + 3, rowY - 2, 188, 26,
                            settingsFocus ? MAIZO_DIVIDER : MAIZO_CARD);
             if (highlighted)
-                rmDrawRect(leftX + 3, rowY - 2, 3, 29, MAIZO_ACCENT);
+                rmDrawRect(leftX + 3, rowY - 2, 3, 26, MAIZO_ACCENT);
             maizoDrawIcon(settingsIcons[i], leftX + 12, rowY + 1, 18,
                           highlighted ? MAIZO_BRIGHT : MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], leftX + 38, rowY + 1,

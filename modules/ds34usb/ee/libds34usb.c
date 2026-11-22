@@ -17,15 +17,21 @@
 #define DS34USB_PROFILES    12
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
-static SifRpcClientData_t ds34usb;
+static SifRpcClientData_t ds34usb __attribute__((aligned(64)));
+static SifRpcClientData_t menuusb __attribute__((aligned(64)));
 
 static u8 rpcbuf[64] __attribute__((aligned(64)));
+static u8 menu_request[64] __attribute__((aligned(64)));
+static u8 menu_reply[64] __attribute__((aligned(64)));
+static u8 menuusb_inited;
 
 static u8 ds34usb_inited = 0;
 
 int ds34usb_init()
 {
     ds34usb.server = NULL;
+    menuusb.server = NULL;
+    menuusb_inited = 0;
 
     do {
         if (SifBindRpc(&ds34usb, DS34USB_BIND_RPC_ID, 0) < 0)
@@ -35,6 +41,12 @@ int ds34usb_init()
     } while (!ds34usb.server);
 
     ds34usb_inited = 1;
+    do {
+        if (SifBindRpc(&menuusb, DS34USB_BIND_RPC_ID, 0) < 0)
+            return 1;
+        nopdelay();
+    } while (!menuusb.server);
+    menuusb_inited = 1;
 
     return 1;
 }
@@ -42,6 +54,7 @@ int ds34usb_init()
 int ds34usb_deinit()
 {
     ds34usb_inited = 0;
+    menuusb_inited = 0;
     return 1;
 }
 
@@ -84,13 +97,18 @@ int ds34usb_set_profiles(const u8 profiles[32])
 
 int ds34usb_get_menu_state(u8 out[16])
 {
-    if (!ds34usb_inited || !out)
+    if (!menuusb_inited || !out)
         return 0;
 
-    if (SifCallRpc(&ds34usb, DS34USB_MENU_STATE, 0, NULL, 0,
-                   rpcbuf, 16, NULL, NULL) != 0)
+    /* Explicit request and dedicated aligned receive buffer: do not consume
+     * a stale previous RPC command or race with a profile/diagnostic call. */
+    memset(menu_reply, 0, sizeof(menu_reply));
+    menu_request[0] = 0x4d;
+    menu_request[1] = 0x5a;
+    if (SifCallRpc(&menuusb, DS34USB_MENU_STATE, 0, menu_request, 16,
+                   menu_reply, 16, NULL, NULL) != 0)
         return 0;
-    memcpy(out, rpcbuf, 16);
+    memcpy(out, menu_reply, 16);
     return 1;
 }
 

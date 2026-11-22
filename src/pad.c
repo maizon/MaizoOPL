@@ -51,11 +51,13 @@ static unsigned short pad_count;
 #ifdef PADEMU
 /* USB input is accepted only from a validated driver snapshot.
  * Bluetooth retains its neutral-report safety gate. */
-static unsigned int maizoUsbArmed;
+static unsigned int maizoUsbArmed, maizoUsbCentered;
 static unsigned int maizoUsbNotified, maizoBtNotified;
 static u8 maizoUsbCenters[4] = {127, 127, 127, 127};
 static unsigned int maizoBtArmed;
 static int maizoPhysicalRescueMode;
+static int maizoRescueHeld;
+static u32 maizoRescueStart;
 #endif
 static struct pad_data_t pad_data[MAX_PADS];
 
@@ -361,13 +363,15 @@ static int maizoReadRemotePads(void)
                 }
             }
             maizoUsbArmed &= valid;
-            fresh = neutral & ~maizoUsbArmed;
+            maizoUsbCentered &= valid;
+            fresh = neutral & snapshot[12] & ~maizoUsbCentered;
             for (int slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
                 if (fresh & (1u << slot)) {
                     maizoUsbCenters[slot * 2] = snapshot[slot * 4 + 2];
                     maizoUsbCenters[slot * 2 + 1] = snapshot[slot * 4 + 3];
                 }
             }
+            maizoUsbCentered |= fresh;
             /* A validated decoded report is usable immediately. */
             maizoUsbArmed |= valid;
             remote = maizoMenuPadMask(snapshot, gXSensitivity,
@@ -378,7 +382,10 @@ static int maizoReadRemotePads(void)
                 rslt = 1;
         } else {
             maizoUsbArmed = 0;
+            maizoUsbCentered = 0;
             maizoUsbNotified = 0;
+            for (int slot = 0; slot < MAIZO_MENU_SLOTS * 2; slot++)
+                maizoUsbCenters[slot] = 127;
         }
     }
 
@@ -441,13 +448,20 @@ int readPads()
     }
 
 #ifdef PADEMU
-    /* Emergency input bypass: on a REAL P1/P2 DualShock, L1+R1+START
-     * stops remote controllers from injecting menu input until reboot.
-     * It is checked BEFORE USB/BT are merged, so a corrupt USB report
-     * can never falsely trigger or prevent the rescue combo. */
+    /* Native-only rescue: hold the chord for 1.5 seconds to toggle.
+     * An ordinary shortcut or transient report cannot permanently disable USB. */
     if ((paddata & (PAD_L1 | PAD_R1 | PAD_START)) ==
-        (PAD_L1 | PAD_R1 | PAD_START))
-        maizoPhysicalRescueMode = 1;
+        (PAD_L1 | PAD_R1 | PAD_START)) {
+        if (!maizoRescueHeld) {
+            maizoRescueStart = curtime;
+            maizoRescueHeld = 1;
+        } else if (maizoRescueHeld == 1 && curtime - maizoRescueStart >= 1500) {
+            maizoPhysicalRescueMode = !maizoPhysicalRescueMode;
+            maizoRescueHeld = 2;
+        }
+    } else {
+        maizoRescueHeld = 0;
+    }
     if (!maizoPhysicalRescueMode)
         rslt |= maizoReadRemotePads();
 #endif
@@ -603,6 +617,7 @@ int startPads()
     pad_count = 0;
 #ifdef PADEMU
     maizoUsbArmed = 0;
+    maizoUsbCentered = 0;
     maizoBtArmed = 0;
     maizoUsbNotified = 0;
     maizoBtNotified = 0;

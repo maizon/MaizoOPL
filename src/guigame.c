@@ -670,7 +670,7 @@ static void maizoTwinRefresh(void)
         diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_STATUS,
                     "Driver IOP indisponivel (nao e erro de VID/PID)");
         diaSetLabel(diaTwinDiag, PADCFG_TWIN_DIAG_DATA,
-                    "Verifique USB ativado no OPL e reinicie");
+                    "Driver de menu USB independente de PadEmu; reinicie o OPL");
         return;
     }
     if (d[0]) {
@@ -685,9 +685,9 @@ static void maizoTwinRefresh(void)
             if (ds34usb_get_menu_state(menuReport) &&
                 menuReport[8] == 0x4d && menuReport[9] == 0x5a) {
                 snprintf(twinDataLine, sizeof(twinDataLine),
-                         "VID:%04X PID:%04X PK:%u RX:%u READY:%02X SLOT:%02X BTN:%02X%02X",
-                         vid, pid, packet, d[9], menuReport[12],
-                         menuReport[11], menuReport[1], menuReport[0]);
+                         "VID:%04X PID:%04X RX:%u READY:%02X SLOT:%02X P1:%02X%02X P2:%02X%02X W:%u",
+                         vid, pid, d[9], menuReport[12], menuReport[11],
+                         menuReport[1], menuReport[0], menuReport[5], menuReport[4], d[13]);
             } else {
                 snprintf(twinDataLine, sizeof(twinDataLine),
                          "USB:%04X:%04X PK:%u BITS:%u RX:%u ERR:%u SEM RPC",

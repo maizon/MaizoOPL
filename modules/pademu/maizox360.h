@@ -20,7 +20,7 @@ static inline uint8_t maizox360_axis(const uint8_t *r, int invert)
 static inline int maizox360_decode(const uint8_t *r, unsigned int len, struct ds2report *out)
 {
     uint16_t p = 0;
-    if (!r || !out || len != MAIZOX360_PACKET || r[0] != 0 || r[1] != MAIZOX360_PACKET)
+    if (!r || !out || len < MAIZOX360_PACKET || len > 64 || r[0] != 0 || r[1] != MAIZOX360_PACKET)
         return 0;
 
     if (r[2] & 0x01)
@@ -77,8 +77,8 @@ static inline int maizox360_decode(const uint8_t *r, unsigned int len, struct ds
     return 1;
 }
 
-/* Parse only interface 0, alternate 0, FF/5D/01 and its 81 IN endpoint.
- * The audio/accessory interfaces (82,83,86) are deliberately ignored. */
+/* Match the wired Xbox 360 protocol by interface class/subclass/protocol,
+ * not VID/PID. Audio/accessory and wireless receiver protocols are excluded. */
 static inline int maizox360_input_offset(const uint8_t *cfg, unsigned int len)
 {
     unsigned int off;
@@ -91,11 +91,11 @@ static inline int maizox360_input_offset(const uint8_t *cfg, unsigned int len)
         if (n < 2 || n > len - off)
             return -1;
         if (d[1] == 4)
-            selected = n >= 9 && d[2] == 0 && d[3] == 0 &&
+            selected = n >= 9 && d[3] == 0 &&
                        d[5] == 0xff && d[6] == 0x5d && d[7] == 1;
         else if (selected && d[1] == 5 && n >= 7 &&
-                 d[2] == 0x81 && (d[3] & 3) == 3 &&
-                 ((unsigned int)d[4] | ((unsigned int)d[5] << 8)) == 32)
+                 (d[2] & 0x80) && (d[3] & 3) == 3 &&
+                 d[5] == 0 && d[4] >= MAIZOX360_PACKET && d[4] <= 64)
             return (int)off;
         off += n;
     }

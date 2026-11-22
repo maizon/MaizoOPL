@@ -276,12 +276,15 @@ void sysReset(int modload_mask)
 
     if (modload_mask & SYS_LOAD_USB_MODULES) {
         LOG("[DS34_USB]:\n");
-        sysLoadModuleBuffer(&ds34usb_irx, size_ds34usb_irx, 4, (char *)&ds3pads);
+        /* Menu USB is independent of the per-game PadEmu port mask.
+         * Register and bind before Bluetooth; the menu IRX defaults to both slots. */
+        if (sysLoadModuleBuffer(&ds34usb_irx, size_ds34usb_irx, 0, NULL) == 0) {
+            if (ds34usb_init())
+                ds34usb_reinit_ports(0x03);
+        }
         LOG("[DS34_BT]:\n");
-        sysLoadModuleBuffer(&ds34bt_irx, size_ds34bt_irx, 4, (char *)&ds3pads);
-
-        ds34usb_init();
-        ds34bt_init();
+        if (sysLoadModuleBuffer(&ds34bt_irx, size_ds34bt_irx, 4, (char *)&ds3pads) == 0)
+            ds34bt_init();
     }
 #endif
 

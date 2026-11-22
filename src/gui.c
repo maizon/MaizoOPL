@@ -260,8 +260,8 @@ void guiShowSupremeDiagnostics(void)
 #ifdef PADEMU
     snprintf(features, sizeof(features),
              maizoIsPhysicalRescueMode() ?
-                 "Entrada: seguranca L1+R1+START; somente controles PS2" :
-                 "PadEmu: incluido; emergencia PS2: L1+R1+START");
+                 "Somente PS2; segure L1+R1+START para reativar USB/BT" :
+                 "PadEmu: ativo; emergencia PS2: segure L1+R1+START");
 #else
     snprintf(features, sizeof(features), "PadEmu: nao incluido nesta compilacao");
 #endif
@@ -287,8 +287,33 @@ void guiShowSupremeDiagnostics(void)
 
 void guiShowAbout()
 {
+    struct UIItem credits[] = {
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"CREDITOS", -1}}},
+        {UI_SPLITTER},
+        {UI_BUTTON, 7401, 1, 1, -1, 0, 0, {.label = {"Open PS2 Loader - equipe original", -1}}},
+        {UI_BREAK},
+        {UI_BUTTON, 7402, 1, 1, -1, 0, 0, {.label = {"MAIZON - MAIZO SUPREME", -1}}},
+        {UI_BREAK},
+        {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
+        {UI_TERMINATOR}};
+    struct UIItem maizon[] = {
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MAIZON - MAIZO SUPREME", -1}}},
+        {UI_SPLITTER},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Desenvolvimento e personalizacao: MAIZON", -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"GITHUB.COM/MAIZON", -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Instagram.com/Maicon_Nasciment0", -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"YouTube.com/MaiconGameplays", -1}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Base: Open PS2 Loader e seus colaboradores", -1}}},
+        {UI_BREAK},
+        {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
+        {UI_TERMINATOR}};
     char OPLVersion[40];
     char OPLBuildDetails[40];
+    int selected;
 
     snprintf(OPLVersion, sizeof(OPLVersion), "Open PS2 Loader %s", OPL_VERSION);
     diaSetLabel(diaAbout, ABOUT_TITLE, OPLVersion);
@@ -314,7 +339,12 @@ void guiShowAbout()
     );
     diaSetLabel(diaAbout, ABOUT_BUILD_DETAILS, OPLBuildDetails);
 
-    diaExecuteDialog(diaAbout, -1, 1, NULL);
+    while ((selected = diaExecuteDialog(credits, -1, 1, NULL)) == 7401 || selected == 7402) {
+        if (selected == 7401)
+            diaExecuteDialog(diaAbout, -1, 1, NULL);
+        else
+            diaExecuteDialog(maizon, -1, 1, NULL);
+    }
 }
 
 void guiCheckNotifications(int checkTheme, int checkLang)

@@ -6,7 +6,7 @@ static UsbEndpointDescriptor *maizox360_find_input(int devId, UsbDeviceDescripto
 {
     UsbConfigDescriptor *config;
     int off;
-    if (!device || device->idVendor != MAIZOX360_VID || device->idProduct != MAIZOX360_PID)
+    if (!device)
         return NULL;
     config = (UsbConfigDescriptor *)UsbGetDeviceStaticDescriptor(devId, device, USB_DT_CONFIG);
     if (!config || config->wTotalLength < 9 || config->wTotalLength > 4096)

@@ -66,6 +66,18 @@ int main(void)
         assert(!maizohid_decode(&layout, numbered, sizeof(numbered), &pad));
     }
 
+    {
+        /* Four-button digital pad, genuine gamepad collection, no analog. */
+        const uint8_t digital[] = {
+            0x05, 1, 0x09, 5, 0xa1, 1,
+            0x15, 0, 0x25, 7, 0x75, 4, 0x95, 1, 0x09, 0x39, 0x81, 0x42,
+            0x05, 9, 0x15, 0, 0x25, 1, 0x75, 1, 0x95, 4,
+            0x19, 1, 0x29, 4, 0x81, 2, 0xc0};
+        uint8_t button = 0x48;
+        assert(maizohid_parse(&layout, digital, sizeof(digital)));
+        assert(maizohid_decode(&layout, &button, 1, &pad));
+        assert(!pad.nCross && pad.LeftStickX == 127 && pad.LeftStickY == 127);
+    }
     puts("MaizoHID: HID descriptor + DS2 translator tests passed");
     return 0;
 }

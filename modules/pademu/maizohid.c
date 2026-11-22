@@ -48,6 +48,7 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
     unsigned int page = 0, report_size = 0, report_count = 0;
     unsigned int usages[32], usage_count = 0, usage_min = 0, usage_max = 0;
     int have_usage_range = 0, seen_input = 0, selected_input = 0;
+    int gamepad_application = 0;
     unsigned int current_report_id = 0, selected_report_id = 0;
     int32_t logical_min = 0, logical_max = 0;
 
@@ -111,6 +112,9 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
                     break;
             }
         } else if (type == 0) {
+            if (tag == 10 && value == 1 && page == 1 && usage_count &&
+                (usages[0] == 4 || usages[0] == 5))
+                gamepad_application = 1;
             if (tag == 8) { /* INPUT */
                 if (!selected_input) {
                     selected_input = 1;
@@ -157,10 +161,17 @@ int maizohid_parse(maizohid_layout *out, const uint8_t *desc, unsigned int lengt
         p += size;
     }
     out->report_bits = (uint16_t)bitpos;
-    if (!seen_input || !out->axis[0].valid || !out->axis[1].valid ||
-        !out->button[0].valid || !out->button[7].valid ||
-        (!out->hat.valid && !out->dpad[0].valid))
+    if (!seen_input || !out->button[0].valid)
         return 0;
+    /* Preserve the established legacy layout. A declared joystick/gamepad
+     * can also be digital-only or omit a hat/extra shoulder buttons. */
+    if (!(out->axis[0].valid && out->axis[1].valid && out->button[7].valid &&
+          (out->hat.valid || out->dpad[0].valid))) {
+        if (!gamepad_application || !out->button[3].valid ||
+            !((out->axis[0].valid && out->axis[1].valid) || out->hat.valid ||
+              (out->dpad[0].valid && out->dpad[1].valid && out->dpad[2].valid && out->dpad[3].valid)))
+            return 0;
+    }
     out->ready = 1;
     return 1;
 }

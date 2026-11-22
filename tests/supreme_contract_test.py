@@ -22,7 +22,7 @@ license_text = read("assets/maizo/tabler/LICENSE")
 assert "MIT License" in license_text
 assert "maizo_tabler_strokes.h" in ui
 assert "maizoDrawHeader(dashboard.tab)" in menu
-assert "MAIZO_SETTING_CATEGORIES 9" in menu
+assert "MAIZO_SETTING_CATEGORIES 10" in menu
 assert "maizo_sort_mode" in menu and "maizoLibrarySortMode" in menu
 assert "maizo_cover_mode" in menu and "maizo_cover_mode" in art
 assert "maizo_animation_mode" in ui
@@ -128,3 +128,11 @@ assert "maizoDecodeKeyboard" in read("modules/pademu/ds34usb.c")
 assert "MaizoInputProfiles" in read("ee_core/src/iopmgr.c")
 assert "maizoRemapHid" in menu_driver
 assert "maizoRemapHid" in read("modules/pademu/ds34usb.c")
+
+# Menu USB has an independent SIF client and an always-available pump.
+assert "menuusb" in read("modules/ds34usb/ee/libds34usb.c")
+assert "hid_stream_pump();" in menu_driver
+assert "ds34usb_reinit_ports(0x03)" in read("src/system.c")
+assert "while (!padStatus)" not in read("src/opl.c")
+assert '"CREDITOS"' in menu
+assert "Instagram.com/Maicon_Nasciment0" in gui
