@@ -1113,7 +1113,7 @@ static void drawHintText(struct menu_list *menu, struct submenu_list *item, conf
         x = guiDrawIconAndText(TRIANGLE_ICON, _STR_OPTIONS, elem->font, x, y, MAIZO_MUTED) + 14;
         maizoDrawIcon(MAIZO_ICON_STAR, x, y - 1, 18, MAIZO_ACCENT);
         fntRenderString(elem->font, x + 22, y, ALIGN_NONE, 0, 0, "Quadrado", MAIZO_MUTED);
-        fntRenderString(elem->font, 608, y, ALIGN_RIGHT, 160, 24, "Start: menu", MAIZO_MUTED);
+        fntRenderString(elem->font, 608, y, ALIGN_RIGHT, 160, 24, "START: menu", MAIZO_MUTED);
         return;
     }
     menu_hint_item_t *hint = menu->item->hints;

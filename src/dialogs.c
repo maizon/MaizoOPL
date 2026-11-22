@@ -574,7 +574,7 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_BOOL, PADCFG_PADEMU_ENABLE, 1, 1, _STR_HINT_PADEMU_ENABLE, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},
 
-    {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {"Pad emulator mode", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {"Tipo de controle", -1}}},
     {UI_BREAK},
     {UI_ENUM, PADCFG_PADEMU_MODE, 1, 1, _STR_HINT_PADEMU_MODE, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},

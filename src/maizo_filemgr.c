@@ -107,7 +107,8 @@ static int fm_compare(const void *a, const void *b)
  * fileXio operations and Unix creation flags are not portable to it. */
 static int fm_mc_port(const char *path)
 {
-    return !strncmp(path, "mc0:", 4) ? 0 : !strncmp(path, "mc1:", 4) ? 1 : -1;
+    return !strncmp(path, "mc0:", 4) ? 0 : !strncmp(path, "mc1:", 4) ? 1 :
+                                                                       -1;
 }
 
 static int fm_mc_result(int queued)

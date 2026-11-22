@@ -1199,7 +1199,7 @@ static void maizoShowMapping(void)
         {UI_BREAK},
         {UI_BUTTON, 7101, 1, 1, -1, 0, 0, {.label = {"USB HID", -1}}},
         {UI_BREAK},
-        {UI_BUTTON, 7102, 1, 1, -1, 0, 0, {.label = {"Keyboard", -1}}},
+        {UI_BUTTON, 7102, 1, 1, -1, 0, 0, {.label = {"Teclado USB", -1}}},
         {UI_BREAK},
         {UI_TERMINATOR}};
     int result;
@@ -1209,7 +1209,7 @@ static void maizoShowMapping(void)
         struct UIItem ui[16 * 4 + 7] = {{0}};
         int i, n = 0, selected, j;
         maizoLoadInputProfiles(profiles);
-        ui[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {keyboard ? "Keyboard > DualShock" : "USB HID > DualShock", -1}}};
+        ui[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {keyboard ? "Teclado > DualShock" : "USB HID > DualShock", -1}}};
         ui[n++].type = UI_BREAK;
         for (i = 0; i < 16; i++) {
             selected = profiles[offset + i];
@@ -1294,7 +1294,6 @@ void guiShowControllerConfig(void)
             guiGameShowPadEmuConfig(1);
         } else if (result == MAIZO_MAPPING_BUTTON) {
             maizoShowMapping();
-
         }
 #endif
         applyConfig(-1, -1, 1);

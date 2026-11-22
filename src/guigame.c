@@ -488,9 +488,9 @@ static const char *PadEmuPorts_enums[][5] = {
 // This enum, along with lookup tables, can be re-used anywhere an enum containing all PS2 buttons is necessary.
 static const char *button_names_enum[] = {
     "Off",
-    "Up", "Down", "Left", "Right",
+    "Cima", "Baixo", "Esquerda", "Direita",
     "L1", "R1", "L2", "R2",
-    "Cross", "Circle", "Square", "Triangle",
+    "X", "Círculo", "Quadrado", "Triângulo",
     "L3", "R3", "Start", "Select",
     NULL};
 

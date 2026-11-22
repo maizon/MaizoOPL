@@ -240,7 +240,7 @@ void maizoDrawSeparator(int x, int y, int width)
 void maizoDrawHeader(int tab)
 {
     static const char *const names[] = {
-        "TODOS", "PS2", "PS1", "APPS", "FAVORITOS", "CONFIGURACOES"};
+        "TODOS", "PS2", "PS1", "APLICATIVOS", "FAVORITOS", "CONFIGURACOES"};
     if (tab < 0 || tab >= MAIZO_TAB_COUNT)
         return;
 

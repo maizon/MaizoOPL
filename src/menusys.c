@@ -1605,7 +1605,7 @@ void menuRenderMain(void)
             fntRenderString(gTheme->fonts[0], 320, 224, ALIGN_CENTER, 560, 48,
                             dashboardError ? "Memoria insuficiente para a biblioteca" : "Nenhum item nesta aba", MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 320, 290, ALIGN_CENTER, 560, 48,
-                            "Start: configuracoes  |  Select: atualizar fontes", MAIZO_MUTED);
+                            "START: configurações  |  SELECT: atualizar fontes", MAIZO_MUTED);
             return;
         }
     }
