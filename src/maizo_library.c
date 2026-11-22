@@ -65,6 +65,7 @@ int maizoLibraryAdd(maizo_library_t *library, void *owner, void *item, int platf
     entry.item = item;
     entry.platform = platform;
     entry.favorite = favorite;
+    entry.source = MAIZO_SOURCE_ALL;
     entry.ordinal = library->count;
     library->entries[library->count++] = entry;
     return 1;
@@ -184,9 +185,9 @@ int maizoLibraryFilter(maizo_library_t *library, int tab)
                     (tab == MAIZO_PS1_TAB && entry->platform == MAIZO_PS1) ||
                     (tab == MAIZO_APPS_TAB && entry->platform == MAIZO_APP) ||
                     (tab == MAIZO_FAVORITES && entry->favorite);
-        if (!match)
+        if (!match || (library->sourceFilter != MAIZO_SOURCE_ALL && entry->source != library->sourceFilter))
             continue;
-        if (entry->platform == library->remembered_platform[tab] &&
+        if (tab < MAIZO_SETTINGS && entry->platform == library->remembered_platform[tab] &&
             strcmp(entry->identity, library->remembered[tab]) == 0)
             library->position = library->view_count;
         library->view[library->view_count++] = i;

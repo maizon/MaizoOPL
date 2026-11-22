@@ -56,26 +56,28 @@ static void cacheLoadImage(void *data)
 
     item_list_t *handler = req->list;
     if (!handler)
-        return;
+        goto discard;
 
     // the cache entry was already reused!
     if (req->cacheUID != req->entry->UID)
-        return;
+        goto discard;
 
     // seems okay. we can proceed
     GSTEXTURE *texture = &req->entry->texture;
     texFree(texture);
 
-    if (handler->itemGetImage(handler, req->cache->prefix, req->cache->isPrefixRelative, req->value, req->cache->suffix, texture, GS_PSM_CT24) < 0)
-        req->entry->lastUsed = 0;
-    else
-        req->entry->lastUsed = guiFrameId;
-
+    int failed = handler->itemGetImage(handler, req->cache->prefix, req->cache->isPrefixRelative, req->value, req->cache->suffix, texture, GS_PSM_CT24) < 0;
     guiLock();
+    req->entry->failed = failed;
+    req->entry->retryFrame = guiFrameId + 900;
+    req->entry->lastUsed = guiFrameId;
+    if (failed)
+        texFree(texture);
     cacheTrim(req->cache, req->entry);
     req->entry->qr = NULL;
     guiUnlock();
 
+discard:
     free(req);
 }
 
@@ -171,16 +173,18 @@ static GSTEXTURE *cacheGetTextureEx(image_cache_t *cache, item_list_t *list,
                                     int *cacheId, int *UID, char *value,
                                     int prefetch)
 {
-    if (*cacheId == -2) {
+    if (!cache || !list || !cacheId || !UID || !value || !list->itemGetImage || strlen(value) >= sizeof(cache->content[0].key))
         return NULL;
-    } else if (*cacheId != -1) {
+    if (*cacheId < -1 || *cacheId >= cache->count)
+        *cacheId = -1;
+    if (*cacheId != -1) {
         cache_entry_t *entry = &cache->content[*cacheId];
-        if (entry->UID == *UID) {
+        if (entry->UID == *UID && entry->owner == list && !strcmp(entry->key, value)) {
             if (entry->qr)
                 return NULL;
-            else if (entry->lastUsed == 0) {
-                *cacheId = -2;
-                return NULL;
+            else if (entry->failed) {
+                if ((int)(guiFrameId - entry->retryFrame) < 0)
+                    return NULL;
             } else {
                 entry->lastUsed = guiFrameId;
                 return &entry->texture;
@@ -189,6 +193,25 @@ static GSTEXTURE *cacheGetTextureEx(image_cache_t *cache, item_list_t *list,
 
         *cacheId = -1;
     }
+
+    /* Reuse decoded artwork when the UI rebuilt item bookkeeping. */
+    int queued = 0;
+    for (int i = 0; i < cache->count; i++) {
+        cache_entry_t *entry = &cache->content[i];
+        queued += entry->qr != NULL;
+        if (!entry->UID || entry->owner != list || strcmp(entry->key, value))
+            continue;
+        if (entry->failed && (int)(guiFrameId - entry->retryFrame) >= 0)
+            continue;
+        *cacheId = i;
+        *UID = entry->UID;
+        if (entry->qr || entry->failed)
+            return NULL;
+        entry->lastUsed = guiFrameId;
+        return &entry->texture;
+    }
+    if (prefetch && queued >= 2)
+        return NULL;
 
     // under the cache pre-delay (to avoid filling cache while moving around)
     if (!prefetch && guiInactiveFrames < list->delay)
@@ -222,10 +245,16 @@ static GSTEXTURE *cacheGetTextureEx(image_cache_t *cache, item_list_t *list,
         cacheClearItem(oldestEntry, 1);
         oldestEntry->qr = req;
         oldestEntry->UID = cache->nextUID;
+        oldestEntry->owner = list;
+        snprintf(oldestEntry->key, sizeof(oldestEntry->key), "%s", value);
 
         *UID = cache->nextUID++;
 
-        ioPutRequest(IO_CACHE_LOAD_ART, req);
+        if (ioPutRequest(IO_CACHE_LOAD_ART, req) != IO_OK) {
+            cacheClearItem(oldestEntry, 1);
+            *cacheId = -1;
+            free(req);
+        }
     }
 
     return NULL;

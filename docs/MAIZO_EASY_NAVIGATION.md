@@ -1,0 +1,10 @@
+# MAIZO — navegação e armazenamento
+
+- Categorias separam sistema, jogos e desempenho de armazenamento; as fontes têm estado e configuração própria. USB, MX4SIO e iLink compartilham o modo de inicialização BDM do OPL; ocultar USB não desativa a pilha USB. O filtro de origem é independente da aba de plataforma.
+- Confirmação salva configurações; Voltar cancela quando suportado pelo diálogo. A seleção de cada categoria é lembrada durante a sessão.
+- Gerenciador: SELECT marca vários itens, quadrado copia, triângulo cola, START abre opções, L1/R1 alternam painéis, L2/R2 mudam unidade. Cópia normal é verificada byte a byte; substituição usa temporário e backup, nunca sobrescreve pastas. Cancelamento conserva origem e arquivos concluídos. O espaço disponível é obtido pelo RPC do Memory Card; outros dispositivos podem não expor capacidade.
+- PSU: exportar pasta de save do cartão para o painel de outro dispositivo; importar arquivo .psu de outro dispositivo para cartão. Suporta EMS plano (sem subpastas), sem sobrescrever diretórios. Datas são solicitadas via mcSetFileInfo; atributos especiais completos e cartões não padrão precisam de validação. Formato por documentação PS2 Save Tools e mymc/ps2mc_dir.py (Ross Ridge, domínio público).
+- A confirmar em PS2 real: MC0/MC1, saves PSU, fontes misturadas, TV CRT 4:3, 240p/480i/480p, USB HID/X360/teclado/BT. Este commit não modifica a emulação de portas em jogo.
+
+- Controles: em Controles > Mapeamento USB e teclado, selecione Capturar botão/tecla abaixo do botão de destino. Funciona para HID genérico e teclado USB em modo boot; não altera os drivers de jogo, nem promete suporte a protocolos proprietários. Diagnóstico USB mostra os botões e analógicos dos dois slots em tempo real. START + Voltar sai, SELECT abre detalhes técnicos.
+- Capas: reaproveitamento por origem e identificador, fila limitada a duas leituras da biblioteca, prioridade às capas visíveis enquanto navega e tentativa posterior de capas ausentes. As imagens originais não são modificadas.

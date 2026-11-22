@@ -148,3 +148,17 @@ assert "maizo_home_tab" in gui and "maizo_home_tab" in menu
 assert "GAME_PADMACRO_SETTINGS, _STR_PADMACROCONFIG" not in menu
 assert "config->PadMacroSettings = 0" in read("src/system.c")
 assert "Portuguese_BR.yml" in read("Makefile")
+
+assert "maizo_source_filter" in menu and "sourceFilter" in library
+assert "menuMaizoSourceAvailable" in menu and "guiConfigureSource" in gui
+assert "settingsRemember" in menu and "guiAdvancedRows" in gui
+assert "guiShowInputMapping" in menu
+
+# Independent, non-consuming mapping and live input report.
+assert "DS34USB_CAPTURE" in menu_driver
+assert "ds34usb_get_capture" in gui and "maizoCaptureInput" in gui
+assert "captureButtons" in menu_driver
+assert "fm_verify_file" in fm and "fm_copy_replace" in fm
+assert "fm_psu_import" in fm and "fm_psu_export" in fm
+assert "queued >= 2" in read("src/texcache.c")
+assert "retryFrame" in read("src/texcache.c")

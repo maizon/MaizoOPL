@@ -16,6 +16,10 @@ typedef struct
     int lastUsed;
 
     int UID;
+    item_list_t *owner;
+    char key[256];
+    unsigned int retryFrame;
+    int failed;
 } cache_entry_t;
 
 

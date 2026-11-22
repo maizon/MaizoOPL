@@ -107,5 +107,18 @@ int main(void)
         maizoLibraryClear(&library);
     }
     puts("MAIZO library: stable sources, sort modes, favorites, hotplug and 12000-item navigation passed");
+    {
+        maizo_library_t sources = {0};
+        assert(maizoLibraryAdd(&sources, (void *)1, (void *)1, MAIZO_PS2, "A", "USB", 0));
+        sources.entries[0].source = MAIZO_SOURCE_USB;
+        assert(maizoLibraryAdd(&sources, (void *)2, (void *)2, MAIZO_PS2, "A", "SMB", 0));
+        sources.entries[1].source = MAIZO_SOURCE_SMB;
+        sources.sourceFilter = MAIZO_SOURCE_SMB;
+        assert(maizoLibraryFilter(&sources, MAIZO_ALL));
+        assert(sources.view_count == 1 && maizoLibrarySlot(&sources, 0)->source == MAIZO_SOURCE_SMB);
+        sources.sourceFilter = MAIZO_SOURCE_ALL;
+        assert(maizoLibraryFilter(&sources, MAIZO_ALL) && sources.view_count == 2);
+        maizoLibraryClear(&sources);
+    }
     return 0;
 }

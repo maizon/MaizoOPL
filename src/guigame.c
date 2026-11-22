@@ -16,6 +16,10 @@
 #include "include/guigame.h"
 #include "include/ds34common.h"
 #include "include/vmc_groups.h"
+#include "include/maizo_ui.h"
+#include "include/renderman.h"
+#include "include/fntsys.h"
+#include "include/themes.h"
 
 #ifdef PADEMU
 #include <libds34bt.h>
@@ -711,11 +715,49 @@ static void maizoTwinRefresh(void)
 
 void guiGameShowUsbDiagnostics(void)
 {
-    int result = -1;
-    do {
-        maizoTwinRefresh();
-        result = diaExecuteDialog(diaTwinDiag, result, 1, NULL);
-    } while (result == PADCFG_TWIN_DIAG_REFRESH);
+    static const char *const names[] = {"Ausente", "DS3", "DS4", "Guitarra", "Guitarra", "USB HID", "Twin USB", "Xbox 360", "Teclado"};
+    static const char *const buttons[] = {"SEL", "L3", "R3", "START", "CIMA", "DIR", "BAIXO", "ESQ", "L2", "R2", "L1", "R1", "TRI", "O", "X", "QUAD"};
+    int armed = 0;
+    for (;;) {
+        u8 state[40] = {0};
+        ds34usb_get_capture(state);
+        readPads();
+        int back = gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE;
+        if (!getKeyPressed(back))
+            armed = 1;
+        if (armed && getKeyPressed(back) && getKeyPressed(KEY_START))
+            break;
+        if (getKeyOn(KEY_SELECT)) {
+            maizoTwinRefresh();
+            diaExecuteDialog(diaTwinDiag, -1, 1, NULL);
+        }
+        rmStartFrame();
+        rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
+        maizoDrawBrand();
+        fntRenderString(gTheme->fonts[0], 320, 78, ALIGN_CENTER, 580, 30, "TESTE DE CONTROLES USB", MAIZO_TEXT);
+        for (int port = 0; port < 2; port++) {
+            const u8 *slot = state + port * 20;
+            int x = 22 + port * 310, y = 124;
+            unsigned int pressed = slot[1] ? 0xffffu ^ (slot[2] | (slot[3] << 8)) : 0;
+            char title[64];
+            snprintf(title, sizeof(title), "P%d: %s", port + 1, names[slot[0] < sizeof(names) / sizeof(names[0]) ? slot[0] : 0]);
+            maizoDrawPanel(x, y, 288, 208, 0);
+            fntRenderString(gTheme->fonts[0], x + 12, y + 10, ALIGN_NONE, 265, 27, title, MAIZO_TEXT);
+            for (int b = 0; b < 16; b++) {
+                int bx = x + 10 + (b % 4) * 68, by = y + 44 + (b / 4) * 28;
+                rmDrawRect(bx, by, 63, 24, pressed & (1u << b) ? MAIZO_ACCENT : MAIZO_CARD);
+                fntRenderString(gTheme->fonts[0], bx + 31, by + 3, ALIGN_CENTER, 62, 21, buttons[b], MAIZO_TEXT);
+            }
+            for (int stick = 0; stick < 2; stick++) {
+                int sx = x + 42 + stick * 135, sy = y + 178;
+                rmDrawRect(sx - 13, sy - 13, 27, 27, MAIZO_CARD);
+                if (slot[1])
+                    rmDrawRect(sx - 11 + slot[4 + stick * 2] * 20 / 255, sy - 11 + slot[5 + stick * 2] * 20 / 255, 4, 4, MAIZO_ACCENT);
+            }
+        }
+        fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight - 50, ALIGN_CENTER, 590, 28, "SELECT: detalhes  |  START + VOLTAR: sair", MAIZO_MUTED);
+        rmEndFrame();
+    }
 }
 
 static int forceGlobalPadMacro;
@@ -1605,6 +1647,14 @@ void guiGameShowOSDLanguageConfig(int forceGlobal)
 
         if (result == UIID_BTN_OK)
             break;
+    }
+    if (forceGlobal) {
+        config_set_t *cfg = configGetByType(CONFIG_GAME);
+        if (result == UIID_BTN_OK) {
+            guiGameSaveOSDLanguageGlobalConfig(cfg);
+            saveConfig(CONFIG_GAME, 0);
+        }
+        guiGameLoadOSDLanguageConfig(NULL, cfg);
     }
 }
 static int guiGameSaveOSDLanguageGameConfig(config_set_t *configSet, int result)

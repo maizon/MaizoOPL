@@ -128,6 +128,8 @@ static volatile u8 hid_stream_state[MAX_PADS];
 static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
 static volatile unsigned int hid_stream_generation[MAX_PADS];
 static volatile u8 hid_report_ready[MAX_PADS];
+static u8 captureKeys[MAX_PADS][8];
+static u16 captureButtons[MAX_PADS];
 static u16 hid_pending[MAX_PADS];
 static unsigned char maizoProfiles[MAIZO_PROFILE_SIZE];
 
@@ -422,6 +424,8 @@ static void usb_release(int pad)
     mips_memset(&ds34pad[pad].data[2], 0x7f, 4);
     mips_memset(&ds34pad[pad].data[6], 0, 12);
     hid_report_ready[pad] = 0;
+    captureButtons[pad] = 0;
+    mips_memset(captureKeys[pad], 0, 8);
     CpuResumeIntr(state);
     if (pad == twin_root) {
         int secondary = twin_slots[1];
@@ -607,6 +611,7 @@ static void readReport(u8 *data, int bytes, int pad)
     if (ds34pad[pad].type == MAIZO_KEYBOARD) {
         u16 oldButtons = ds34pad[pad].ds2.nButtonState;
         if (maizoDecodeKeyboard(&ds34pad[pad].ds2, data, bytes, maizoProfiles)) {
+            mips_memcpy(captureKeys[pad], data, 8);
             hid_pending[pad] |= maizohid_press_edges(oldButtons, ds34pad[pad].ds2.nButtonState);
             hid_report_ready[pad] = 1;
             maizo_usb_stage = MAIZO_USB_READY;
@@ -641,6 +646,7 @@ static void readReport(u8 *data, int bytes, int pad)
     if (ds34pad[pad].type == MAIZOHID) {
         u16 oldButtons = ds34pad[pad].ds2.nButtonState;
         if (maizohid_decode(&ds34pad[pad].hid_layout, data, bytes, &ds34pad[pad].ds2)) {
+            captureButtons[pad] = (u16)~ds34pad[pad].ds2.nButtonState;
             maizoRemapHid(&ds34pad[pad].ds2, maizoProfiles);
             maizo_usb_stage = MAIZO_USB_READY;
             hid_report_ready[pad] = 1;
@@ -1206,6 +1212,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34USB_USB_DIAG    10
 #define DS34USB_MENU_STATE  11
 #define DS34USB_PROFILES    12
+#define DS34USB_CAPTURE     13
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)
@@ -1271,6 +1278,27 @@ void *rpc_sf(int cmd, void *data, int size)
                 }
             }
             CpuResumeIntr(oldstate);
+            break;
+        }
+        case DS34USB_CAPTURE: {
+            u8 *out = data;
+            int intr;
+            hid_stream_pump();
+            mips_memset(out, 0, 40);
+            CpuSuspendIntr(&intr);
+            for (int port = 0; port < MAX_PADS; port++) {
+                u8 *slot = out + port * 20;
+                if (ds34pad[port].devId < 0 || !ds34pad[port].enabled ||
+                    !(ds34pad[port].status & DS34USB_STATE_RUNNING))
+                    continue;
+                slot[0] = ds34pad[port].type + 1;
+                slot[1] = hid_report_ready[port];
+                mips_memcpy(slot + 2, ds34pad[port].data, 6);
+                slot[8] = captureButtons[port] & 255;
+                slot[9] = captureButtons[port] >> 8;
+                mips_memcpy(slot + 10, captureKeys[port], 8);
+            }
+            CpuResumeIntr(intr);
             break;
         }
         case DS34USB_MENU_STATE: {

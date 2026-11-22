@@ -134,4 +134,5 @@ int menuIsParentalLockPasswordSet(void);
 // Returns 0 if the game may be started, EACCES otherwise.
 int menuCheckGameParentalLock(config_set_t *configSet);
 
+int menuMaizoSourceAvailable(int source);
 #endif

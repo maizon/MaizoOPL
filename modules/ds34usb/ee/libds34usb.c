@@ -15,6 +15,7 @@
 #define DS34USB_USB_DIAG    10
 #define DS34USB_MENU_STATE  11
 #define DS34USB_PROFILES    12
+#define DS34USB_CAPTURE     13
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 static SifRpcClientData_t ds34usb __attribute__((aligned(64)));
@@ -110,6 +111,11 @@ int ds34usb_get_twin_diag(u8 info[8])
 int ds34usb_set_profiles(const u8 profiles[32])
 {
     return profiles && rpc_transaction(DS34USB_PROFILES, profiles, 32, NULL, 0, 0);
+}
+
+int ds34usb_get_capture(u8 out[40])
+{
+    return out && rpc_transaction(DS34USB_CAPTURE, NULL, 0, out, 40, 1);
 }
 
 int ds34usb_get_menu_state(u8 out[16])

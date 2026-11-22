@@ -11,6 +11,7 @@
 #include "include/renderman.h"
 #include "include/maizo_oled.h"
 #include "include/maizo_ui.h"
+#include "include/maizo_library.h"
 #include "include/menusys.h"
 #include "include/fntsys.h"
 #include "include/ioman.h"
@@ -580,18 +581,67 @@ static void guiShowBlockDeviceConfig(void)
     }
 }
 
+static int guiAdvancedSection;
+static int guiAdvancedRow(int id)
+{
+    switch (id) {
+        case CFG_DEBUG:
+        case CFG_EXITTO:
+            return 0;
+        case CFG_HDDGAMELISTCACHE:
+        case CFG_ENWRITEOP:
+        case CFG_BDMPREFIX:
+        case CFG_ETHPREFIX:
+        case CFG_HDDSPINDOWN:
+        case CFG_BDMCACHE:
+        case CFG_HDDCACHE:
+        case CFG_SMBCACHE:
+            return 1;
+        case CFG_PS2LOGO:
+        case CFG_LASTPLAYED:
+        case CFG_AUTOSTARTLAST:
+        case CFG_LBL_AUTOSTARTLAST:
+            return 2;
+        default:
+            return 3;
+    }
+}
+
+static void guiAdvancedRows(void)
+{
+    struct UIItem *row = diaConfig;
+    while (row->type != UI_TERMINATOR) {
+        struct UIItem *end = row;
+        int section = -1, keep = row == diaConfig;
+        while (end->type != UI_TERMINATOR && end->type != UI_BREAK && end->type != UI_SPLITTER) {
+            if (end->type == UI_OK)
+                keep = 1;
+            else if (end->type >= UI_OK)
+                section = guiAdvancedRow(end->id);
+            end++;
+        }
+        keep |= section == guiAdvancedSection;
+        for (struct UIItem *it = row; it < end; it++)
+            it->visible = keep;
+        if (end->type == UI_TERMINATOR)
+            break;
+        end->visible = keep;
+        row = end + 1;
+    }
+}
+
 static int guiUpdater(int modified)
 {
     int showAutoStartLast;
 
     if (modified) {
         diaGetInt(diaConfig, CFG_LASTPLAYED, &showAutoStartLast);
-        diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast);
-        diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast);
+        diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast && (thmGetGuiValue() != 0 || guiAdvancedSection == 2));
+        diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast && (thmGetGuiValue() != 0 || guiAdvancedSection == 2));
 
         int bdmMode;
         diaGetInt(diaConfig, CFG_BDMMODE, &bdmMode);
-        diaSetVisible(diaConfig, BLOCKDEVICE_BUTTON, bdmMode);
+        diaSetVisible(diaConfig, BLOCKDEVICE_BUTTON, bdmMode && thmGetGuiValue() != 0);
     }
     return 0;
 }
@@ -673,7 +723,13 @@ static void guiShowConfigWithFocus(int focusId)
     diaSetInt(diaConfig, CFG_APPMODE, gAPPStartMode);
     diaSetInt(diaConfig, CFG_PS1MODE, gPS1StartMode);
 
+    if (thmGetGuiValue() == 0) {
+        guiAdvancedRows();
+        guiUpdater(1);
+    }
     int ret = diaExecuteDialog(diaConfig, focusId, 1, &guiUpdater);
+    for (struct UIItem *it = diaConfig; it->type != UI_TERMINATOR; it++)
+        it->visible = 1;
     if (ret) {
         diaGetInt(diaConfig, CFG_DEBUG, &gEnableDebug);
         diaGetInt(diaConfig, CFG_PS2LOGO, &gPS2Logo);
@@ -701,6 +757,7 @@ static void guiShowConfigWithFocus(int focusId)
             guiShowBlockDeviceConfig();
 
         applyConfig(-1, -1, 0);
+        saveConfig(CONFIG_OPL, 0);
         menuReinitMainMenu();
     }
 }
@@ -709,101 +766,141 @@ static int curTheme = -1;
 
 void guiShowConfig(void)
 {
+    guiAdvancedSection = 0;
+    guiShowConfigWithFocus(-1);
+}
+
+void guiShowStoragePerformance(void)
+{
+    guiAdvancedSection = 1;
+    guiShowConfigWithFocus(-1);
+}
+
+void guiShowGamePreferences(void)
+{
+    guiAdvancedSection = 2;
     guiShowConfigWithFocus(-1);
 }
 
 /* One screen for sources and startup, backed by real OPL settings. */
-void guiShowStorageConfig(void)
+static void guiConfigureSource(int source, const char *name)
 {
-    const char *modes[] = {"Desativado", "Manual", "Automático", NULL};
-    const char *home[] = {"Todos", "PS2", "PS1", "Aplicativos", "Favoritos", NULL};
+    const char *modes[] = {"Desativado", "Manual (SELECT)", "Automático", NULL};
+    const char *hddFormats[] = {"APA", "GPT / MBR", NULL};
     config_set_t *cfg = configGetByType(CONFIG_OPL);
-    int usb = 1, initial = 0;
-    int previous = gEnableBdmHDD;
+    int mask = 255, usb = 1, visible, startup, format = gEnableBdmHDD;
+    int oldBdm = gBDMStartMode, oldFormat = gEnableBdmHDD;
+    int bdm = source == MAIZO_SOURCE_USB || source == MAIZO_SOURCE_MX4SIO || source == MAIZO_SOURCE_ILINK || (source == MAIZO_SOURCE_HDD && format);
     struct UIItem options[] = {
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"FONTES DE JOGOS / TELA INICIAL", -1}}},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {name, -1}}},
         {UI_SPLITTER},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Dispositivos USB, MX4SIO e iLink", -1}}},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Mostrar na tela inicial", -1}}},
         {UI_SPACER},
-        {UI_ENUM, 301, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
+        {UI_BOOL, 301, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
         {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Mostrar jogos USB", -1}}},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Inicialização", -1}}},
         {UI_SPACER},
-        {UI_BOOL, 302, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+        {UI_ENUM, 302, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
         {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MX4SIO (cartão SD)", -1}}},
+        {UI_LABEL, 303, 1, 1, -1, 0, 0, {.label = {"Formato do HDD", -1}}},
         {UI_SPACER},
-        {UI_BOOL, 303, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+        {UI_ENUM, 304, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, hddFormats}}},
         {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"iLink (FireWire)", -1}}},
-        {UI_SPACER},
-        {UI_BOOL, 304, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
-        {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"HDD interno (APA)", -1}}},
-        {UI_SPACER},
-        {UI_ENUM, 305, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
-        {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"HDD interno (GPT/MBR)", -1}}},
-        {UI_SPACER},
-        {UI_BOOL, 306, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
-        {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Jogos em rede (SMB)", -1}}},
-        {UI_SPACER},
-        {UI_ENUM, 307, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
-        {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Aplicativos", -1}}},
-        {UI_SPACER},
-        {UI_ENUM, 308, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
-        {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Jogos de PS1", -1}}},
-        {UI_SPACER},
-        {UI_ENUM, 309, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
-        {UI_BREAK},
-        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Aba ao iniciar", -1}}},
-        {UI_SPACER},
-        {UI_ENUM, 310, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, home}}},
+        {UI_LABEL, 305, 1, 1, -1, 0, 0, {.label = {"USB, MX4SIO e iLink compartilham o driver BDM.", -1}}},
         {UI_BREAK},
         {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar e aplicar", -1}}},
         {UI_TERMINATOR}};
+    configGetInt(cfg, "maizo_source_mask", &mask);
     configGetInt(cfg, "maizo_show_usb", &usb);
-    configGetInt(cfg, "maizo_home_tab", &initial);
-    if (initial < 0 || initial >= 5)
-        initial = 0;
-    diaSetInt(options, 301, gBDMStartMode);
-    diaSetInt(options, 302, usb);
-    diaSetInt(options, 303, gEnableMX4SIO);
-    diaSetInt(options, 304, gEnableILK);
-    diaSetInt(options, 305, gHDDStartMode);
-    diaSetInt(options, 306, gEnableBdmHDD);
-    diaSetInt(options, 307, gETHStartMode);
-    diaSetInt(options, 308, gAPPStartMode);
-    diaSetInt(options, 309, gPS1StartMode);
-    diaSetInt(options, 310, initial);
-    if (!diaExecuteDialog(options, -1, 1, NULL))
+    if (!usb)
+        mask &= ~(1 << MAIZO_SOURCE_USB);
+    visible = !!(mask & (1 << source));
+    startup = bdm ? gBDMStartMode : source == MAIZO_SOURCE_SMB ? gETHStartMode : source == MAIZO_SOURCE_HDD ? gHDDStartMode : source == MAIZO_SOURCE_APP ? gAPPStartMode : gPS1StartMode;
+    if ((source == MAIZO_SOURCE_MX4SIO && !gEnableMX4SIO) || (source == MAIZO_SOURCE_ILINK && !gEnableILK))
+        startup = 0;
+    diaSetInt(options, 301, visible);
+    diaSetInt(options, 302, startup);
+    diaSetInt(options, 304, format);
+    diaSetVisible(options, 303, source == MAIZO_SOURCE_HDD);
+    diaSetVisible(options, 304, source == MAIZO_SOURCE_HDD);
+    diaSetVisible(options, 305, bdm || source == MAIZO_SOURCE_HDD);
+    if (diaExecuteDialog(options, -1, 1, NULL) != UIID_BTN_OK)
         return;
-    diaGetInt(options, 301, &gBDMStartMode);
-    diaGetInt(options, 302, &usb);
-    diaGetInt(options, 303, &gEnableMX4SIO);
-    diaGetInt(options, 304, &gEnableILK);
-    diaGetInt(options, 305, &gHDDStartMode);
-    diaGetInt(options, 306, &gEnableBdmHDD);
-    diaGetInt(options, 307, &gETHStartMode);
-    diaGetInt(options, 308, &gAPPStartMode);
-    diaGetInt(options, 309, &gPS1StartMode);
-    diaGetInt(options, 310, &initial);
-    if (gEnableBdmHDD && gHDDStartMode) {
-        gHDDStartMode = 0;
-        guiMsgBox("HDD GPT/MBR selecionado. O modo APA foi desativado.", 0, NULL);
-    }
-    if (!gBDMStartMode && (gEnableMX4SIO || gEnableILK || gEnableBdmHDD))
-        gBDMStartMode = START_MODE_AUTO;
-    configSetInt(cfg, "maizo_show_usb", !!usb);
-    configSetInt(cfg, "maizo_home_tab", initial);
+    diaGetInt(options, 301, &visible);
+    diaGetInt(options, 302, &startup);
+    diaGetInt(options, 304, &format);
+    if (startup && (source == MAIZO_SOURCE_USB || source == MAIZO_SOURCE_MX4SIO || source == MAIZO_SOURCE_ILINK || (source == MAIZO_SOURCE_HDD && format)))
+        gBDMStartMode = startup;
+    if (source == MAIZO_SOURCE_USB && !startup)
+        visible = 0; /* USB driver kept available for storage/configuration. */
+    if (source == MAIZO_SOURCE_MX4SIO)
+        gEnableMX4SIO = startup != 0;
+    if (source == MAIZO_SOURCE_ILINK)
+        gEnableILK = startup != 0;
+    if (source == MAIZO_SOURCE_HDD) {
+        gEnableBdmHDD = format && startup != 0;
+        gHDDStartMode = format ? 0 : startup;
+    } else if (source == MAIZO_SOURCE_SMB)
+        gETHStartMode = startup;
+    else if (source == MAIZO_SOURCE_APP)
+        gAPPStartMode = startup;
+    else if (source == MAIZO_SOURCE_PS1)
+        gPS1StartMode = startup;
+    if (visible)
+        mask |= 1 << source;
+    else
+        mask &= ~(1 << source);
+    configSetInt(cfg, "maizo_source_mask", mask);
+    configSetInt(cfg, "maizo_show_usb", !!(mask & (1 << MAIZO_SOURCE_USB)));
     applyConfig(-1, -1, 0);
-    saveConfig(CONFIG_OPL, 1);
-    menuReinitMainMenu();
-    if (previous != gEnableBdmHDD)
-        guiMsgBox("Reinicie o OPL se o modo do HDD não mudar imediatamente.", 0, NULL);
+    saveConfig(CONFIG_OPL, 0);
+    if (oldBdm != gBDMStartMode)
+        guiMsgBox("Modo de início compartilhado pelos dispositivos USB/MX4SIO/iLink.", 0, NULL);
+    if (oldFormat != gEnableBdmHDD)
+        guiMsgBox("Se necessário, reinicie o OPL para trocar o formato do HDD.", 0, NULL);
+}
+
+void guiShowStorageConfig(void)
+{
+    static const char *const names[] = {"Todas", "USB", "Rede SMB", "MX4SIO", "HDD", "iLink", "Aplicativos", "PS1"};
+    const char *home[] = {"Todos", "PS2", "PS1", "Aplicativos", "Favoritos", NULL};
+    int result = -1;
+    do {
+        char labels[MAIZO_SOURCE_COUNT][64];
+        struct UIItem options[24] = {{0}};
+        int n = 0, initial = 0;
+        options[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"FONTES DE JOGOS", -1}}};
+        options[n++].type = UI_SPLITTER;
+        for (int source = 1; source < MAIZO_SOURCE_COUNT; source++) {
+            int enabled = source == MAIZO_SOURCE_USB ? gBDMStartMode : source == MAIZO_SOURCE_MX4SIO ? gEnableMX4SIO : source == MAIZO_SOURCE_ILINK ? gEnableILK : source == MAIZO_SOURCE_HDD ? (gHDDStartMode || gEnableBdmHDD) : source == MAIZO_SOURCE_SMB ? gETHStartMode : source == MAIZO_SOURCE_APP ? gAPPStartMode : gPS1StartMode;
+            snprintf(labels[source], sizeof(labels[source]), "%s - %s", names[source],
+                     !enabled ? "Desativado" : menuMaizoSourceAvailable(source) ? "Disponível" : "Aguardando");
+            options[n++] = (struct UIItem) {UI_BUTTON, 400 + source, 1, 1, -1, 0, 0, {.label = {labels[source], -1}}};
+            options[n++].type = UI_BREAK;
+        }
+        options[n++] = (struct UIItem) {UI_BUTTON, 420, 1, 1, -1, 0, 0, {.label = {"Aba inicial", -1}}};
+        options[n++].type = UI_BREAK;
+        options[n++].type = UI_TERMINATOR;
+        result = diaExecuteDialog(options, result, 1, NULL);
+        if (result > 400 && result < 400 + MAIZO_SOURCE_COUNT)
+            guiConfigureSource(result - 400, names[result - 400]);
+        else if (result == 420) {
+            struct UIItem homeDialog[] = {
+                {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"ABA INICIAL", -1}}},
+                {UI_SPLITTER},
+                {UI_ENUM, 421, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, home}}},
+                {UI_BREAK},
+                {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
+                {UI_TERMINATOR}};
+            configGetInt(configGetByType(CONFIG_OPL), "maizo_home_tab", &initial);
+            diaSetInt(homeDialog, 421, initial >= 0 && initial < 5 ? initial : 0);
+            if (diaExecuteDialog(homeDialog, -1, 1, NULL) == UIID_BTN_OK) {
+                diaGetInt(homeDialog, 421, &initial);
+                configSetInt(configGetByType(CONFIG_OPL), "maizo_home_tab", initial);
+                saveConfig(CONFIG_OPL, 0);
+            }
+        }
+    } while (result >= 401 && result <= 420);
 }
 
 void guiShowPS1Config(void)
@@ -931,11 +1028,15 @@ void guiShowUIConfig(void)
         , NULL};
     // clang-format on
     int previousVMode;
-    int previousTheme;
+    int previousTheme, previousX, previousY, previousOverscan, previousWide;
 
 reselect_video_mode:
     previousVMode = gVMode;
     previousTheme = thmGetGuiValue();
+    previousX = gXOff;
+    previousY = gYOff;
+    previousOverscan = gOverscan;
+    previousWide = gWideScreen;
     diaSetEnum(diaUIConfig, UICFG_THEME, (const char **)thmGetGuiList());
     diaSetEnum(diaUIConfig, UICFG_LANG, (const char **)lngGetGuiList());
     diaSetEnum(diaUIConfig, UICFG_VMODE, vmodeNames);
@@ -988,6 +1089,13 @@ reselect_video_mode:
             bgmStart();
     }
 
+    if (!ret) {
+        gXOff = previousX;
+        gYOff = previousY;
+        gOverscan = previousOverscan;
+        gWideScreen = previousWide;
+        applyConfig(-1, -1, 1);
+    }
     if (previousVMode != gVMode) {
         if (guiConfirmVideoMode() == 0) {
             // Restore previous video mode, without changing the theme & language settings.
@@ -996,6 +1104,8 @@ reselect_video_mode:
             goto reselect_video_mode;
         }
     }
+    if (ret)
+        saveConfig(CONFIG_OPL, 0);
 }
 
 void guiShowVideoConfig(void)
@@ -1116,6 +1226,7 @@ void guiShowNetConfig(void)
             gNetworkStartup = ERROR_ETH_SMB_LOGON;
 
         applyConfig(-1, -1, 0);
+        saveConfig(CONFIG_NETWORK | CONFIG_OPL, 0);
     }
 }
 
@@ -1148,6 +1259,7 @@ void guiShowParentalLockConfig(void)
         }
 
         menuSetParentalLockCheckState(1);
+        saveConfig(CONFIG_OPL, 0);
     }
 }
 
@@ -1166,15 +1278,6 @@ static void guiSetAudioSettingsState(void)
         bgmStart();
 }
 
-static int guiAudioUpdater(int modified)
-{
-    if (modified) {
-        guiSetAudioSettingsState();
-    }
-
-    return 0;
-}
-
 void guiShowAudioConfig(void)
 {
     diaSetInt(diaAudioConfig, CFG_SFX, gEnableSFX);
@@ -1185,10 +1288,77 @@ void guiShowAudioConfig(void)
     diaSetInt(diaAudioConfig, CFG_BGM_VOLUME, gBGMVolume);
     diaSetString(diaAudioConfig, CFG_DEFAULT_BGM_PATH, gDefaultBGMPath);
 
-    diaExecuteDialog(diaAudioConfig, -1, 1, guiAudioUpdater);
+    if (diaExecuteDialog(diaAudioConfig, -1, 1, NULL) == UIID_BTN_OK) {
+        guiSetAudioSettingsState();
+        if (!gEnableBGM && isBgmPlaying())
+            bgmStop();
+        saveConfig(CONFIG_OPL, 0);
+    }
 }
 
 #ifdef PADEMU
+/* Capture the physical source before remapping, without changing the
+ * active PadEmu profile or consuming the menu's pending press edges. */
+static int maizoCaptureInput(int keyboard, const char *target)
+{
+    int neutral = 0;
+    unsigned int frames = 0;
+    for (; frames < 900; frames++) {
+        u8 snapshot[40] = {0};
+        int value = -1, ready = 0, pressed = 0;
+        if (ds34usb_get_capture(snapshot)) {
+            for (int port = 0; port < 2; port++) {
+                const u8 *slot = snapshot + port * 20;
+                if (!slot[1] || slot[0] != (keyboard ? 8 : 5))
+                    continue;
+                ready = 1;
+                if (keyboard) {
+                    if (slot[10]) {
+                        pressed = 1;
+                        for (int b = 0; b < 8; b++)
+                            if (slot[10] == (1 << b))
+                                value = 224 + b;
+                    }
+                    for (int b = 12; b < 18; b++)
+                        if (slot[b]) {
+                            if (pressed)
+                                value = -1;
+                            else
+                                value = slot[b];
+                            pressed = 1;
+                        }
+                } else {
+                    unsigned int mask = slot[8] | (slot[9] << 8);
+                    if (mask) {
+                        pressed = 1;
+                        for (int b = 0; b < 16; b++)
+                            if (mask == (1u << b))
+                                value = b;
+                    }
+                }
+            }
+        }
+        if (ready && !pressed)
+            neutral = 1;
+        if (neutral && value >= 0)
+            return value;
+        readPads();
+        /* The button being mapped may also be BACK; reserve START+SELECT
+         * for explicit cancellation. */
+        if (getKeyPressed(KEY_START) && getKeyPressed(KEY_SELECT))
+            return -1;
+        rmStartFrame();
+        rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
+        maizoDrawBrand();
+        fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2 - 45, ALIGN_CENTER, 560, 32, target, MAIZO_TEXT);
+        fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2, ALIGN_CENTER, 560, 29,
+                        !ready ? "Conecte o dispositivo e pressione uma tecla." : !neutral ? "Solte todos os botões." : "Pressione o botão ou tecla desejada.", MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2 + 42, ALIGN_CENTER, 560, 25, "START + SELECT cancela", MAIZO_MUTED);
+        rmEndFrame();
+    }
+    return -1;
+}
+
 static void maizoShowMapping(void)
 {
     static const char *padNames[] = {"Select", "L3", "R3", "Start", "Cima", "Direita", "Baixo", "Esquerda", "L2", "R2", "L1", "R1", "Triangulo", "Circulo", "X", "Quadrado", "Desativado", NULL};
@@ -1206,7 +1376,7 @@ static void maizoShowMapping(void)
     while ((result = diaExecuteDialog(menu, -1, 1, NULL)) == 7101 || result == 7102) {
         int keyboard = result == 7102, offset = keyboard ? 16 : 0;
         unsigned char profiles[MAIZO_PROFILE_SIZE];
-        struct UIItem ui[16 * 4 + 7] = {{0}};
+        struct UIItem ui[16 * 6 + 7] = {{0}};
         int i, n = 0, selected, j;
         maizoLoadInputProfiles(profiles);
         ui[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {keyboard ? "Teclado > DualShock" : "USB HID > DualShock", -1}}};
@@ -1223,14 +1393,34 @@ static void maizoShowMapping(void)
             ui[n++].type = UI_SPACER;
             ui[n++] = (struct UIItem) {UI_ENUM, 7200 + i, 1, 1, -1, 0, 0, {.intvalue = {selected, selected, 0, 0, keyboard ? keyNames : padNames}}};
             ui[n++].type = UI_BREAK;
+            ui[n++] = (struct UIItem) {UI_BUTTON, 7400 + i, 1, 1, -1, 0, 0, {.label = {"Capturar botão / tecla", -1}}};
+            ui[n++].type = UI_BREAK;
         }
         ui[n++] = (struct UIItem) {UI_BUTTON, 7300, 1, 1, -1, 0, 0, {.label = {"Restaurar padrao", -1}}};
         ui[n++].type = UI_BREAK;
         ui[n++] = (struct UIItem) {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar", -1}}};
         ui[n++].type = UI_TERMINATOR;
+        result = -1;
         do {
-            result = diaExecuteDialog(ui, -1, 1, NULL);
-            if (result == 7300) {
+            result = diaExecuteDialog(ui, result, 1, NULL);
+            if (result >= 7400 && result < 7416) {
+                i = result - 7400;
+                int captured = maizoCaptureInput(keyboard, padNames[i]);
+                if (captured >= 0) {
+                    if (keyboard) {
+                        selected = -1;
+                        for (j = 0; j < (int)sizeof(keyCodes); j++)
+                            if (keyCodes[j] == captured)
+                                selected = j;
+                        if (selected < 0)
+                            guiMsgBox("Tecla fora da lista de mapeamento.", 0, NULL);
+                    } else
+                        selected = captured;
+                    if (selected >= 0)
+                        diaSetInt(ui, 7200 + i, selected);
+                }
+                readPads();
+            } else if (result == 7300) {
                 for (i = 0; i < 16; i++) {
                     selected = i;
                     if (keyboard)
@@ -1240,7 +1430,7 @@ static void maizoShowMapping(void)
                     diaSetInt(ui, 7200 + i, selected);
                 }
             }
-        } while (result == 7300);
+        } while (result == 7300 || (result >= 7400 && result < 7416));
         if (result == UIID_BTN_OK) {
             char key[24];
             config_set_t *config = configGetByType(CONFIG_OPL);
@@ -1259,6 +1449,13 @@ static void maizoShowMapping(void)
     }
 }
 #endif
+
+void guiShowInputMapping(void)
+{
+#ifdef PADEMU
+    maizoShowMapping();
+#endif
+}
 
 void guiShowControllerConfig(void)
 {
@@ -1279,6 +1476,10 @@ void guiShowControllerConfig(void)
     diaSetInt(diaControllerConfig, CFG_XSENSITIVITY, gXSensitivity);
     diaSetInt(diaControllerConfig, CFG_YSENSITIVITY, gYSensitivity);
 
+#ifdef PADEMU
+    diaSetVisible(diaControllerConfig, PADEMU_GLOBAL_BUTTON, thmGetGuiValue() != 0);
+    diaSetVisible(diaControllerConfig, MAIZO_MAPPING_BUTTON, thmGetGuiValue() != 0);
+#endif
     int result = diaExecuteDialog(diaControllerConfig, -1, 1, NULL);
     if (result) {
         diaGetInt(diaControllerConfig, UICFG_SCROLL, &gScrollSpeed);
@@ -1297,6 +1498,7 @@ void guiShowControllerConfig(void)
         }
 #endif
         applyConfig(-1, -1, 1);
+        saveConfig(CONFIG_OPL, 0);
     }
 }
 

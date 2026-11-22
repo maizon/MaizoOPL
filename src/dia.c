@@ -773,7 +773,7 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
             caption = diaGetLocalisedText(begin->label.text,
                                           begin->label.stringId);
         else if (begin->type == UI_OK)
-            caption = _l(_STR_OK);
+            caption = diaGetLocalisedText(begin->label.text, begin->label.stringId);
 
         if (selected)
             *focusY = y + scroll + 12;
@@ -818,7 +818,7 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                 hidden[0] = '\0';
                 switch (p->type) {
                     case UI_BOOL:
-                        value = p->intvalue.current ? "ON" : "OFF";
+                        value = p->intvalue.current ? _l(_STR_ON) : _l(_STR_OFF);
                         break;
                     case UI_ENUM:
                         if (p->intvalue.enumvalues)
@@ -941,8 +941,11 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
                    screenWidth, 65, MAIZO_SURFACE);
         rmDrawRect(0, gTheme->usedHeight - 65,
                    screenWidth, 1, MAIZO_DIVIDER);
+        if (cur && cur->hintId >= 0)
+            fntRenderString(gTheme->fonts[0], 38, gTheme->usedHeight - 60, ALIGN_NONE,
+                            screenWidth - 70, 20, _l(cur->hintId), MAIZO_MUTED);
         fntRenderString(gTheme->fonts[0], 38,
-                        gTheme->usedHeight - 42, ALIGN_NONE,
+                        gTheme->usedHeight - 35, ALIGN_NONE,
                         screenWidth - 65, 28,
                         gSelectButton == KEY_CIRCLE ?
                             "O SELECIONAR     X VOLTAR   |   MAIZO SUPREME" :
@@ -1211,12 +1214,12 @@ int diaExecuteDialog(struct UIItem *ui, int uiId, short inMenu, int (*updater)(i
     if (uiId != -1)
         cur = diaFindByID(ui, uiId);
 
-    if (!cur)
+    if (!cur || !diaIsControllable(cur))
         cur = diaGetFirstControl(ui);
 
     // what? no controllable item? Exit!
-    if (cur == ui)
-        return -1;
+    if (!diaIsControllable(cur))
+        return UIID_BTN_CANCEL;
 
     int haveFocus = 0, modified;
 
@@ -1248,13 +1251,36 @@ int diaExecuteDialog(struct UIItem *ui, int uiId, short inMenu, int (*updater)(i
             modified = 0;
             struct UIItem *newf = cur;
 
-            if (getKey(KEY_LEFT)) {
+            int direct = 0;
+            if (thmGetGuiValue() == 0 && (cur->type == UI_ENUM || cur->type == UI_BOOL || cur->type == UI_INT)) {
+                struct UIItem *first = cur, *last = cur;
+                int controls = 0;
+                while (first > ui && (first - 1)->type != UI_BREAK && (first - 1)->type != UI_SPLITTER)
+                    first--;
+                while (last->type != UI_TERMINATOR && last->type != UI_BREAK && last->type != UI_SPLITTER)
+                    last++;
+                for (struct UIItem *it = first; it < last; it++)
+                    controls += diaIsControllable(it) != 0;
+                direct = controls == 1;
+            }
+            if (direct && (getKey(KEY_LEFT) || getKey(KEY_RIGHT))) {
+                int step = getKey(KEY_RIGHT) ? 1 : -1;
+                int n = cur->intvalue.current + step;
+                if (cur->type == UI_BOOL)
+                    cur->intvalue.current = !cur->intvalue.current;
+                else if (cur->type == UI_INT && n >= cur->intvalue.min && n <= cur->intvalue.max)
+                    cur->intvalue.current = n;
+                else if (cur->type == UI_ENUM && n >= 0 && cur->intvalue.enumvalues && cur->intvalue.enumvalues[n])
+                    cur->intvalue.current = n;
+                modified = 1;
+                sfxPlay(SFX_CURSOR);
+            } else if (getKey(KEY_LEFT)) {
                 newf = diaGetPrevControl(cur, ui);
                 if (newf == cur)
                     newf = diaGetLastControl(ui);
             }
 
-            if (getKey(KEY_RIGHT)) {
+            if (!direct && getKey(KEY_RIGHT)) {
                 newf = diaGetNextControl(cur, cur);
                 if (newf == cur)
                     newf = diaGetFirstControl(ui);
@@ -1304,8 +1330,12 @@ int diaExecuteDialog(struct UIItem *ui, int uiId, short inMenu, int (*updater)(i
 
         if (updater) {
             int updResult = updater(modified);
-            if (updResult)
+            if (updResult) {
+                diaRestoreScrollSpeed();
                 return updResult;
+            }
+            if (!diaIsControllable(cur))
+                cur = diaGetFirstControl(ui);
         }
     }
 }
@@ -1363,6 +1393,13 @@ int diaSetInt(struct UIItem *ui, int id, int value)
         return 0;
 
     if ((item->type == UI_INT) || (item->type == UI_BOOL) || (item->type == UI_ENUM)) {
+        if (item->type == UI_ENUM && item->intvalue.enumvalues) {
+            int count = 0;
+            while (item->intvalue.enumvalues[count])
+                count++;
+            if (value < 0 || value >= count)
+                value = 0;
+        }
         item->intvalue.def = value;
         item->intvalue.current = value;
         return 1;

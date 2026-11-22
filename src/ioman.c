@@ -214,17 +214,16 @@ int ioPutRequest(int type, void *data)
 
     // We don't have to lock the tip of the queue...
     // If it exists, it won't be touched, if it does not exist, it is not being processed
-    struct io_request_t *req = gReqEnd;
-
+    struct io_request_t *req = malloc(sizeof(*req));
     if (!req) {
-        gReqList = (struct io_request_t *)malloc(sizeof(struct io_request_t));
-        req = gReqList;
-        gReqEnd = gReqList;
-    } else {
-        req->next = (struct io_request_t *)malloc(sizeof(struct io_request_t));
-        req = req->next;
-        gReqEnd = req;
+        SignalSema(gEndSemaId);
+        return IO_ERR_IO_BLOCKED;
     }
+    if (!gReqEnd)
+        gReqList = req;
+    else
+        gReqEnd->next = req;
+    gReqEnd = req;
 
     req->next = NULL;
     req->type = type;

@@ -545,7 +545,7 @@ static void initStaticImage(const char *themePath, config_set_t *themeConfig, th
 
 static GSTEXTURE *getGameImageTexture(image_cache_t *cache, void *support, struct submenu_item *item)
 {
-    if (gEnableArt) {
+    if (gEnableArt && cache && item && item->cache_id && item->cache_uid) {
         item_list_t *list = (item_list_t *)support;
         char *startup = list->itemGetStartup(list, item->id);
         return cacheGetTexture(cache, list, &item->cache_id[cache->userId], &item->cache_uid[cache->userId], startup);
@@ -630,7 +630,8 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
      * slots; nine nearby entries max avoid eviction-thrashing. Bypasses
      * the legacy list->delay which produced black neighbours while moving. */
     if (covers && gEnableArt) {
-        for (i = 0; i < 9; i++) {
+        int prefetchCount = guiInactiveFrames >= 5 ? 9 : 5;
+        for (i = 0; i < prefetchCount; i++) {
             int offset = requestOrder[i];
             maizo_entry_t *entry = menuDashboardSlot(offset);
             if (entry) {
@@ -639,7 +640,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                 item_list_t *support = owner->item->userdata;
                 const char *startup = support->itemGetStartup(support, child->item.id);
                 GSTEXTURE *tex = NULL;
-                if (startup)
+                if (startup && child->item.cache_id && child->item.cache_uid)
                     tex = cachePrefetchTexture(art->cache, support,
                                                &child->item.cache_id[art->cache->userId],
                                                &child->item.cache_uid[art->cache->userId],
