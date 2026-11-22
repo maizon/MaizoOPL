@@ -162,6 +162,31 @@ if __name__ == '__main__':
     if args.make_header:
         make_header(base_obj, args.output_file)
     elif args.make_source:
+        if args.translation is not None:
+            translations = yaml.safe_load(args.translation)['translations']
+            translations.update({
+                'LOCALE': 'Português (Brasil)', 'MENU': 'Menu', 'ON': 'Ligado', 'OFF': 'Desligado',
+                'BDM_GAMES': 'Jogos USB / MX4SIO', 'NET_GAMES': 'Jogos em rede (SMB)',
+                'MANUAL': 'Manual', 'IP_ADDRESS_TYPE_DHCP': 'DHCP', 'ADDR_TYPE_IP': 'IP',
+                'ADDR_TYPE_NETBIOS': 'NetBIOS', 'ENTER': 'Enter',
+                'VMC_SLOT1': 'Cartão virtual 1', 'VMC_SLOT2': 'Cartão virtual 2',
+                'OVERSCAN': 'Margem da tela', 'ENABLECHEAT': 'Trapaças PS2RD',
+                'DS34USB_MODE': 'Controle USB / teclado', 'GLOBAL_SETTINGS': 'Global',
+                'PADMACRO_ENABLE': 'Macros de controle',
+                'HINT_OSD_SETTINGS_LNG': 'Força um idioma personalizado.',
+                'OSD_SETTINGS_TVASPECT': 'Formato da tela', 'FULL_SCREEN': 'Tela cheia',
+                'OSD_SETTINGS_VMODE': 'Modo de vídeo', 'SYSTEM_DEFAULT': 'Padrão do sistema',
+                'HIGH': 'Alta', 'LOW': 'Baixa', 'XSENSITIVITY': 'Sensibilidade horizontal',
+                'YSENSITIVITY': 'Sensibilidade vertical', 'FILE_COUNT': 'Arquivos encontrados: %i',
+                'CHEAT_SELECTION': 'Selecionar trapaças', 'HDD_HINT': 'Somente um HDD interno: APA ou GPT.',
+                'PARENLOCK_GAME': 'Bloqueio parental', 'PARENLOCK_GAME_HINT': 'Exige senha para iniciar este jogo.',
+                'PARENLOCK_GAME_NO_PASSWORD': 'Defina uma senha para bloquear este jogo.',
+                'PS1_GAMES': 'Jogos de PS1', 'PS1MODE': 'Iniciar jogos de PS1',
+            })
+            for entry in base_obj['gui_strings']:
+                translated = translations.get(entry['label'])
+                if isinstance(translated, str):
+                    entry['string'] = translated
         make_source(base_obj, args.output_file)
     elif args.make_template_yml:
         make_template_yml(base_obj, args.output_file)

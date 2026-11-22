@@ -818,8 +818,8 @@ $(ENGLISH_TEMPLATE_YML): $(BASE_LANGUAGE) $(LANG_COMPILER)
 $(ENGLISH_LNG): $(ENGLISH_TEMPLATE_YML) $(BASE_LANGUAGE) $(LANG_COMPILER)
 	python3 $(LANG_COMPILER) --make_lng --base $(BASE_LANGUAGE) --translation $< $@
 
-$(INTERNAL_LANGUAGE_C): $(BASE_LANGUAGE) $(LANG_COMPILER)
-	python3 $(LANG_COMPILER) --make_source --base $< $@
+$(INTERNAL_LANGUAGE_C): $(BASE_LANGUAGE) $(LANG_COMPILER) $(LNG_SRC_DIR)Portuguese_BR.yml
+	python3 $(LANG_COMPILER) --make_source --base $< --translation $(LNG_SRC_DIR)Portuguese_BR.yml $@
 
 $(INTERNAL_LANGUAGE_H): $(BASE_LANGUAGE) $(LANG_COMPILER)
 	python3 $(LANG_COMPILER) --make_header --base $< $@

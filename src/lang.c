@@ -22,7 +22,7 @@ char *_l(unsigned int id)
 
 static void lngFreeFromFile(char **lang_strs)
 {
-    if (guiLangID == 0)
+    if (lang_strs == internalEnglish)
         return;
 
     int strId = 0;
@@ -203,6 +203,7 @@ int lngSetGuiValue(int langID)
                     return 1;
                 }
             }
+            lngFreeFromFile(lang_strs);
             lang_strs = internalEnglish;
             guiLangID = 0;
             // lang switched back to internalEnglish, reload default font
@@ -221,7 +222,9 @@ int lngGetGuiValue(void)
 
 int lngFindGuiID(const char *lang)
 {
-    if (lang) {
+    if (lang && strcasecmp(lang, "English (internal)") && strcasecmp(lang, "English") &&
+        strcasecmp(lang, "Portuguese_BR") && strcasecmp(lang, "Portuguese Brazil") &&
+        strcmp(lang, internalEnglish[0])) {
         int i = 0;
         for (; i < nLanguages; i++) {
             if (strcasecmp(languages[i].name, lang) == 0)

@@ -104,7 +104,7 @@ struct UIItem diaNetConfig[] = {
 
     {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {NULL, _STR_PORT}}},
     {UI_SPACER},
-    {UI_INT, NETCFG_SHARE_PORT, 1, 1, -1, 0, 0, {.intvalue = {445, 445, 0, 65353}}},
+    {UI_INT, NETCFG_SHARE_PORT, 1, 1, -1, 0, 0, {.intvalue = {445, 445, 0, 65535}}},
     {UI_BREAK},
 
     {UI_BREAK},
@@ -253,15 +253,15 @@ struct UIItem diaConfig[] = {
     {UI_ENUM, CFG_DEFDEVICE, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
     {UI_BREAK},
 
-    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"BDM Cache", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"Cache USB / MX4SIO", -1}}},
     {UI_SPACER},
     {UI_INT, CFG_BDMCACHE, 1, 1, -1, 0, 0, {.intvalue = {16, 8, 0, 32, NULL}}},
     {UI_BREAK},
-    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"HDD Cache", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"Cache HDD", -1}}},
     {UI_SPACER},
     {UI_INT, CFG_HDDCACHE, 1, 1, -1, 0, 0, {.intvalue = {8, 0, 0, 32, NULL}}},
     {UI_BREAK},
-    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"SMB Cache", -1}}},
+    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"Cache rede SMB", -1}}},
     {UI_SPACER},
     {UI_INT, CFG_SMBCACHE, 1, 1, -1, 0, 0, {.intvalue = {16, 4, 0, 32, NULL}}},
     {UI_BREAK},
@@ -1085,8 +1085,6 @@ struct UIItem diaControllerConfig[] = {
     {UI_BUTTON, PADEMU_GLOBAL_BUTTON, 1, 1, -1, 0, 0, {.label = {NULL, _STR_PADEMUCONFIG}}},
     {UI_BREAK},
     {UI_BUTTON, MAIZO_MAPPING_BUTTON, 1, 1, -1, 0, 0, {.label = {"Mapeamento de botoes", -1}}},
-    {UI_BREAK},
-    {UI_BUTTON, PADMACRO_GLOBAL_BUTTON, 1, 1, -1, 0, 0, {.label = {NULL, _STR_PADMACROCONFIG}}},
     {UI_BREAK},
 #endif
     // buttons

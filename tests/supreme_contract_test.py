@@ -51,7 +51,7 @@ required_callbacks = (
     "guiShowParentalLockConfig", "guiShowSupremeDiagnostics",
     "guiGameShowCompatConfig", "guiGameShowGSConfig",
     "guiGameShowCheatConfig", "guiGameShowVMCMenu",
-    "guiGameShowPadMacroConfig", "guiGameShowOSDLanguageConfig",
+    "guiGameShowOSDLanguageConfig",
     "guiGameSaveConfig", "guiGameTestSettings", "menuDeleteGame",
     "menuRenameGame", "menuCheckParentalLock",
 )
@@ -139,3 +139,12 @@ assert "maizoReadUsbSnapshot" in pad_input
 assert "rpc_transaction" in read("modules/ds34usb/ee/libds34usb.c")
 assert '"CREDITOS"' in menu
 assert "Instagram.com/Maicon_Nasciment0" in gui
+
+# Native card backend, direct source preferences, embedded Brazilian locale.
+assert "mcOpen(" in fm and "mcGetDir(" in fm and "mcSync(" in fm
+assert "mcFlush(" in fm and "fm_paste(pane)" in fm
+assert "maizo_show_usb" in gui and "maizo_show_usb" in menu
+assert "maizo_home_tab" in gui and "maizo_home_tab" in menu
+assert "GAME_PADMACRO_SETTINGS, _STR_PADMACROCONFIG" not in menu
+assert "config->PadMacroSettings = 0" in read("src/system.c")
+assert "Portuguese_BR.yml" in read("Makefile")

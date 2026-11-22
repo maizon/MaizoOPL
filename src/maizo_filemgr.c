@@ -17,6 +17,8 @@
 #include "include/renderman.h"
 #define NEWLIB_PORT_AWARE
 #include <fileXio_rpc.h>
+#include <libmc.h>
+#include <malloc.h>
 #include <elf-loader.h>
 #include <strings.h>
 
@@ -51,7 +53,7 @@ static struct
 static int screenWidth;
 
 static const char *const fm_devices[] = {
-    "mass0:/", "mass1:/", "mc0:/", "mc1:/"};
+    "mass0:/", "mass1:/", "mass2:/", "mass3:/", "mass4:/", "mc0:/", "mc1:/"};
 
 static void fm_status(const char *message)
 {
@@ -63,10 +65,11 @@ static int fm_join(char *out, size_t len, const char *base,
 {
     size_t n = strlen(base);
     char slash = !strncmp(base, "smb", 3) ? '\\' : '/';
-    if (!name || !name[0] || strstr(name, "..") ||
+    if (!name || !name[0] || !strcmp(name, ".") || !strcmp(name, "..") ||
         strchr(name, ':') || strchr(name, '/') || strchr(name, '\\'))
         return 0;
-    if (n + strlen(name) + 2 > len)
+    if ((!strncmp(base, "mc", 2) && (strlen(name) > 31 || strchr(name, '*') || strchr(name, '?'))) ||
+        n + strlen(name) + 2 > len)
         return 0;
     snprintf(out, len, "%s%s%s", base,
              n && base[n - 1] != slash && base[n - 1] != ':' ?
@@ -100,28 +103,80 @@ static int fm_compare(const void *a, const void *b)
     return strcasecmp(left->name, right->name);
 }
 
-static int fm_reload(fm_pane_t *pane)
+/* Native memory-card RPC. MCMAN is not a FAT filesystem: extended
+ * fileXio operations and Unix creation flags are not portable to it. */
+static int fm_mc_port(const char *path)
 {
+    return !strncmp(path, "mc0:", 4) ? 0 : !strncmp(path, "mc1:", 4) ? 1 : -1;
+}
+
+static int fm_mc_result(int queued)
+{
+    int result;
+    if (queued < 0)
+        return queued;
+    return mcSync(MC_WAIT, NULL, &result) == 1 ? result : -EIO;
+}
+
+/* Collect a directory before recursion: mcGetDir has a shared cursor. */
+static int fm_list(const char *path, fm_item_t *items, int capacity, int strict)
+{
+    int port = fm_mc_port(path), count = 0;
+    if (port >= 0) {
+        char pattern[FM_PATH];
+        sceMcTblGetDir entries[16];
+        int ret, mode = 0;
+        if (snprintf(pattern, sizeof(pattern), "%s%s*", path + 4,
+                     path[strlen(path) - 1] == '/' ? "" : "/") >= sizeof(pattern))
+            return -ENAMETOOLONG;
+        do {
+            ret = fm_mc_result(mcGetDir(port, 0, pattern, mode, 16, entries));
+            if (ret < 0)
+                return ret;
+            for (int i = 0; i < ret; i++) {
+                char name[33];
+                memcpy(name, entries[i].EntryName, 32);
+                name[32] = 0;
+                if (!name[0] || !strcmp(name, ".") || !strcmp(name, ".."))
+                    continue;
+                if (count == capacity)
+                    return strict ? -EOVERFLOW : count;
+                snprintf(items[count].name, sizeof(items[count].name), "%s", name);
+                items[count].size = entries[i].FileSizeByte;
+                items[count].folder = !!(entries[i].AttrFile & MC_ATTR_SUBDIR);
+                count++;
+            }
+            mode = 1;
+        } while (ret == 16);
+        return count;
+    }
     iox_dirent_t entry;
-    int dd, count = 0, ret;
-    dd = fileXioDopen(pane->path);
-    pane->count = 0;
-    pane->error = dd < 0 ? dd : 0;
+    int dd = fileXioDopen(path), ret;
     if (dd < 0)
-        return -1;
-    /* Bounded to protect EE RAM from folders with thousands of files. */
-    while (count < FM_ITEMS && (ret = fileXioDread(dd, &entry)) > 0) {
-        fm_item_t *dst = &pane->items[count];
-        if (!strcmp(entry.name, ".") || !strcmp(entry.name, "..") ||
-            !entry.name[0])
+        return dd;
+    while ((ret = fileXioDread(dd, &entry)) > 0) {
+        if (!entry.name[0] || !strcmp(entry.name, ".") || !strcmp(entry.name, ".."))
             continue;
-        snprintf(dst->name, sizeof(dst->name), "%s", entry.name);
-        dst->folder = FIO_S_ISDIR(entry.stat.mode) != 0;
-        dst->size = entry.stat.size;
+        if (count == capacity) {
+            fileXioDclose(dd);
+            return strict ? -EOVERFLOW : count;
+        }
+        snprintf(items[count].name, sizeof(items[count].name), "%s", entry.name);
+        items[count].folder = FIO_S_ISDIR(entry.stat.mode) != 0;
+        items[count].size = entry.stat.size;
         count++;
     }
     fileXioDclose(dd);
-    pane->count = count;
+    return ret < 0 ? ret : count;
+}
+
+static int fm_reload(fm_pane_t *pane)
+{
+    int count = fm_list(pane->path, pane->items, FM_ITEMS, 0);
+    pane->count = count < 0 ? 0 : count;
+    pane->error = count < 0 ? count : 0;
+    if (count < 0)
+        return count;
     qsort(pane->items, count, sizeof(fm_item_t), fm_compare);
     if (pane->selection >= count)
         pane->selection = count ? count - 1 : 0;
@@ -172,11 +227,11 @@ static int fm_selected(fm_pane_t *pane, char *full, size_t len)
 
 static void fm_pick_device(fm_pane_t *pane, int forward)
 {
-    const char *roots[6];
+    const char *roots[8];
     char smb[FM_PATH];
-    int idx = 0, size = 4;
+    int idx = 0, size = sizeof(fm_devices) / sizeof(fm_devices[0]);
     item_list_t *eth = ethGetObject(1);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < size; i++)
         roots[i] = fm_devices[i];
     if (gNetworkStartup == 0 && gPCShareName[0] && eth &&
         eth->itemGetPrefix) {
@@ -201,47 +256,104 @@ static void fm_pick_device(fm_pane_t *pane, int forward)
 
 static int fm_exists(const char *path)
 {
+    int port = fm_mc_port(path);
+    if (port >= 0) {
+        sceMcTblGetDir info;
+        return fm_mc_result(mcGetDir(port, 0, path + 4, 0, 1, &info)) > 0;
+    }
     iox_stat_t st;
     return fileXioGetStat(path, &st) >= 0;
 }
 
+static int fm_mkdir(const char *path)
+{
+    int port = fm_mc_port(path);
+    return port >= 0 ? fm_mc_result(mcMkDir(port, 0, path + 4)) : fileXioMkdir(path, 0777);
+}
+
+static int fm_remove(const char *path, int folder)
+{
+    int port = fm_mc_port(path);
+    if (port >= 0)
+        return fm_mc_result(mcDelete(port, 0, path + 4));
+    return folder ? fileXioRmdir(path) : fileXioRemove(path);
+}
+
+static int fm_rename(const char *source, const char *dest)
+{
+    int port = fm_mc_port(source);
+    if (port >= 0) {
+        const char *a = strrchr(source, '/'), *b = strrchr(dest, '/');
+        if (!a || !b || a - source != b - dest || strncmp(source, dest, a - source + 1))
+            return -EXDEV;
+        return fm_mc_result(mcRename(port, 0, source + 4, b + 1));
+    }
+    return fileXioRename(source, dest);
+}
+
+static int fm_open(const char *path, int writing)
+{
+    int port = fm_mc_port(path);
+    if (port >= 0)
+        return fm_mc_result(mcOpen(port, 0, path + 4, writing ? O_WRONLY | O_CREAT : O_RDONLY));
+    return fileXioOpen(path, writing ? O_WRONLY | O_CREAT | O_EXCL : O_RDONLY, 0666);
+}
+
+static int fm_close(int fd, int mc)
+{
+    return mc ? fm_mc_result(mcClose(fd)) : fileXioClose(fd);
+}
+
 static int fm_copy_file(const char *source, const char *dest)
 {
-    int fd = -1, out = -1, got, result = -1;
+    int fd = -1, out = -1, got, result = -EIO;
+    int srcMc = fm_mc_port(source) >= 0, dstMc = fm_mc_port(dest) >= 0;
     unsigned char *buffer;
     if (fm_exists(dest))
-        return -EEXIST; /* Never silently overwrite save files. */
-    buffer = malloc(FM_CHUNK);
+        return -EEXIST;
+    buffer = memalign(64, FM_CHUNK);
     if (!buffer)
         return -ENOMEM;
-    fd = fileXioOpen(source, O_RDONLY, 0);
-    if (fd < 0)
+    fd = fm_open(source, 0);
+    if (fd < 0) {
+        result = fd;
         goto done;
-    out = fileXioOpen(dest, O_WRONLY | O_CREAT | O_EXCL, 0666);
-    if (out < 0)
+    }
+    out = fm_open(dest, 1);
+    if (out < 0) {
+        result = out;
         goto done;
+    }
     for (;;) {
-        got = fileXioRead(fd, buffer, FM_CHUNK);
-        if (got < 0)
+        got = srcMc ? fm_mc_result(mcRead(fd, buffer, FM_CHUNK)) : fileXioRead(fd, buffer, FM_CHUNK);
+        if (got < 0) {
+            result = got;
             break;
-        if (got == 0) {
+        }
+        if (!got) {
             result = 0;
             break;
         }
         for (int off = 0; off < got;) {
-            int sent = fileXioWrite(out, buffer + off, got - off);
-            if (sent <= 0)
+            int sent = dstMc ? fm_mc_result(mcWrite(out, buffer + off, got - off)) : fileXioWrite(out, buffer + off, got - off);
+            if (sent <= 0) {
+                result = sent < 0 ? sent : -EIO;
                 goto done;
+            }
             off += sent;
         }
     }
 done:
-    if (out >= 0)
-        fileXioClose(out);
+    if (out >= 0) {
+        int flush = dstMc && !result ? fm_mc_result(mcFlush(out)) : 0;
+        int closed = fm_close(out, dstMc);
+        if (!result && (flush < 0 || closed < 0))
+            result = flush < 0 ? flush : closed;
+    }
     if (fd >= 0)
-        fileXioClose(fd);
+        fm_close(fd, srcMc);
     if (result && out >= 0)
-        fileXioRemove(dest); /* Drop a partial copy, keep source. */
+        fm_remove(dest, 0);
     free(buffer);
     return result;
 }
@@ -249,8 +361,8 @@ done:
 static int fm_copy_tree(const char *source, const char *dest,
                         int folder, int depth)
 {
-    iox_dirent_t item;
-    int dd, ret = 0;
+    int ret, count;
+    fm_item_t *items;
     char srcChild[FM_PATH], dstChild[FM_PATH];
     if (depth > FM_DEPTH)
         return -ELOOP;
@@ -260,53 +372,55 @@ static int fm_copy_tree(const char *source, const char *dest,
         return -EEXIST;
     if (fm_is_child(source, dest))
         return -EINVAL;
-    if (fileXioMkdir(dest, 0777) < 0)
-        return -EACCES;
-    dd = fileXioDopen(source);
-    if (dd < 0)
-        return dd;
-    while (fileXioDread(dd, &item) > 0) {
-        if (!strcmp(item.name, ".") || !strcmp(item.name, ".."))
-            continue;
-        if (!fm_join(srcChild, sizeof(srcChild), source, item.name) ||
-            !fm_join(dstChild, sizeof(dstChild), dest, item.name)) {
+    items = malloc(sizeof(*items) * FM_ITEMS);
+    if (!items)
+        return -ENOMEM;
+    count = fm_list(source, items, FM_ITEMS, 1);
+    if (count < 0) {
+        free(items);
+        return count;
+    }
+    ret = fm_mkdir(dest);
+    for (int i = 0; ret >= 0 && i < count; i++) {
+        if (!fm_join(srcChild, sizeof(srcChild), source, items[i].name) ||
+            !fm_join(dstChild, sizeof(dstChild), dest, items[i].name)) {
             ret = -ENAMETOOLONG;
             break;
         }
-        ret = fm_copy_tree(srcChild, dstChild,
-                           FIO_S_ISDIR(item.stat.mode), depth + 1);
-        if (ret < 0)
-            break;
+        ret = fm_copy_tree(srcChild, dstChild, items[i].folder, depth + 1);
     }
-    fileXioDclose(dd);
+    free(items);
     return ret;
 }
 
 static int fm_remove_tree(const char *path, int folder, int depth)
 {
-    iox_dirent_t item;
-    int dd, ret = 0;
+    int ret = 0, count;
+    fm_item_t *items;
     char full[FM_PATH];
     if (depth > FM_DEPTH)
         return -ELOOP;
     if (!folder)
-        return fileXioRemove(path);
-    dd = fileXioDopen(path);
-    if (dd < 0)
-        return dd;
-    while (fileXioDread(dd, &item) > 0) {
-        if (!strcmp(item.name, ".") || !strcmp(item.name, ".."))
-            continue;
-        if (!fm_join(full, sizeof(full), path, item.name)) {
+        return fm_remove(path, 0);
+    items = malloc(sizeof(*items) * FM_ITEMS);
+    if (!items)
+        return -ENOMEM;
+    count = fm_list(path, items, FM_ITEMS, 1);
+    if (count < 0) {
+        free(items);
+        return count;
+    }
+    for (int i = 0; i < count; i++) {
+        if (!fm_join(full, sizeof(full), path, items[i].name)) {
             ret = -ENAMETOOLONG;
             break;
         }
-        ret = fm_remove_tree(full, FIO_S_ISDIR(item.stat.mode), depth + 1);
+        ret = fm_remove_tree(full, items[i].folder, depth + 1);
         if (ret < 0)
             break;
     }
-    fileXioDclose(dd);
-    return ret < 0 ? ret : fileXioRmdir(path);
+    free(items);
+    return ret < 0 ? ret : fm_remove(path, 1);
 }
 
 static void fm_draw_pane(fm_pane_t *pane, int x, int focused)
@@ -410,6 +524,40 @@ static void fm_wlaunch(void)
     guiMsgBox("wLaunchELF nao instalado. Copie seu BOOT.ELF para mass0:/APPS/wLaunchELF/", 0, NULL);
 }
 
+static void fm_paste(fm_pane_t *pane)
+{
+    char dst[FM_PATH];
+    if (!fm.clipboardSet || pane->error)
+        return;
+    const char *filename = strrchr(fm.clipboard, '/');
+    const char *slash = strrchr(fm.clipboard, '\\');
+    if (!filename || (slash && slash > filename))
+        filename = slash;
+    filename = filename ? filename + 1 : fm.clipboard;
+    if (!fm_join(dst, sizeof(dst), pane->path, filename) ||
+        !strcmp(fm.clipboard, dst) ||
+        (fm.clipboardDir && fm_is_child(fm.clipboard, dst))) {
+        fm_status("Destino invalido ou dentro da origem.");
+    } else if (fm.clipMove && fm_same_device(fm.clipboard, dst)) {
+        if (!fm_exists(dst) && fm_rename(fm.clipboard, dst) >= 0) {
+            fm.clipboardSet = 0;
+            fm_status("Arquivo movido.");
+        } else
+            fm_status("Falha ao mover; origem preservada.");
+    } else {
+        fm_status("Copiando arquivos: nao desligue o console.");
+        int result = fm_copy_tree(fm.clipboard, dst, fm.clipboardDir, 0);
+        if (result >= 0) {
+            fm.clipboardSet = 0;
+            fm_status("Copia finalizada. Origem preservada.");
+        } else {
+            snprintf(fm.status, sizeof(fm.status), "Falha na cópia (%d). Origem preservada; confira o destino.", result);
+        }
+    }
+    fm_reload(&fm.pane[0]);
+    fm_reload(&fm.pane[1]);
+}
+
 static void fm_options(void)
 {
     fm_pane_t *pane = &fm.pane[fm.current];
@@ -449,36 +597,13 @@ static void fm_options(void)
                                       "Copiado. Selecione destino e cole.");
         }
     } else if (action == 202 && fm.clipboardSet) {
-        const char *filename = strrchr(fm.clipboard, '/');
-        const char *slash = strrchr(fm.clipboard, '\\');
-        if (!filename || (slash && slash > filename))
-            filename = slash;
-        filename = filename ? filename + 1 : fm.clipboard;
-        if (!fm_join(dst, sizeof(dst), pane->path, filename) ||
-            !strcmp(fm.clipboard, dst) ||
-            (fm.clipboardDir && fm_is_child(fm.clipboard, dst))) {
-            fm_status("Destino invalido ou dentro da origem.");
-        } else if (fm.clipMove && fm_same_device(fm.clipboard, dst)) {
-            if (!fm_exists(dst) && fileXioRename(fm.clipboard, dst) >= 0) {
-                fm.clipboardSet = 0;
-                fm_status("Arquivo movido.");
-            } else
-                fm_status("Falha ao mover; origem preservada.");
-        } else {
-            fm_status("Copiando arquivos: nao desligue o console.");
-            if (fm_copy_tree(fm.clipboard, dst, fm.clipboardDir, 0) >= 0) {
-                fm.clipboardSet = 0;
-                fm_status("Copia finalizada. Origem preservada.");
-            } else {
-                fm_status("Erro de copia / sem permissao. Origem preservada.");
-            }
-        }
+        fm_paste(pane);
     } else if (action == 204 && have) {
         snprintf(name, sizeof(name), "%s", pane->items[pane->selection].name);
         if (diaShowKeyb(name, sizeof(name), 0, "RENOMEAR") &&
             fm_join(dst, sizeof(dst), pane->path, name) &&
             !fm_exists(dst)) {
-            if (fileXioRename(src, dst) < 0)
+            if (fm_rename(src, dst) < 0)
                 fm_status("Nao foi possivel renomear neste dispositivo.");
             else
                 fm_status("Item renomeado.");
@@ -488,7 +613,7 @@ static void fm_options(void)
         if (diaShowKeyb(name, sizeof(name), 0, "NOVA PASTA") &&
             fm_join(dst, sizeof(dst), pane->path, name) &&
             !fm_exists(dst)) {
-            if (fileXioMkdir(dst, 0777) < 0)
+            if (fm_mkdir(dst) < 0)
                 fm_status("Nao foi possivel criar pasta aqui.");
             else
                 fm_status("Nova pasta criada.");
@@ -522,7 +647,7 @@ void maizoFileManagerOpen(void)
     memset(&fm, 0, sizeof(fm));
     fm_set_root(&fm.pane[0], "mass0:/");
     fm_set_root(&fm.pane[1], "mc0:/");
-    fm_status("Gerenciador nativo MAIZO. wLaunchELF disponivel nas opcoes.");
+    fm_status("Quadrado copia; triângulo cola; L2/R2 troca a unidade.");
     for (;;) {
         fm_pane_t *pane = &fm.pane[fm.current];
         int select, back;
@@ -565,9 +690,8 @@ void maizoFileManagerOpen(void)
                 fm_status("Copiado. Navegue e use triangulo para colar.");
             }
         } else if (getKeyOn(KEY_TRIANGLE) && fm.clipboardSet) {
-            /* Paste through the options dialog to preserve confirmations
-             * and prevent silent overwriting. */
-            fm_options();
+            if (guiMsgBox("Colar nesta pasta? Arquivos existentes não serão sobrescritos.", 1, NULL))
+                fm_paste(pane);
         } else if (getKeyOn(back)) {
             if (!fm_parent(pane))
                 break;

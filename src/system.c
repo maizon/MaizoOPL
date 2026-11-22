@@ -944,7 +944,7 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
 #ifdef PADEMU
     config->EnablePadEmuOp = gEnablePadEmu;
     config->PadEmuSettings = (unsigned int)(gPadEmuSettings >> 8);
-    config->PadMacroSettings = (unsigned int)(gPadMacroSettings);
+    config->PadMacroSettings = 0; /* Do not activate old saved macros. */
     maizoLoadInputProfiles(config->MaizoInputProfiles);
     memset(config->MaizoBtPair, 0, sizeof(config->MaizoBtPair));
     if (gEnablePadEmu && (gPadEmuSettings & 0xFF))

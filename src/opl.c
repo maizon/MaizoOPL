@@ -1782,10 +1782,10 @@ static void setDefaults(void)
     gXSensitivity = 1;
     gYSensitivity = 1;
 
-    gBDMStartMode = START_MODE_DISABLED;
+    gBDMStartMode = START_MODE_AUTO;
     gHDDStartMode = START_MODE_DISABLED;
     gETHStartMode = START_MODE_DISABLED;
-    gAPPStartMode = START_MODE_DISABLED;
+    gAPPStartMode = START_MODE_AUTO;
     gPS1StartMode = START_MODE_AUTO; // PS1 page enabled by default; no per-game setup
 
     gEnableILK = 0;

@@ -589,8 +589,9 @@ static int guiUpdater(int modified)
         diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast);
         diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast);
 
-        diaGetInt(diaConfig, CFG_BDMMODE, &gBDMStartMode);
-        diaSetVisible(diaConfig, BLOCKDEVICE_BUTTON, gBDMStartMode);
+        int bdmMode;
+        diaGetInt(diaConfig, CFG_BDMMODE, &bdmMode);
+        diaSetVisible(diaConfig, BLOCKDEVICE_BUTTON, bdmMode);
     }
     return 0;
 }
@@ -687,6 +688,7 @@ static void guiShowConfigWithFocus(int focusId)
         DisableCron = 1; // Disable Auto Start Last Played counter (we don't want to call it right after enable it on GUI)
         diaGetInt(diaConfig, CFG_DEFDEVICE, &deviceModeIndex);
         gDefaultDevice = guiDeviceTypeToIoMode(deviceModeIndex);
+        diaGetInt(diaConfig, CFG_BDMMODE, &gBDMStartMode);
         diaGetInt(diaConfig, CFG_HDDMODE, &gHDDStartMode);
         diaGetInt(diaConfig, CFG_ETHMODE, &gETHStartMode);
         diaGetInt(diaConfig, CFG_APPMODE, &gAPPStartMode);
@@ -710,58 +712,103 @@ void guiShowConfig(void)
     guiShowConfigWithFocus(-1);
 }
 
+/* One screen for sources and startup, backed by real OPL settings. */
 void guiShowStorageConfig(void)
 {
-    if (thmGetGuiValue() != 0) {
-        guiShowConfigWithFocus(CFG_BDMMODE);
+    const char *modes[] = {"Desativado", "Manual", "Automático", NULL};
+    const char *home[] = {"Todos", "PS2", "PS1", "Aplicativos", "Favoritos", NULL};
+    config_set_t *cfg = configGetByType(CONFIG_OPL);
+    int usb = 1, initial = 0;
+    int previous = gEnableBdmHDD;
+    struct UIItem options[] = {
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"FONTES DE JOGOS / TELA INICIAL", -1}}},
+        {UI_SPLITTER},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Dispositivos USB, MX4SIO e iLink", -1}}},
+        {UI_SPACER},
+        {UI_ENUM, 301, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Mostrar jogos USB", -1}}},
+        {UI_SPACER},
+        {UI_BOOL, 302, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MX4SIO (cartão SD)", -1}}},
+        {UI_SPACER},
+        {UI_BOOL, 303, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"iLink (FireWire)", -1}}},
+        {UI_SPACER},
+        {UI_BOOL, 304, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"HDD interno (APA)", -1}}},
+        {UI_SPACER},
+        {UI_ENUM, 305, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"HDD interno (GPT/MBR)", -1}}},
+        {UI_SPACER},
+        {UI_BOOL, 306, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Jogos em rede (SMB)", -1}}},
+        {UI_SPACER},
+        {UI_ENUM, 307, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Aplicativos", -1}}},
+        {UI_SPACER},
+        {UI_ENUM, 308, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Jogos de PS1", -1}}},
+        {UI_SPACER},
+        {UI_ENUM, 309, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
+        {UI_BREAK},
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Aba ao iniciar", -1}}},
+        {UI_SPACER},
+        {UI_ENUM, 310, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, home}}},
+        {UI_BREAK},
+        {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar e aplicar", -1}}},
+        {UI_TERMINATOR}};
+    configGetInt(cfg, "maizo_show_usb", &usb);
+    configGetInt(cfg, "maizo_home_tab", &initial);
+    if (initial < 0 || initial >= 5)
+        initial = 0;
+    diaSetInt(options, 301, gBDMStartMode);
+    diaSetInt(options, 302, usb);
+    diaSetInt(options, 303, gEnableMX4SIO);
+    diaSetInt(options, 304, gEnableILK);
+    diaSetInt(options, 305, gHDDStartMode);
+    diaSetInt(options, 306, gEnableBdmHDD);
+    diaSetInt(options, 307, gETHStartMode);
+    diaSetInt(options, 308, gAPPStartMode);
+    diaSetInt(options, 309, gPS1StartMode);
+    diaSetInt(options, 310, initial);
+    if (!diaExecuteDialog(options, -1, 1, NULL))
         return;
+    diaGetInt(options, 301, &gBDMStartMode);
+    diaGetInt(options, 302, &usb);
+    diaGetInt(options, 303, &gEnableMX4SIO);
+    diaGetInt(options, 304, &gEnableILK);
+    diaGetInt(options, 305, &gHDDStartMode);
+    diaGetInt(options, 306, &gEnableBdmHDD);
+    diaGetInt(options, 307, &gETHStartMode);
+    diaGetInt(options, 308, &gAPPStartMode);
+    diaGetInt(options, 309, &gPS1StartMode);
+    diaGetInt(options, 310, &initial);
+    if (gEnableBdmHDD && gHDDStartMode) {
+        gHDDStartMode = 0;
+        guiMsgBox("HDD GPT/MBR selecionado. O modo APA foi desativado.", 0, NULL);
     }
-    for (;;) {
-        int selected;
-        struct UIItem options[] = {
-            {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"MAIZO / ARMAZENAMENTO", -1}}},
-            {UI_BREAK},
-            {UI_BUTTON, 301, 1, 1, -1, 0, 0, {.label = {"Fontes e dispositivos OPL", -1}}},
-            {UI_BREAK},
-            {UI_BUTTON, 302, 1, 1, -1, 0, 0, {.label = {"Gerenciar arquivos USB / MC / SMB", -1}}},
-            {UI_BREAK},
-            {UI_BUTTON, 303, 1, 1, -1, 0, 0, {.label = {"SMB / configuracao existente", -1}}},
-            {UI_BREAK},
-            {UI_BUTTON, 304, 1, 1, -1, 0, 0, {.label = {"wLaunchELF / operacoes avancadas", -1}}},
-            {UI_BREAK},
-            {UI_TERMINATOR}};
-        selected = diaExecuteDialog(options, -1, 1, NULL);
-        if (selected == 0)
-            break;
-        if (selected == 301)
-            guiShowConfigWithFocus(CFG_BDMMODE);
-        else if (selected == 302 || selected == 304)
-            maizoFileManagerOpen();
-        else if (selected == 303) {
-            char status[248];
-            if (gNetworkStartup == 0 && gPCShareName[0]) {
-                if (gPCShareAddressIsNetBIOS)
-                    snprintf(status, sizeof(status),
-                             "SMB OPL ja conectado.\nServidor: %s:%d\nCompartilhamento: %s\nUsuario: %s\nNenhuma senha sera solicitada.",
-                             gPCShareNBAddress, gPCPort, gPCShareName,
-                             gPCUserName);
-                else
-                    snprintf(status, sizeof(status),
-                             "SMB OPL ja conectado.\nServidor: %d.%d.%d.%d:%d\nCompartilhamento: %s\nUsuario: %s\nNenhuma senha sera solicitada.",
-                             pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3],
-                             gPCPort, gPCShareName, gPCUserName);
-            } else {
-                snprintf(status, sizeof(status),
-                         "SMB ainda nao conectado. Configure a rede em MAIZO / Rede e inicie ETH Games. Os dados ja salvos no OPL serao reutilizados.");
-            }
-            guiMsgBox(status, 0, NULL);
-        }
-    }
+    if (!gBDMStartMode && (gEnableMX4SIO || gEnableILK || gEnableBdmHDD))
+        gBDMStartMode = START_MODE_AUTO;
+    configSetInt(cfg, "maizo_show_usb", !!usb);
+    configSetInt(cfg, "maizo_home_tab", initial);
+    applyConfig(-1, -1, 0);
+    saveConfig(CONFIG_OPL, 1);
+    menuReinitMainMenu();
+    if (previous != gEnableBdmHDD)
+        guiMsgBox("Reinicie o OPL se o modo do HDD não mudar imediatamente.", 0, NULL);
 }
 
 void guiShowPS1Config(void)
 {
-    guiShowConfigWithFocus(CFG_PS1MODE);
+    guiShowStorageConfig();
 }
 
 static int guiUIUpdater(int modified)
@@ -832,6 +879,33 @@ static int guiUIUpdater(int modified)
     return 0;
 }
 
+static int guiUiVideoOnly;
+
+static void guiUiRows(int videoOnly)
+{
+    struct UIItem *row = diaUIConfig;
+    int video = 0;
+    while (row->type != UI_TERMINATOR) {
+        struct UIItem *end = row;
+        int isOk = 0, hasVideo = 0;
+        while (end->type != UI_TERMINATOR && end->type != UI_BREAK && end->type != UI_SPLITTER) {
+            if (end->id == UICFG_VMODE)
+                hasVideo = 1;
+            if (end->type == UI_OK)
+                isOk = 1;
+            end++;
+        }
+        if (hasVideo)
+            video = 1;
+        for (struct UIItem *it = row; it < end; it++)
+            it->visible = isOk || videoOnly == video || row == diaUIConfig;
+        if (end->type == UI_TERMINATOR)
+            break;
+        end->visible = isOk || videoOnly == video || row == diaUIConfig;
+        row = end + 1;
+    }
+}
+
 void guiShowUIConfig(void)
 {
     int themeID = -1, langID = -1;
@@ -877,8 +951,11 @@ reselect_video_mode:
     diaSetInt(diaUIConfig, UICFG_YOFF, gYOff);
     diaSetInt(diaUIConfig, UICFG_OVERSCAN, gOverscan);
     guiUIUpdater(1);
-
+    if (thmGetGuiValue() == 0)
+        guiUiRows(guiUiVideoOnly);
     int ret = diaExecuteDialog(diaUIConfig, -1, 1, guiUIUpdater);
+    for (struct UIItem *it = diaUIConfig; it->type != UI_TERMINATOR; it++)
+        it->visible = 1;
     if (ret) {
         diaGetInt(diaUIConfig, UICFG_LANG, &langID);
         diaGetInt(diaUIConfig, UICFG_THEME, &themeID);
@@ -921,6 +998,13 @@ reselect_video_mode:
     }
 }
 
+void guiShowVideoConfig(void)
+{
+    guiUiVideoOnly = 1;
+    guiShowUIConfig();
+    guiUiVideoOnly = 0;
+}
+
 static int netConfigUpdater(int modified)
 {
     int showAdvancedOptions, isNetBIOS, isDHCPEnabled, i;
@@ -944,7 +1028,7 @@ static int netConfigUpdater(int modified)
         for (i = 0; i < 3; i++)
             diaSetVisible(diaNetConfig, NETCFG_SHARE_IP_ADDR_DOT_0 + i, !isNetBIOS);
 
-        diaSetEnabled(diaNetConfig, NETCFG_SHARE_PORT, showAdvancedOptions);
+        diaSetEnabled(diaNetConfig, NETCFG_SHARE_PORT, 1);
         diaSetEnabled(diaNetConfig, NETCFG_ETHOPMODE, showAdvancedOptions);
     }
 
@@ -964,7 +1048,7 @@ void guiShowNetConfig(void)
     // upload current values
     diaSetInt(diaNetConfig, NETCFG_SHOW_ADVANCED_OPTS, 0);
     diaSetEnabled(diaNetConfig, NETCFG_ETHOPMODE, 0);
-    diaSetEnabled(diaNetConfig, NETCFG_SHARE_PORT, 0);
+    diaSetEnabled(diaNetConfig, NETCFG_SHARE_PORT, 1);
 
     diaSetInt(diaNetConfig, NETCFG_PS2_IP_ADDR_TYPE, ps2_ip_use_dhcp);
     diaSetInt(diaNetConfig, NETCFG_SHARE_ADDR_TYPE, gPCShareAddressIsNetBIOS);
@@ -1210,8 +1294,7 @@ void guiShowControllerConfig(void)
             guiGameShowPadEmuConfig(1);
         } else if (result == MAIZO_MAPPING_BUTTON) {
             maizoShowMapping();
-        } else if (result == PADMACRO_GLOBAL_BUTTON) {
-            guiGameShowPadMacroConfig(1);
+
         }
 #endif
         applyConfig(-1, -1, 1);

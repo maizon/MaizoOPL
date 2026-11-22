@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <time.h>
 #include "include/maizo_ui.h"
+#include "include/bdmsupport.h"
 #include "include/appsupport.h"
 #include "include/maizo_filemgr.h"
 
@@ -171,6 +172,15 @@ static void dashboardRefresh(void)
     menu_list_t *source;
     unsigned int signature = 0;
     int tab = dashboard.tab;
+    int showUsb = 1;
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_show_usb", &showUsb);
+    signature = !!showUsb;
+    if (!builtRevision) {
+        int initial = 0;
+        configGetInt(configGetByType(CONFIG_OPL), "maizo_home_tab", &initial);
+        if (initial >= 0 && initial < MAIZO_SETTINGS)
+            tab = initial;
+    }
     for (source = menu; source; source = source->next) {
         item_list_t *support = source->item->userdata;
         signature = signature * 33 + source->item->visible + (support->enabled << 1);
@@ -189,6 +199,9 @@ static void dashboardRefresh(void)
         item_list_t *support = source->item->userdata;
         submenu_list_t *item;
         if (!source->item->visible || !support->enabled)
+            continue;
+        if (!showUsb && support->mode >= BDM_MODE && support->mode < ETH_MODE &&
+            support->priv && ((bdm_device_data_t *)support->priv)->bdmDeviceType == BDM_TYPE_USB)
             continue;
         for (item = source->item->submenu; item; item = item->next) {
             const char *identity = support->itemGetStartup(support, item->item.id);
@@ -488,16 +501,15 @@ static void menuInitMainMenu(void)
         submenuDestroy(&mainMenu);
 
     // initialize the menu
-    submenuAppendItem(&mainMenu, -1, NULL, MENU_SETTINGS, _STR_SETTINGS);
+    submenuAppendItem(&mainMenu, -1, "Avançado: desempenho e sistema", MENU_SETTINGS, -1);
     if (thmGetGuiValue() == 0) {
         submenuAppendItem(&mainMenu, -1, "Organizar biblioteca", MENU_LIBRARY_SORT, -1);
         submenuAppendItem(&mainMenu, -1, "Atualizar biblioteca", MENU_LIBRARY_REFRESH, -1);
         submenuAppendItem(&mainMenu, -1, "Capas dos jogos", MENU_COVER_MODE, -1);
         submenuAppendItem(&mainMenu, -1, "Informacoes tecnicas", MENU_DIAG_SYSTEM, -1);
-        submenuAppendItem(&mainMenu, -1, "Video da interface", MENU_VIDEO_SETTINGS, -1);
-        submenuAppendItem(&mainMenu, -1, "Armazenamento e fontes", MENU_STORAGE_SETTINGS, -1);
-        submenuAppendItem(&mainMenu, -1, "Gerenciar arquivos (USB / MC / SMB)", MENU_FILE_MANAGER, -1);
-        submenuAppendItem(&mainMenu, -1, "Configuracoes PlayStation 1", MENU_PS1_SETTINGS, -1);
+        submenuAppendItem(&mainMenu, -1, "Resolução e ajuste de tela", MENU_VIDEO_SETTINGS, -1);
+        submenuAppendItem(&mainMenu, -1, "Fontes de jogos e tela inicial", MENU_STORAGE_SETTINGS, -1);
+        submenuAppendItem(&mainMenu, -1, "Gerenciador de arquivos", MENU_FILE_MANAGER, -1);
     }
     submenuAppendItem(&mainMenu, -1, NULL, MENU_GFX_SETTINGS, _STR_GFX_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
@@ -513,13 +525,13 @@ static void menuInitMainMenu(void)
     submenuAppendItem(&mainMenu, -1, NULL, MENU_POWER_OFF, _STR_POWEROFF);
 
     if (thmGetGuiValue() == 0) {
-        submenuAppendItem(&mainMenu, -1, "Animacoes OLED", MENU_ANIMATIONS, -1);
+        submenuAppendItem(&mainMenu, -1, "Animações do menu", MENU_ANIMATIONS, -1);
         if (selected_item && selected_item->item->current)
             submenuAppendItem(&mainMenu, -1, "Informacoes do item", MENU_ITEM_INFO, -1);
 #ifdef PADEMU
-        submenuAppendItem(&mainMenu, -1, "PadEmu / macros / USB HID", MENU_PADEMU, -1);
-        submenuAppendItem(&mainMenu, -1, "Gerenciar controles Bluetooth", MENU_BLUETOOTH, -1);
-        submenuAppendItem(&mainMenu, -1, "Diagnostico USB HID universal", MENU_USB_DIAG, -1);
+        submenuAppendItem(&mainMenu, -1, "Emulação de controles nos jogos", MENU_PADEMU, -1);
+        submenuAppendItem(&mainMenu, -1, "Parear controle Bluetooth", MENU_BLUETOOTH, -1);
+        submenuAppendItem(&mainMenu, -1, "Testar controles USB", MENU_USB_DIAG, -1);
 #endif
         submenu_list_t *item = mainMenu;
         while (item) {
@@ -552,7 +564,6 @@ void menuInitGameMenu(void)
     submenuAppendItem(&gameMenu, -1, NULL, GAME_VMC_SETTINGS, _STR_VMC_SCREEN);
 #ifdef PADEMU
     submenuAppendItem(&gameMenu, -1, NULL, GAME_PADEMU_SETTINGS, _STR_PADEMUCONFIG);
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_PADMACRO_SETTINGS, _STR_PADMACROCONFIG);
 #endif
     submenuAppendItem(&gameMenu, -1, NULL, GAME_OSD_LANGUAGE_SETTINGS, _STR_OSD_SETTINGS);
     submenuAppendItem(&gameMenu, -1, NULL, GAME_SAVE_CHANGES, _STR_SAVE_CHANGES);
@@ -1178,7 +1189,7 @@ void menuRenderMenu()
         for (it = mainMenu; it; it = it->next, pos++)
             if (it == mainMenuCurrent)
                 active = pos;
-        first = active >= 7 ? active - 6 : 0;
+        first = active >= 6 ? active - 5 : 0;
 
         pos = 0;
         y = 188;
@@ -1190,13 +1201,13 @@ void menuRenderMenu()
             focus = it == mainMenuCurrent && settingsFocus;
             if (it->item.id == MENU_ANIMATIONS) {
                 static const char *const anim[] = {
-                    "OFF", "SUAVE", "COMPLETA"};
+                    "DESLIGADO", "SUAVE", "COMPLETA"};
                 value = anim[maizoAnimationMode()];
             } else if (it->item.id == MENU_COVER_MODE) {
                 int enabled = 1;
                 configGetInt(configGetByType(CONFIG_OPL),
                              "maizo_cover_mode", &enabled);
-                value = enabled ? "ON" : "OFF";
+                value = enabled ? "SIM" : "NÃO";
             } else if (it->item.id == MENU_LIBRARY_SORT) {
                 static const char *const sortNames[] = {
                     "NOME", "PLATAFORMA", "ORIGEM"};
@@ -1505,7 +1516,7 @@ void menuHandleInputMenu()
 #endif
         } else if (id == MENU_VIDEO_SETTINGS) {
             if (menuCheckParentalLock() == 0)
-                guiShowUIConfig();
+                guiShowVideoConfig();
         } else if (id == MENU_GFX_SETTINGS) {
             if (menuCheckParentalLock() == 0) {
                 guiShowUIConfig();
@@ -1539,7 +1550,6 @@ void menuHandleInputMenu()
                 guiGameSaveOSDLanguageGlobalConfig(configGetByType(CONFIG_GAME));
 #ifdef PADEMU
                 guiGameSavePadEmuGlobalConfig(configGetByType(CONFIG_GAME));
-                guiGameSavePadMacroGlobalConfig(configGetByType(CONFIG_GAME));
 #endif
                 saveConfig(CONFIG_OPL | CONFIG_NETWORK | CONFIG_GAME, 1);
                 menuSetParentalLockCheckState(1); // Re-enable parental lock check.
@@ -1558,7 +1568,7 @@ void menuHandleInputMenu()
 
     if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
         // Check if there is anything to show the user, at all.
-        if (gAPPStartMode || gETHStartMode || gBDMStartMode || gHDDStartMode) {
+        if (thmGetGuiValue() == 0 || gAPPStartMode || gETHStartMode || gBDMStartMode || gHDDStartMode || gPS1StartMode) {
             guiSwitchScreen(GUI_SCREEN_MAIN);
             refreshMenuPosition();
         }
@@ -2069,8 +2079,7 @@ void menuHandleInputGameMenu()
 #ifdef PADEMU
         } else if (menuID == GAME_PADEMU_SETTINGS) {
             guiGameShowPadEmuConfig(0);
-        } else if (menuID == GAME_PADMACRO_SETTINGS) {
-            guiGameShowPadMacroConfig(0);
+
 #endif
         } else if (menuID == GAME_OSD_LANGUAGE_SETTINGS) {
             guiGameShowOSDLanguageConfig(0);

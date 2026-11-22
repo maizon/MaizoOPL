@@ -131,6 +131,7 @@ void guiShowConfig();
 void guiShowStorageConfig(void);
 void guiShowPS1Config(void);
 void guiShowUIConfig();
+void guiShowVideoConfig(void);
 void guiShowAudioConfig();
 void guiShowControllerConfig();
 void guiShowNetConfig();
