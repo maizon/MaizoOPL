@@ -191,11 +191,9 @@ int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
         if (thmGetGuiValue() == 0) {
             rmDrawRect(0, gTheme->usedHeight - 62,
                        screenWidth, 62, MAIZO_SURFACE);
-            fntRenderString(gTheme->fonts[0], 33,
-                            gTheme->usedHeight - 39, ALIGN_NONE,
-                            screenWidth - 65, 26,
-                            "SELECIONAR LETRA   |   START CONFIRMAR   |   VOLTAR",
-                            MAIZO_MUTED);
+            maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 33, gTheme->usedHeight - 41, "Letra");
+            maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, 175, gTheme->usedHeight - 41, "Voltar");
+            fntRenderString(gTheme->fonts[0], 335, gTheme->usedHeight - 39, ALIGN_NONE, 270, 25, "START Confirmar", MAIZO_MUTED);
         } else
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, _STR_CANCEL, gTheme->fonts[0], 500, 417, gTheme->selTextColor);
 
@@ -962,13 +960,8 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
         if (cur && cur->hintId >= 0)
             fntRenderString(gTheme->fonts[0], 38, gTheme->usedHeight - 60, ALIGN_NONE,
                             screenWidth - 70, 20, _l(cur->hintId), MAIZO_MUTED);
-        fntRenderString(gTheme->fonts[0], 38,
-                        gTheme->usedHeight - 35, ALIGN_NONE,
-                        screenWidth - 65, 28,
-                        gSelectButton == KEY_CIRCLE ?
-                            "O SELECIONAR     X VOLTAR   |   MAIZO SUPREME" :
-                            "X SELECIONAR     O VOLTAR   |   MAIZO SUPREME",
-                        MAIZO_MUTED);
+        maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 38, gTheme->usedHeight - 38, "Selecionar");
+        maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, 208, gTheme->usedHeight - 38, "Voltar");
     } else {
         diaLayout(ui, cur, haveFocus, 0, 0, &focusY);
     }

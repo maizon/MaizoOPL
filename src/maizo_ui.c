@@ -8,6 +8,7 @@
 #include "include/gui.h"
 #include "include/maizo_library.h"
 #include "include/maizo_ui.h"
+#include "include/textures.h"
 #include <stdlib.h>
 
 typedef struct
@@ -207,6 +208,65 @@ void maizoDrawIcon(int icon, int x, int y, int size, u64 color)
 
 /* The original MaizoWii logo PNG is not present in either repository.
  * Keep this transparent text fallback until the approved asset is imported. */
+int maizoPromptStyle(void)
+{
+    int style = 0;
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_prompt_style", &style);
+    return style >= 0 && style < 3 ? style : 0;
+}
+
+/* Position, not letter: choosing icons cannot modify the gameplay profile. */
+static int maizoFaceIndex(int iconId)
+{
+    switch (iconId) {
+        case CROSS_ICON: return 0;
+        case CIRCLE_ICON: return 1;
+        case SQUARE_ICON: return 2;
+        case TRIANGLE_ICON: return 3;
+        default: return -1;
+    }
+}
+
+const char *maizoPromptName(int iconId, int style)
+{
+    static const char *const labels[3][4] = {
+        {"X", "O", "Quadrado", "Triângulo"},
+        {"A", "B", "X", "Y"},
+        {"B", "A", "Y", "X"}};
+    int index = maizoFaceIndex(iconId);
+    if (index < 0)
+        return "";
+    if (style < 0 || style > 2)
+        style = 0;
+    return labels[style][index];
+}
+
+GSTEXTURE *maizoPromptTexture(int iconId, int style)
+{
+    int index = maizoFaceIndex(iconId);
+    if (index >= 0 && style >= 0 && style < 3) {
+        GSTEXTURE *tex = thmGetTexture(MAIZO_PROMPT_PS_SOUTH + style * 4 + index);
+        if (tex && tex->Mem)
+            return tex;
+    }
+    return thmGetTexture(iconId);
+}
+
+void maizoDrawPrompt(int iconId, int style, int x, int y, int size)
+{
+    GSTEXTURE *tex = maizoPromptTexture(iconId, style);
+    if (tex && tex->Mem)
+        rmDrawPixmap(tex, x + rmWideScale(size) / 2, y + size / 2, ALIGN_CENTER, rmWideScale(size), size, SCALING_NONE, gDefaultCol);
+    else
+        fntRenderString(gTheme->fonts[0], x, y, ALIGN_NONE, size, size, maizoPromptName(iconId, style), MAIZO_TEXT);
+}
+
+void maizoDrawPromptHint(int iconId, int x, int y, const char *label)
+{
+    maizoDrawPrompt(iconId, maizoPromptStyle(), x, y, 23);
+    fntRenderString(gTheme->fonts[0], x + 29, y + 2, ALIGN_NONE, 150, 24, label, MAIZO_MUTED);
+}
+
 void maizoDrawBrand(void)
 {
     fntRenderString(gTheme->fonts[0], 32, 20, ALIGN_NONE, 112, 24, "MAIZO", MAIZO_TEXT);

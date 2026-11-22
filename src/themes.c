@@ -1634,6 +1634,11 @@ static void thmLoad(const char *themePath)
     // LOGO, loaded here to avoid flickering during startup with device in AUTO + theme set
     texLoadInternal(&newT->textures[LOGO_PICTURE], LOGO_PICTURE);
 
+    /* Preload the small embedded prompt pack once per theme, never during
+     * rendering or async artwork decoding. */
+    for (i = MAIZO_PROMPT_PS_SOUTH; i <= MAIZO_PROMPT_SW_NORTH; i++)
+        texLoadInternal(&newT->textures[i], i);
+
     // First start with busy icon
     const char *themePath_temp = themePath;
     int customBusy = 0;

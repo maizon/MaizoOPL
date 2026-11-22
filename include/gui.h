@@ -137,6 +137,7 @@ void guiShowGamePreferences(void);
 void guiShowInputMapping(void);
 void guiShowAudioConfig();
 void guiShowControllerConfig();
+void guiShowPromptStyle(void);
 void guiShowNetConfig();
 void guiShowParentalLockConfig();
 

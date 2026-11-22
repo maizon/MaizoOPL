@@ -1906,11 +1906,11 @@ void guiDrawBGPlasma()
 
 int guiDrawIconAndText(int iconId, int textId, int font, int x, int y, u64 color)
 {
-    GSTEXTURE *iconTex = thmGetTexture(iconId);
+    GSTEXTURE *iconTex = thmGetGuiValue() == 0 ? maizoPromptTexture(iconId, maizoPromptStyle()) : thmGetTexture(iconId);
     int w = 0;
     int h = 20;
 
-    if (iconTex) {
+    if (iconTex && iconTex->Height) {
         w = (iconTex->Width * 20) / iconTex->Height;
     }
 
@@ -1934,8 +1934,8 @@ int guiAlignMenuHints(menu_hint_item_t *hint, int font, int width)
     int w;
 
     for (; hint; hint = hint->next) {
-        GSTEXTURE *iconTex = thmGetTexture(hint->icon_id);
-        w = (iconTex->Width * 20) / iconTex->Height;
+        GSTEXTURE *iconTex = thmGetGuiValue() == 0 ? maizoPromptTexture(hint->icon_id, maizoPromptStyle()) : thmGetTexture(hint->icon_id);
+        w = iconTex && iconTex->Height ? (iconTex->Width * 20) / iconTex->Height : 0;
         char *text = _l(hint->text_id);
 
         x -= rmWideScale(w) + 2;
@@ -1956,8 +1956,8 @@ int guiAlignSubMenuHints(int hintCount, int *textID, int *iconID, int font, int 
     int i, w;
 
     for (i = 0; i < hintCount; i++) {
-        GSTEXTURE *iconTex = thmGetTexture(iconID[i]);
-        w = (iconTex->Width * 20) / iconTex->Height;
+        GSTEXTURE *iconTex = thmGetGuiValue() == 0 ? maizoPromptTexture(iconID[i], maizoPromptStyle()) : thmGetTexture(iconID[i]);
+        w = iconTex && iconTex->Height ? (iconTex->Width * 20) / iconTex->Height : 0;
         char *text = _l(textID[i]);
 
         x -= rmWideScale(w) + 2;
@@ -2164,9 +2164,106 @@ void guiIntroLoop(void)
     }
 }
 
+static void guiWelcomeFeature(int icon, int x, int y, const char *title, const char *detail)
+{
+    maizoDrawIcon(icon, x, y + 3, 28, MAIZO_BRIGHT);
+    fntRenderString(gTheme->fonts[0], x + 39, y, ALIGN_NONE, 236, 24, title, MAIZO_TEXT);
+    fntRenderString(gTheme->fonts[0], x + 39, y + 25, ALIGN_NONE, 236, 23, detail, MAIZO_MUTED);
+}
+
+static void guiSelectPromptStyle(int welcome)
+{
+    config_set_t *cfg = configGetByType(CONFIG_OPL);
+    static const char *const styles[] = {"PlayStation", "Xbox", "Nintendo Switch"};
+    int selected = maizoPromptStyle(), previous = selected;
+    int confirm = gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON;
+    int back = gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON;
+    int armed = 0;
+    for (;;) {
+        guiStartFrame();
+        guiReadPads();
+        int h = gTheme->usedHeight;
+        int cardsY = welcome ? h - 175 : h / 2 - 36;
+        rmDrawRect(0, 0, screenWidth, h, MAIZO_BLACK);
+        maizoDrawBrand();
+        fntRenderString(gTheme->fonts[0], screenWidth - 30, 20, ALIGN_RIGHT, 190, 25, welcome ? "PRIMEIRO ACESSO" : "INTERFACE", MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], 32, 66, ALIGN_NONE, 576, 42, welcome ? "Bem-vindo ao MAIZO Supreme" : "Estilo dos botões", MAIZO_TEXT);
+        if (welcome) {
+#ifdef PADEMU
+            guiWelcomeFeature(MAIZO_ICON_PAD, 32, 125, "Dois jogadores", "Até dois controles USB");
+            guiWelcomeFeature(MAIZO_ICON_KEYBOARD, 325, 125, "USB + teclado", "Podem jogar juntos");
+            guiWelcomeFeature(MAIZO_ICON_BLUETOOTH, 32, 190, "DS3, DS4 e Xbox 360", "USB / Bluetooth compatível");
+            guiWelcomeFeature(MAIZO_ICON_LIBRARY, 325, 190, "Uma só biblioteca", "PS2, PS1 e aplicativos");
+#else
+            guiWelcomeFeature(MAIZO_ICON_PAD, 32, 125, "Controle original", "PadEmu nesta build: ausente");
+            guiWelcomeFeature(MAIZO_ICON_LIBRARY, 325, 125, "Uma só biblioteca", "PS2, PS1 e aplicativos");
+            guiWelcomeFeature(MAIZO_ICON_NETWORK, 32, 190, "USB, rede e HDD", "Organize suas fontes");
+            guiWelcomeFeature(MAIZO_ICON_SETTINGS, 325, 190, "Personalização", "Interface e vídeo");
+#endif
+        } else {
+            fntRenderString(gTheme->fonts[0], 32, 126, ALIGN_NONE, 576, 28, "Escolha os ícones de ajuda que prefere.", MAIZO_MUTED);
+        }
+        fntRenderString(gTheme->fonts[0], 32, cardsY - 35, ALIGN_NONE, 576, 28, "Qual estilo de botões você prefere?", MAIZO_TEXT);
+        for (int style = 0; style < 3; style++) {
+            int x = 32 + style * 196;
+            maizoDrawPanel(x, cardsY, 184, 92, style == selected);
+            fntRenderString(gTheme->fonts[0], x + 92, cardsY + 12, ALIGN_CENTER, 168, 25, styles[style], style == selected ? MAIZO_TEXT : MAIZO_MUTED);
+            maizoDrawPrompt(CROSS_ICON, style, x + 18, cardsY + 47, 28);
+            maizoDrawPrompt(CIRCLE_ICON, style, x + 58, cardsY + 47, 28);
+            maizoDrawPrompt(SQUARE_ICON, style, x + 98, cardsY + 47, 28);
+            maizoDrawPrompt(TRIANGLE_ICON, style, x + 138, cardsY + 47, 28);
+        }
+        fntRenderString(gTheme->fonts[0], 32, h - 70, ALIGN_NONE, 576, 24, "Apenas aparência. Não altera o mapeamento ou a compatibilidade.", MAIZO_MUTED);
+        maizoDrawPrompt(confirm, selected, 32, h - 39, 23);
+        fntRenderString(gTheme->fonts[0], 61, h - 36, ALIGN_NONE, 210, 25, welcome ? "Começar" : "Salvar", MAIZO_TEXT);
+        if (!welcome) {
+            maizoDrawPrompt(back, selected, 272, h - 39, 23);
+            fntRenderString(gTheme->fonts[0], 301, h - 36, ALIGN_NONE, 160, 25, "Voltar", MAIZO_MUTED);
+        }
+        fntRenderString(gTheme->fonts[0], screenWidth - 32, h - 36, ALIGN_RIGHT, 140, 25, "<  >  Escolher", MAIZO_MUTED);
+        guiHandleDeferredOps();
+        guiEndFrame();
+
+        if (!getKeyPressed(gSelectButton) && !getKeyPressed(KEY_START))
+            armed = 1;
+        if (getKeyOn(KEY_LEFT)) {
+            selected = (selected + 2) % 3;
+            sfxPlay(SFX_CURSOR);
+        } else if (getKeyOn(KEY_RIGHT)) {
+            selected = (selected + 1) % 3;
+            sfxPlay(SFX_CURSOR);
+        } else if (armed && (getKeyOn(gSelectButton) || getKeyOn(KEY_START))) {
+            sfxPlay(SFX_CONFIRM);
+            configSetInt(cfg, "maizo_prompt_style", selected);
+            if (welcome)
+                configSetInt(cfg, "maizo_welcome_seen", 1);
+            if (!saveConfig(CONFIG_OPL, 0)) {
+                configSetInt(cfg, "maizo_prompt_style", previous);
+                if (welcome)
+                    configRemoveKey(cfg, "maizo_welcome_seen");
+                guiMsgBox("Não foi possível salvar. Verifique o dispositivo de configurações e tente novamente.", 0, NULL);
+            }
+            return;
+        } else if (!welcome && getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
+            return;
+        }
+        if (gFrameHook)
+            gFrameHook();
+    }
+}
+
+void guiShowPromptStyle(void)
+{
+    guiSelectPromptStyle(0);
+}
+
 void guiMainLoop(void)
 {
+    int welcomeSeen = 0;
     guiResetNotifications();
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_welcome_seen", &welcomeSeen);
+    if (!welcomeSeen)
+        guiSelectPromptStyle(1);
     guiCheckNotifications(1, 1);
 
     if (gOPLPart[0] != '\0')

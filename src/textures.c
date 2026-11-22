@@ -1,5 +1,6 @@
 #include "include/opl.h"
 #include "include/textures.h"
+#include "include/maizo_prompt_png.h"
 #include "include/util.h"
 #include "include/ioman.h"
 #include <png.h>
@@ -105,7 +106,7 @@ typedef struct
 {
     int id;
     char *name;
-    void **texture;
+    const void *texture;
 } texture_t;
 
 typedef struct
@@ -216,6 +217,18 @@ static texture_t internalDefault[TEXTURES_COUNT] = {
     {LOGO_PICTURE, "logo", &logo_png},
     {CASE_OVERLAY, "case", &case_png},
     {APPS_CASE_OVERLAY, "apps_case", &apps_case_png},
+    {MAIZO_PROMPT_PS_SOUTH, "maizo_ps_0", maizo_ps_0},
+    {MAIZO_PROMPT_PS_EAST, "maizo_ps_1", maizo_ps_1},
+    {MAIZO_PROMPT_PS_WEST, "maizo_ps_2", maizo_ps_2},
+    {MAIZO_PROMPT_PS_NORTH, "maizo_ps_3", maizo_ps_3},
+    {MAIZO_PROMPT_XB_SOUTH, "maizo_xb_0", maizo_xb_0},
+    {MAIZO_PROMPT_XB_EAST, "maizo_xb_1", maizo_xb_1},
+    {MAIZO_PROMPT_XB_WEST, "maizo_xb_2", maizo_xb_2},
+    {MAIZO_PROMPT_XB_NORTH, "maizo_xb_3", maizo_xb_3},
+    {MAIZO_PROMPT_SW_SOUTH, "maizo_sw_0", maizo_sw_0},
+    {MAIZO_PROMPT_SW_EAST, "maizo_sw_1", maizo_sw_1},
+    {MAIZO_PROMPT_SW_WEST, "maizo_sw_2", maizo_sw_2},
+    {MAIZO_PROMPT_SW_NORTH, "maizo_sw_3", maizo_sw_3},
 };
 
 int texLookupInternalTexId(const char *name)
@@ -470,6 +483,9 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
             return ERR_BAD_FILE;
 
         PngFileBufferPtr = internalDefault[texId].texture;
+        static const size_t promptSizes[] = {sizeof(maizo_ps_0), sizeof(maizo_ps_1), sizeof(maizo_ps_2), sizeof(maizo_ps_3), sizeof(maizo_xb_0), sizeof(maizo_xb_1), sizeof(maizo_xb_2), sizeof(maizo_xb_3), sizeof(maizo_sw_0), sizeof(maizo_sw_1), sizeof(maizo_sw_2), sizeof(maizo_sw_3)};
+        if (texId >= MAIZO_PROMPT_PS_SOUTH && texId <= MAIZO_PROMPT_SW_NORTH)
+            inputSize = promptSizes[texId - MAIZO_PROMPT_PS_SOUTH];
         readData = NULL;
         readFunction = &texReadMemFunction;
     }

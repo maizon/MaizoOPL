@@ -7,6 +7,7 @@
 #include "include/opl.h"
 #include "include/maizo_filemgr.h"
 #include "include/maizo_ui.h"
+#include "include/textures.h"
 #include "include/ethsupport.h"
 #include "include/system.h"
 #include "include/gui.h"
@@ -813,7 +814,7 @@ static void fm_capture(fm_pane_t *pane, int move)
     }
     fm.clipMove = move;
     if (fm.clipboardSet)
-        snprintf(fm.status, sizeof(fm.status), "%d item(ns) %s. Triângulo para colar.", fm.batchCount ? fm.batchCount : 1, move ? "recortados" : "copiados");
+        snprintf(fm.status, sizeof(fm.status), "%d item(ns) %s. %s para colar.", fm.batchCount ? fm.batchCount : 1, move ? "recortados" : "copiados", maizoPromptName(TRIANGLE_ICON, maizoPromptStyle()));
 }
 
 /* EMS/PSU flat-save format: 512-byte directory entries, name at 64,
@@ -1101,7 +1102,7 @@ void maizoFileManagerOpen(void)
     memset(&fm, 0, sizeof(fm));
     fm_set_root(&fm.pane[0], "mass0:/");
     fm_set_root(&fm.pane[1], "mc0:/");
-    fm_status("SELECT marca; quadrado copia; triângulo cola; L2/R2 unidade.");
+    snprintf(fm.status, sizeof(fm.status), "SELECT marca; %s copia; %s cola; L2/R2 unidade.", maizoPromptName(SQUARE_ICON, maizoPromptStyle()), maizoPromptName(TRIANGLE_ICON, maizoPromptStyle()));
     for (;;) {
         fm_pane_t *pane = &fm.pane[fm.current];
         int select, back;

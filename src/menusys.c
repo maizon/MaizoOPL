@@ -60,7 +60,8 @@ enum MENU_IDs {
     MENU_QUICK_SETUP,
     MENU_RESET_APPEARANCE,
     MENU_SMB_STATUS,
-    MENU_PAD_HELP
+    MENU_PAD_HELP,
+    MENU_PROMPT_STYLE
 };
 
 enum GAME_MENU_IDs {
@@ -550,6 +551,7 @@ static int settingsItemCategory(int id)
         case MENU_COVER_MODE:
         case MENU_VIEW_LAYOUT:
         case MENU_RESET_APPEARANCE:
+        case MENU_PROMPT_STYLE:
             return 0;
         case MENU_LIBRARY_SORT:
         case MENU_LIBRARY_REFRESH:
@@ -603,6 +605,7 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Atualizar biblioteca", MENU_LIBRARY_REFRESH, -1);
         submenuAppendItem(&mainMenu, -1, "Capas dos jogos", MENU_COVER_MODE, -1);
         submenuAppendItem(&mainMenu, -1, "Visualização da biblioteca", MENU_VIEW_LAYOUT, -1);
+        submenuAppendItem(&mainMenu, -1, "Estilo dos botões", MENU_PROMPT_STYLE, -1);
         submenuAppendItem(&mainMenu, -1, "Restaurar aparência", MENU_RESET_APPEARANCE, -1);
         submenuAppendItem(&mainMenu, -1, "Assistente de configuração", MENU_QUICK_SETUP, -1);
         submenuAppendItem(&mainMenu, -1, "Estado da conexão SMB", MENU_SMB_STATUS, -1);
@@ -1197,11 +1200,9 @@ static void maizoSettingsFooter(const char *context)
     int h = gTheme->usedHeight;
     rmDrawRect(0, h - 62, 640, 62, MAIZO_SURFACE);
     rmDrawRect(0, h - 62, 640, 1, MAIZO_DIVIDER);
-    fntRenderString(gTheme->fonts[0], 28, h - 44, ALIGN_NONE, 450, 25,
-                    gSelectButton == KEY_CIRCLE ?
-                        "O ABRIR     X VOLTAR     L1/R1 CATEGORIA" :
-                        "X ABRIR     O VOLTAR     L1/R1 CATEGORIA",
-                    MAIZO_TEXT);
+    maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 28, h - 45, "Abrir");
+    maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, 144, h - 45, "Voltar");
+    fntRenderString(gTheme->fonts[0], 263, h - 43, ALIGN_NONE, 190, 25, "L1/R1 Categoria", MAIZO_MUTED);
     if (context)
         fntRenderString(gTheme->fonts[0], 612, h - 27,
                         ALIGN_RIGHT, 220, 23, context, MAIZO_MUTED);
@@ -1328,7 +1329,10 @@ void menuRenderMenu()
             if (pos < first || pos >= first + visibleRows)
                 continue;
             focus = it == mainMenuCurrent && settingsFocus;
-            if (it->item.id == MENU_VIEW_LAYOUT) {
+            if (it->item.id == MENU_PROMPT_STYLE) {
+                static const char *const promptNames[] = {"PLAYSTATION", "XBOX", "SWITCH"};
+                value = promptNames[maizoPromptStyle()];
+            } else if (it->item.id == MENU_VIEW_LAYOUT) {
                 static const char *const layouts[] = {"CARROSSEL", "GRADE", "LISTA"};
                 value = layouts[menuDashboardLayout()];
             } else if (it->item.id == MENU_SOURCE_FILTER) {
@@ -1614,6 +1618,9 @@ void menuHandleInputMenu()
         if (id == MENU_ITEM_INFO) {
             if (selected_item && selected_item->item->current)
                 selected_item->item->execSquare(selected_item->item);
+        } else if (id == MENU_PROMPT_STYLE) {
+            if (menuCheckParentalLock() == 0)
+                guiShowPromptStyle();
         } else if (id == MENU_VIEW_LAYOUT) {
             const char *layouts[] = {"Carrossel", "Grade", "Lista", NULL};
             struct UIItem ui[] = {

@@ -1,6 +1,7 @@
 #ifndef MAIZO_UI_H
 #define MAIZO_UI_H
 #include <tamtypes.h>
+#include <gsKit.h>
 #include "include/maizo_oled.h"
 
 enum maizo_icon {
@@ -46,6 +47,11 @@ int maizoAnimations(void);
 int maizoAnimationMode(void);
 void maizoDrawIcon(int icon, int x, int y, int size, u64 color);
 void maizoDrawBrand(void);
+int maizoPromptStyle(void);
+const char *maizoPromptName(int iconId, int style);
+GSTEXTURE *maizoPromptTexture(int iconId, int style);
+void maizoDrawPrompt(int iconId, int style, int x, int y, int size);
+void maizoDrawPromptHint(int iconId, int x, int y, const char *label);
 void maizoDrawHeader(int tab);
 void maizoDrawPanel(int x, int y, int width, int height, int focused);
 void maizoDrawRow(int x, int y, int width, int icon, const char *label, int selected);

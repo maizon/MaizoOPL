@@ -168,3 +168,10 @@ assert "maizoMenuConnectedPads" in ui
 assert "drawMaizoLibraryList" in art and "maizo_layout" in menu
 assert "maizoTextMatches" in library and "settingsQuery" in menu
 assert "menuSettingsBreadcrumb" in dia and "MENU_QUICK_SETUP" in menu
+
+assert "maizo_welcome_seen" in gui and "guiSelectPromptStyle(1)" in gui
+assert "maizo_prompt_style" in ui and "MENU_PROMPT_STYLE" in menu
+assert "MAIZO_PROMPT_PS_SOUTH + style * 4 + index" in ui
+assert "maizoDrawPromptHint" in dia and "maizoDrawPromptHint" in menu
+assert "CC0" in read("assets/maizo/xelu/README.md")
+assert read("include/maizo_prompt_png.h").count("static const unsigned char maizo_") == 12
