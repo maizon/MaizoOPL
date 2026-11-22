@@ -53,6 +53,8 @@ static unsigned short pad_count;
  * Bluetooth retains its neutral-report safety gate. */
 static unsigned int maizoUsbArmed, maizoUsbCentered;
 static unsigned int maizoUsbNotified, maizoBtNotified;
+static unsigned char maizoUsbType[2], maizoBtType[2];
+static unsigned char maizoUsbMissing[2], maizoBtMissing[2];
 static u8 maizoUsbCenters[4] = {127, 127, 127, 127};
 static unsigned int maizoBtArmed;
 static int maizoPhysicalRescueMode;
@@ -358,6 +360,39 @@ static int maizoReadUsbSnapshot(u8 snapshot[MAIZO_MENU_SNAPSHOT_SIZE])
 }
 
 /* The untrusted USB/BT path never writes over physical libpad state. */
+static const char *maizoPadTypeName(unsigned int type, int bt)
+{
+    static const char *const names[] = {
+        "USB", "DualShock 3 USB", "DualShock 4 USB", "Guitarra USB",
+        "Guitarra USB", "USB HID", "Twin USB", "Xbox 360 USB", "Teclado USB"};
+    if (bt)
+        return type == 1 ? "DualShock 3 Bluetooth" : type == 2 ? "DualShock 4 Bluetooth" : "Bluetooth";
+    return names[type < sizeof(names) / sizeof(names[0]) ? type : 0];
+}
+
+static void maizoNoticeSlot(int slot, unsigned int type, int connected, int bt)
+{
+    unsigned int bit = 1u << slot;
+    unsigned int *known = bt ? &maizoBtNotified : &maizoUsbNotified;
+    unsigned char *types = bt ? maizoBtType : maizoUsbType;
+    unsigned char *missing = bt ? maizoBtMissing : maizoUsbMissing;
+    if (connected) {
+        missing[slot] = 0;
+        if (!(*known & bit) || (type && types[slot] && type != types[slot])) {
+            guiNotifyController(maizoPadTypeName(type, bt), slot + 1);
+            *known |= bit;
+        }
+        if (type || !types[slot])
+            types[slot] = type;
+    } else if (*known & bit) {
+        if (++missing[slot] >= 15) {
+            guiNotifyControllerDisconnected(maizoPadTypeName(types[slot], bt), slot + 1);
+            *known &= ~bit;
+            types[slot] = missing[slot] = 0;
+        }
+    }
+}
+
 static int maizoReadRemotePads(void)
 {
     int rslt = 0;
@@ -373,18 +408,9 @@ static int maizoReadRemotePads(void)
             u32 remote;
             unsigned int neutral = maizoMenuPadNeutralMask(snapshot);
             unsigned int fresh;
-            maizoUsbNotified &= valid;
             for (unsigned int slot = 0; slot < MAIZO_MENU_SLOTS; slot++) {
-                unsigned int bit = 1u << slot;
-                if ((valid & bit) && !(maizoUsbNotified & bit)) {
-                    static const char *const names[] = {
-                        "USB", "DualShock 3 USB", "DualShock 4 USB",
-                        "Guitarra USB", "Guitarra USB", "USB HID",
-                        "Twin USB", "Xbox 360 USB", "Teclado USB"};
-                    unsigned int type = maizoMenuPadType(snapshot, slot);
-                    guiNotifyController(type < sizeof(names) / sizeof(names[0]) ? names[type] : names[0], slot + 1);
-                    maizoUsbNotified |= bit;
-                }
+                unsigned int type = maizoMenuPadType(snapshot, slot);
+                maizoNoticeSlot(slot, type, type || (valid & (1u << slot)), 0);
             }
             for (int slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
                 if (!(valid & (1u << slot))) {
@@ -413,7 +439,8 @@ static int maizoReadRemotePads(void)
         } else {
             maizoUsbArmed = 0;
             maizoUsbCentered = 0;
-            maizoUsbNotified = 0;
+            for (int slot = 0; slot < MAIZO_MENU_SLOTS; slot++)
+                maizoNoticeSlot(slot, 0, 0, 0);
             for (int slot = 0; slot < MAIZO_MENU_SLOTS * 2; slot++)
                 maizoUsbCenters[slot] = 127;
         }
@@ -425,16 +452,7 @@ static int maizoReadRemotePads(void)
         unsigned int bit = 1u << i;
         if (ds34bt_get_status(i) & DS34BT_STATE_RUNNING) {
             u8 report[18];
-            if (!(maizoBtNotified & bit)) {
-                int type = ds34bt_get_pad_type(i);
-                const char *name = "Bluetooth";
-                if (type == 1)
-                    name = "DualShock 3 Bluetooth";
-                else if (type == 2)
-                    name = "DualShock 4 Bluetooth";
-                guiNotifyController(name, i + 1);
-                maizoBtNotified |= bit;
-            }
+            maizoNoticeSlot(i, (maizoBtNotified & bit) ? maizoBtType[i] : ds34bt_get_pad_type(i), 1, 1);
             if (ds34bt_get_data(i, report)) {
                 u16 buttons = report[0] | ((u16)report[1] << 8);
                 if (buttons == 0)
@@ -452,7 +470,7 @@ static int maizoReadRemotePads(void)
             }
         } else {
             maizoBtArmed &= ~bit;
-            maizoBtNotified &= ~bit;
+            maizoNoticeSlot(i, 0, 0, 1);
         }
     }
     return rslt;
@@ -460,6 +478,15 @@ static int maizoReadRemotePads(void)
 #endif
 
 /** polling method. Call every frame. */
+unsigned int maizoMenuConnectedPads(void)
+{
+#ifdef PADEMU
+    return maizoUsbNotified | (maizoBtNotified << 2);
+#else
+    return 0;
+#endif
+}
+
 int readPads()
 {
     int i;
@@ -492,8 +519,15 @@ int readPads()
     } else {
         maizoRescueHeld = 0;
     }
+    /* Always poll remote ports, even in native rescue. Suppress only their
+     * input in rescue mode, never their connection notifications. */
     if (!maizoPhysicalRescueMode)
         rslt |= maizoReadRemotePads();
+    else {
+        u32 native = paddata;
+        maizoReadRemotePads();
+        paddata = native;
+    }
 #endif
 
     for (i = 0; i < 16; ++i) {

@@ -45,6 +45,7 @@ typedef struct
     size_t view_count, position;
     int tab;
     int sourceFilter;
+    char query[32];
     char remembered[MAIZO_SETTINGS][256];
     int remembered_platform[MAIZO_SETTINGS];
 } maizo_library_t;
@@ -56,6 +57,7 @@ void maizoLibrarySort(maizo_library_t *library);
 void maizoLibrarySortMode(maizo_library_t *library, int mode);
 int maizoLibraryFilter(maizo_library_t *library, int tab);
 void maizoLibraryMove(maizo_library_t *library, int direction);
+int maizoTextMatches(const char *text, const char *query);
 maizo_entry_t *maizoLibrarySlot(maizo_library_t *library, int offset);
 void maizoFavoriteKey(int platform, const char *identity, char key[32]);
 

@@ -1,3 +1,4 @@
+#include "include/pad.h"
 /* Original MAIZO line icons: GS primitives, no runtime SVG or textures. */
 #include "include/opl.h"
 #include "include/renderman.h"
@@ -234,7 +235,7 @@ void maizoDrawRow(int x, int y, int width, int icon, const char *label, int sele
 void maizoDrawSeparator(int x, int y, int width)
 {
     if (width > 0)
-        rmDrawRect(x, y, width, 1, MAIZO_DIVIDER);
+        rmDrawRect(x, y, width, 2, MAIZO_DIVIDER);
 }
 
 void maizoDrawHeader(int tab)
@@ -252,5 +253,9 @@ void maizoDrawHeader(int tab)
         rmGetScreenExtents(&width, &height);
         fntRenderString(gTheme->fonts[0], width - 28, 20, ALIGN_RIGHT, 165, 26,
                         names[tab], MAIZO_MUTED);
+        unsigned int connected = maizoMenuConnectedPads();
+        for (int slot = 0; slot < 4; slot++)
+            if (connected & (1u << slot))
+                maizoDrawIcon(slot < 2 ? MAIZO_ICON_PAD : MAIZO_ICON_BLUETOOTH, 160 + slot * 25, 23, 18, MAIZO_SUCCESS);
     }
 }

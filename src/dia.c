@@ -1,3 +1,4 @@
+#include "include/menusys.h"
 /*
   Copyright 2009-2010 volca
   Licenced under Academic Free License version 3.0
@@ -867,6 +868,18 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                     rmDrawRect(vx - 2, y + 7, segment - 5, 26,
                                MAIZO_CARD);
                 }
+                if (p->type == UI_INT && count == 1 && p->intvalue.min == 0 && p->intvalue.max == 100) {
+                    int bar = segment - 52;
+                    if (bar > 20) {
+                        rmDrawRect(vx, y + 17, bar, 5, MAIZO_DIVIDER);
+                        rmDrawRect(vx, y + 17, bar * p->intvalue.current / 100, 5, MAIZO_ACCENT);
+                        fntRenderString(gTheme->fonts[0], vx + segment - 6, y + 8, ALIGN_RIGHT, 44, 25, numeric, MAIZO_TEXT);
+                        value = NULL;
+                    }
+                }
+                if (p->type == UI_ENUM && count == 1 && value) {
+                    fntRenderString(gTheme->fonts[0], vx + segment - 6, y + 8, ALIGN_RIGHT, 16, 25, ">", MAIZO_BRIGHT);
+                }
                 if (p->type == UI_BOOL) {
                     rmDrawRect(vx + segment - 47, y + 10, 37, 19,
                                p->intvalue.current ?
@@ -878,7 +891,7 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                 }
                 if (value)
                     fntRenderString(gTheme->fonts[0], vx, y + 8,
-                                    ALIGN_NONE, segment - 7, 25,
+                                    ALIGN_NONE, segment - (p->type == UI_ENUM ? 21 : 7), 25,
                                     value, p == cur ? MAIZO_BRIGHT : MAIZO_TEXT);
                 n++;
             }
@@ -924,6 +937,12 @@ void diaRenderUI(struct UIItem *ui, short inMenu, struct UIItem *cur, int haveFo
         rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
         rmDrawRect(0, 70, screenWidth, 1, MAIZO_DIVIDER);
         maizoDrawBrand();
+        char headingPath[160];
+        const char *section = menuSettingsBreadcrumb();
+        if (section) {
+            snprintf(headingPath, sizeof(headingPath), "%s / %s", section, title);
+            title = headingPath;
+        }
         fntRenderString(gTheme->fonts[0], 35, 79, ALIGN_NONE,
                         screenWidth - 70, 30, title, MAIZO_TEXT);
         maizoDialogLayout(ui, cur, haveFocus, scroll, &focusY, 0);

@@ -55,7 +55,12 @@ enum MENU_IDs {
     MENU_SOURCE_FILTER,
     MENU_STORAGE_PERFORMANCE,
     MENU_GAME_PREFERENCES,
-    MENU_INPUT_MAPPING
+    MENU_INPUT_MAPPING,
+    MENU_VIEW_LAYOUT,
+    MENU_QUICK_SETUP,
+    MENU_RESET_APPEARANCE,
+    MENU_SMB_STATUS,
+    MENU_PAD_HELP
 };
 
 enum GAME_MENU_IDs {
@@ -112,6 +117,8 @@ static unsigned int librarySignature;
 static int dashboardError;
 static int settingsCategory;
 static int settingsFocus;
+static char settingsQuery[32];
+static const char *settingsBreadcrumb;
 static int settingsRemember[10]; /* menu id + 1; zero means first item */
 static unsigned int focusStartFrame;
 
@@ -145,6 +152,15 @@ float menuDashboardSlide(void)
 int menuDashboardTab(void) { return dashboard.tab; }
 int menuDashboardCount(void) { return dashboard.view_count; }
 int menuDashboardPosition(void) { return dashboard.view_count ? dashboard.position + 1 : 0; }
+const char *menuDashboardQuery(void) { return dashboard.query; }
+const char *menuSettingsBreadcrumb(void) { return settingsBreadcrumb; }
+
+int menuDashboardLayout(void)
+{
+    int value = 0;
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_layout", &value);
+    return value >= 0 && value <= 2 ? value : 0;
+}
 maizo_entry_t *menuDashboardSlot(int offset) { return maizoLibrarySlot(&dashboard, offset); }
 
 static int dashboardPlatform(menu_list_t *source)
@@ -532,6 +548,8 @@ static int settingsItemCategory(int id)
         case MENU_GFX_SETTINGS:
         case MENU_ANIMATIONS:
         case MENU_COVER_MODE:
+        case MENU_VIEW_LAYOUT:
+        case MENU_RESET_APPEARANCE:
             return 0;
         case MENU_LIBRARY_SORT:
         case MENU_LIBRARY_REFRESH:
@@ -542,6 +560,8 @@ static int settingsItemCategory(int id)
         case MENU_PADEMU:
         case MENU_BLUETOOTH:
         case MENU_INPUT_MAPPING:
+        case MENU_PAD_HELP:
+        case MENU_USB_DIAG:
             return 1;
         case MENU_OSD_LANGUAGE_SETTINGS:
         case MENU_PS1_SETTINGS:
@@ -558,8 +578,8 @@ static int settingsItemCategory(int id)
         case MENU_NET_CONFIG:
         case MENU_NET_UPDATE:
         case MENU_START_NBD:
+        case MENU_SMB_STATUS:
             return 6;
-        case MENU_USB_DIAG:
         case MENU_DIAG_SYSTEM:
             return 8;
         case MENU_ABOUT:
@@ -582,6 +602,10 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Preferências dos jogos", MENU_GAME_PREFERENCES, -1);
         submenuAppendItem(&mainMenu, -1, "Atualizar biblioteca", MENU_LIBRARY_REFRESH, -1);
         submenuAppendItem(&mainMenu, -1, "Capas dos jogos", MENU_COVER_MODE, -1);
+        submenuAppendItem(&mainMenu, -1, "Visualização da biblioteca", MENU_VIEW_LAYOUT, -1);
+        submenuAppendItem(&mainMenu, -1, "Restaurar aparência", MENU_RESET_APPEARANCE, -1);
+        submenuAppendItem(&mainMenu, -1, "Assistente de configuração", MENU_QUICK_SETUP, -1);
+        submenuAppendItem(&mainMenu, -1, "Estado da conexão SMB", MENU_SMB_STATUS, -1);
         submenuAppendItem(&mainMenu, -1, "Informacoes tecnicas", MENU_DIAG_SYSTEM, -1);
         submenuAppendItem(&mainMenu, -1, "Resolução e ajuste de tela", MENU_VIDEO_SETTINGS, -1);
         submenuAppendItem(&mainMenu, -1, "Fontes de jogos e tela inicial", MENU_STORAGE_SETTINGS, -1);
@@ -606,6 +630,7 @@ static void menuInitMainMenu(void)
         if (selected_item && selected_item->item->current)
             submenuAppendItem(&mainMenu, -1, "Informacoes do item", MENU_ITEM_INFO, -1);
 #ifdef PADEMU
+        submenuAppendItem(&mainMenu, -1, "Controles no menu OPL", MENU_PAD_HELP, -1);
         submenuAppendItem(&mainMenu, -1, "Emulação de controles nos jogos", MENU_PADEMU, -1);
         submenuAppendItem(&mainMenu, -1, "Mapeamento USB e teclado", MENU_INPUT_MAPPING, -1);
         submenuAppendItem(&mainMenu, -1, "Parear controle Bluetooth", MENU_BLUETOOTH, -1);
@@ -615,7 +640,7 @@ static void menuInitMainMenu(void)
         while (item) {
             submenu_list_t *next = item->next;
             int category = settingsItemCategory(item->item.id);
-            int keep = category == settingsCategory;
+            int keep = settingsQuery[0] ? maizoTextMatches(submenuItemGetText(&item->item), settingsQuery) || maizoTextMatches(settingsNames[category], settingsQuery) : category == settingsCategory;
             if (!keep)
                 submenuRemoveItem(&mainMenu, item->item.id);
             item = next;
@@ -1236,12 +1261,21 @@ static const char *const maizoSettingsDescriptions[] = {
 
 void menuRenderMenu()
 {
+    settingsBreadcrumb = NULL;
     guiDrawBGPlasma();
     if (thmGetGuiValue() == 0) {
         const int leftX = 24, rightX = 231, rightWidth = 387;
         int y, active = 0, first, pos = 0;
         int panelHeight = gTheme->usedHeight - 165;
         int categoryStep = (panelHeight - 12) / MAIZO_SETTING_CATEGORIES;
+        int categoryRows = MAIZO_SETTING_CATEGORIES;
+        if (categoryStep < 24) {
+            categoryStep = 24;
+            categoryRows = (panelHeight - 12) / categoryStep;
+            if (categoryRows < 1)
+                categoryRows = 1;
+        }
+        int categoryFirst = settingsCategory >= categoryRows ? settingsCategory - categoryRows + 1 : 0;
         int visibleRows = (panelHeight - 73) / 35;
         if (visibleRows < 1)
             visibleRows = 1;
@@ -1256,8 +1290,8 @@ void menuRenderMenu()
         /* Fixed category navigation rail; input focus and content
          * selection are independent. */
         maizoDrawPanel(leftX, 120, 194, panelHeight, 0);
-        for (int i = 0; i < MAIZO_SETTING_CATEGORIES; i++) {
-            int rowY = 130 + i * categoryStep;
+        for (int i = categoryFirst; i < MAIZO_SETTING_CATEGORIES && i < categoryFirst + categoryRows; i++) {
+            int rowY = 130 + (i - categoryFirst) * categoryStep;
             int highlighted = i == settingsCategory;
             if (highlighted)
                 rmDrawRect(leftX + 3, rowY - 2, 188, categoryStep,
@@ -1273,11 +1307,11 @@ void menuRenderMenu()
 
         maizoDrawPanel(rightX, 120, rightWidth, panelHeight, 0);
         fntRenderString(gTheme->fonts[0], rightX + 18, 127, ALIGN_NONE,
-                        rightWidth - 36, 26, settingsNames[settingsCategory],
+                        rightWidth - 36, 26, settingsQuery[0] ? "RESULTADOS DA PESQUISA" : settingsNames[settingsCategory],
                         MAIZO_TEXT);
         fntRenderString(gTheme->fonts[0], rightX + 18, 151, ALIGN_NONE,
                         rightWidth - 36, 22,
-                        maizoSettingsDescriptions[settingsCategory],
+                        settingsQuery[0] ? settingsQuery : maizoSettingsDescriptions[settingsCategory],
                         MAIZO_MUTED);
         maizoDrawSeparator(rightX + 18, 178, rightWidth - 36);
 
@@ -1294,7 +1328,10 @@ void menuRenderMenu()
             if (pos < first || pos >= first + visibleRows)
                 continue;
             focus = it == mainMenuCurrent && settingsFocus;
-            if (it->item.id == MENU_SOURCE_FILTER) {
+            if (it->item.id == MENU_VIEW_LAYOUT) {
+                static const char *const layouts[] = {"CARROSSEL", "GRADE", "LISTA"};
+                value = layouts[menuDashboardLayout()];
+            } else if (it->item.id == MENU_SOURCE_FILTER) {
                 int source = 0;
                 configGetInt(configGetByType(CONFIG_OPL), "maizo_source_filter", &source);
                 value = sourceNames[source >= 0 && source < MAIZO_SOURCE_COUNT ? source : 0];
@@ -1340,7 +1377,7 @@ void menuRenderMenu()
         if (!mainMenu) {
             fntRenderString(gTheme->fonts[0], rightX + 23, 220,
                             ALIGN_NONE, 330, 48,
-                            "Sem opcoes nesta categoria", MAIZO_MUTED);
+                            "Nenhuma opção encontrada", MAIZO_MUTED);
         }
 #ifndef PADEMU
         if (settingsCategory == 1)
@@ -1349,9 +1386,7 @@ void menuRenderMenu()
                             "PadEmu nao incluido nesta compilacao.",
                             MAIZO_WARNING);
 #endif
-        maizoSettingsFooter(settingsFocus ?
-                                "OPCOES" :
-                                "SELECIONE A CATEGORIA");
+        maizoSettingsFooter(settingsQuery[0] ? "VOLTAR: LIMPAR BUSCA" : "SELECT: PESQUISAR");
         return;
     }
 
@@ -1481,9 +1516,26 @@ int menuCheckGameParentalLock(config_set_t *configSet)
 void menuHandleInputMenu()
 {
     if (thmGetGuiValue() == 0) {
-        if (mainMenuCurrent)
+        if (getKeyOn(KEY_SELECT)) {
+            char query[32];
+            snprintf(query, sizeof(query), "%s", settingsQuery);
+            if (guiShowKeyboard(query, sizeof(query))) {
+                snprintf(settingsQuery, sizeof(settingsQuery), "%s", query);
+                settingsFocus = 1;
+                menuInitMainMenu();
+            }
+            return;
+        }
+        if (settingsQuery[0] && getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
+            settingsQuery[0] = 0;
+            settingsFocus = 0;
+            menuInitMainMenu();
+            return;
+        }
+        if (mainMenuCurrent && !settingsQuery[0])
             settingsRemember[settingsCategory] = mainMenuCurrent->item.id + 1;
         if (getKeyOn(KEY_L1) || getKeyOn(KEY_R1)) {
+            settingsQuery[0] = 0;
             settingsCategory = (settingsCategory +
                                 (getKeyOn(KEY_R1) ? 1 : MAIZO_SETTING_CATEGORIES - 1)) %
                                MAIZO_SETTING_CATEGORIES;
@@ -1492,6 +1544,8 @@ void menuHandleInputMenu()
             return;
         }
         if (getKeyOn(KEY_LEFT)) {
+            settingsQuery[0] = 0;
+            menuInitMainMenu();
             settingsFocus = 0;
             return;
         }
@@ -1550,14 +1604,83 @@ void menuHandleInputMenu()
     if (getKeyOn(gSelectButton)) {
         // execute the item via looking at the id of it
         int id = mainMenuCurrent->item.id;
-        if (thmGetGuiValue() == 0)
+        if (thmGetGuiValue() == 0) {
             settingsRemember[settingsCategory] = id + 1;
+            settingsBreadcrumb = settingsNames[settingsItemCategory(id)];
+        }
 
         sfxPlay(SFX_CONFIRM);
 
         if (id == MENU_ITEM_INFO) {
             if (selected_item && selected_item->item->current)
                 selected_item->item->execSquare(selected_item->item);
+        } else if (id == MENU_VIEW_LAYOUT) {
+            const char *layouts[] = {"Carrossel", "Grade", "Lista", NULL};
+            struct UIItem ui[] = {
+                {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Visualização da biblioteca", -1}}},
+                {UI_SPLITTER},
+                {UI_ENUM, 9010, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, layouts}}},
+                {UI_BREAK},
+                {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
+                {UI_TERMINATOR}};
+            int layout = menuDashboardLayout();
+            diaSetInt(ui, 9010, layout);
+            if (diaExecuteDialog(ui, -1, 1, NULL) == UIID_BTN_OK) {
+                diaGetInt(ui, 9010, &layout);
+                configSetInt(configGetByType(CONFIG_OPL), "maizo_layout", layout);
+                saveConfig(CONFIG_OPL, 0);
+            }
+        } else if (id == MENU_RESET_APPEARANCE) {
+            if (menuCheckParentalLock() == 0 && guiMsgBox("Restaurar o estilo da biblioteca? Jogos, controles e rede serão preservados.", 1, NULL)) {
+                config_set_t *cfg = configGetByType(CONFIG_OPL);
+                configSetInt(cfg, "maizo_layout", 0);
+                configSetInt(cfg, "maizo_animation_mode", 2);
+                configSetInt(cfg, "maizo_animations", 1);
+                configSetInt(cfg, "maizo_cover_mode", 1);
+                configSetInt(cfg, "maizo_sort_mode", 0);
+                menuDashboardInvalidate();
+                saveConfig(CONFIG_OPL, 0);
+            }
+        } else if (id == MENU_QUICK_SETUP) {
+            if (menuCheckParentalLock() == 0) {
+                struct UIItem setup[] = {
+                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Bem-vindo ao MAIZO", -1}}},
+                    {UI_SPLITTER},
+                    {UI_BUTTON, 9020, 1, 1, -1, 0, 0, {.label = {"1. Escolher fontes de jogos", -1}}},
+                    {UI_BREAK},
+                    {UI_BUTTON, 9021, 1, 1, -1, 0, 0, {.label = {"2. Ajustar vídeo e margens", -1}}},
+                    {UI_BREAK},
+                    {UI_BUTTON, 9022, 1, 1, -1, 0, 0, {.label = {"3. Configurar rede SMB", -1}}},
+                    {UI_BREAK},
+                    {UI_BUTTON, 9023, 1, 1, -1, 0, 0, {.label = {"4. Configurar controles", -1}}},
+                    {UI_BREAK},
+                    {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Concluir", -1}}},
+                    {UI_TERMINATOR}};
+                int result = -1;
+                do {
+                    result = diaExecuteDialog(setup, result, 1, NULL);
+                    if (result == 9020)
+                        guiShowStorageConfig();
+                    else if (result == 9021)
+                        guiShowVideoConfig();
+                    else if (result == 9022)
+                        guiShowNetConfig();
+                    else if (result == 9023)
+                        guiShowControllerConfig();
+                } while (result >= 9020 && result <= 9023);
+            }
+        } else if (id == MENU_SMB_STATUS) {
+            char status[192];
+            int connected = menuMaizoSourceAvailable(MAIZO_SOURCE_SMB);
+            snprintf(status, sizeof(status), "SMB: %s | código %d | porta %d | pasta %.31s", connected ? "disponível" : "não conectado", gNetworkStartup, gPCPort, gPCShareName);
+            guiMsgBox(status, 0, NULL);
+            if (menuCheckParentalLock() == 0 && guiMsgBox("Abrir configuração de rede para conectar ou corrigir?", 1, NULL))
+                guiShowNetConfig();
+        } else if (id == MENU_PAD_HELP) {
+#ifdef PADEMU
+            guiMsgBox("USB e Bluetooth ativos no menu, sem iniciar jogo. A emulação nos jogos é independente. L1+R1+START no controle original alterna o modo de resgate.", 0, NULL);
+            guiGameShowUsbDiagnostics();
+#endif
         } else if (id == MENU_SOURCE_FILTER || id == MENU_LIBRARY_SORT || id == MENU_COVER_MODE || id == MENU_ANIMATIONS) {
             const char *sortNames[] = {"Nome", "Plataforma", "Origem", NULL};
             const char *animationNames[] = {"Desligadas", "Suaves", "Completas", NULL};
@@ -1717,6 +1840,7 @@ static void menuRenderElements(theme_element_t *elem)
 
 void menuRenderMain(void)
 {
+    settingsBreadcrumb = NULL;
     if (thmGetGuiValue() == 0) {
         dashboardRefresh();
         if (dashboard.tab == MAIZO_SETTINGS) {
@@ -1727,9 +1851,9 @@ void menuRenderMain(void)
             guiDrawBGPlasma();
             maizoDrawHeader(dashboard.tab);
             fntRenderString(gTheme->fonts[0], 320, 224, ALIGN_CENTER, 560, 48,
-                            dashboardError ? "Memoria insuficiente para a biblioteca" : "Nenhum item nesta aba", MAIZO_MUTED);
+                            dashboardError ? "Memória insuficiente para a biblioteca" : dashboard.query[0] ? "Nenhum resultado para a pesquisa" : "Nenhum item nesta aba", MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 320, 290, ALIGN_CENTER, 560, 48,
-                            "START: configurações  |  SELECT: atualizar fontes", MAIZO_MUTED);
+                            "START: configuração | SELECT: atualizar | R3: pesquisar", MAIZO_MUTED);
             return;
         }
     }
@@ -1812,6 +1936,22 @@ static void dashboardShowContext(void)
 
 static void dashboardHandleInput(void)
 {
+    if (getKeyOn(KEY_R3)) {
+        char query[32];
+        snprintf(query, sizeof(query), "%s", dashboard.query);
+        if (guiShowKeyboard(query, sizeof(query))) {
+            guiLock();
+            snprintf(dashboard.query, sizeof(dashboard.query), "%s", query);
+            if (!maizoLibraryFilter(&dashboard, dashboard.tab))
+                dashboardError = 1;
+            else {
+                dashboardError = 0;
+                dashboardSelect();
+            }
+            guiUnlock();
+        }
+        return;
+    }
     guiLock();
     dashboardRefresh();
     if (getKeyOn(KEY_L1) || getKeyOn(KEY_R1)) {
@@ -1834,8 +1974,13 @@ static void dashboardHandleInput(void)
     if ((pressLeft || pressRight) &&
         (pressEdge || guiFrameId - dashboardLastNavFrame >= 5)) {
         dashboardLastNavFrame = guiFrameId;
+        int layout = menuDashboardLayout();
         carouselDirection = pressLeft ? -1 : 1;
-        maizoLibraryMove(&dashboard, carouselDirection);
+        if (layout == 1 && (getKeyPressed(KEY_UP) || getKeyPressed(KEY_DOWN))) {
+            for (int col = 0; col < 4; col++)
+                maizoLibraryMove(&dashboard, carouselDirection);
+        } else
+            maizoLibraryMove(&dashboard, carouselDirection);
         dashboardSelect();
         dashboardStartAnimation();
         sfxPlay(SFX_CURSOR);
@@ -1872,9 +2017,11 @@ static void dashboardHandleInput(void)
         else
             selected_item->item->execCross(selected_item->item);
     } else if (getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
-        if (dashboard.tab != MAIZO_ALL) {
+        if (dashboard.query[0] || dashboard.tab != MAIZO_ALL) {
             guiLock();
-            maizoLibraryFilter(&dashboard, MAIZO_ALL);
+            int tab = dashboard.query[0] ? dashboard.tab : MAIZO_ALL;
+            dashboard.query[0] = 0;
+            maizoLibraryFilter(&dashboard, tab);
             dashboardSelect();
             guiUnlock();
         }

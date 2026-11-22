@@ -162,3 +162,9 @@ assert "fm_verify_file" in fm and "fm_copy_replace" in fm
 assert "fm_psu_import" in fm and "fm_psu_export" in fm
 assert "queued >= 2" in read("src/texcache.c")
 assert "retryFrame" in read("src/texcache.c")
+
+assert "maizoNoticeSlot" in pad_input and "guiNotifyControllerDisconnected" in pad_input
+assert "maizoMenuConnectedPads" in ui
+assert "drawMaizoLibraryList" in art and "maizo_layout" in menu
+assert "maizoTextMatches" in library and "settingsQuery" in menu
+assert "menuSettingsBreadcrumb" in dia and "MENU_QUICK_SETUP" in menu

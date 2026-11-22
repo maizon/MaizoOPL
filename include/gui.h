@@ -142,6 +142,7 @@ void guiShowParentalLockConfig();
 
 void guiCheckNotifications(int checkTheme, int checkLang);
 void guiNotifyController(const char *name, int slot);
+void guiNotifyControllerDisconnected(const char *name, int slot);
 void guiDrawControllerNotification(void);
 
 /** Renders the given string on screen for the given function until it's io finishes

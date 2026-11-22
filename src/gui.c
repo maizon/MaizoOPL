@@ -63,18 +63,30 @@ static clock_t popupTimer;
  * overwrite the first notification. No heap allocation or modal dialog. */
 #define MAIZO_PAD_TOASTS 8
 static char padToasts[MAIZO_PAD_TOASTS][80];
+static unsigned char padToastConnected[MAIZO_PAD_TOASTS];
 static unsigned int padToastHead, padToastCount;
 static clock_t padToastEnd;
 
-void guiNotifyController(const char *name, int slot)
+static void guiQueueControllerNotice(const char *name, int slot, int connected)
 {
     unsigned int index;
     if (padToastCount >= MAIZO_PAD_TOASTS)
         return;
     index = (padToastHead + padToastCount) % MAIZO_PAD_TOASTS;
     snprintf(padToasts[index], sizeof(padToasts[index]),
-             "Controle conectado - %s (P%d)", name, slot);
+             "Controle %s - %s (P%d)", connected ? "conectado" : "desconectado", name, slot);
+    padToastConnected[index] = connected;
     padToastCount++;
+}
+
+void guiNotifyController(const char *name, int slot)
+{
+    guiQueueControllerNotice(name, slot, 1);
+}
+
+void guiNotifyControllerDisconnected(const char *name, int slot)
+{
+    guiQueueControllerNotice(name, slot, 0);
 }
 
 void guiDrawControllerNotification(void)
@@ -96,8 +108,9 @@ void guiDrawControllerNotification(void)
     x = screenWidth - width - 24;
     y = 72;
     maizoDrawPanel(x, y, width, 42, 0);
-    rmDrawRect(x, y, 3, 42, MAIZO_ACCENT);
-    maizoDrawIcon(MAIZO_ICON_PAD, x + 10, y + 10, 22, MAIZO_ACCENT);
+    u64 accent = padToastConnected[padToastHead] ? MAIZO_SUCCESS : MAIZO_WARNING;
+    rmDrawRect(x, y, 3, 42, accent);
+    maizoDrawIcon(MAIZO_ICON_PAD, x + 10, y + 10, 22, accent);
     fntRenderString(gTheme->fonts[0], x + 40, y + 11, ALIGN_NONE,
                     width - 52, 26, padToasts[padToastHead], MAIZO_TEXT);
 }
@@ -1365,6 +1378,7 @@ static int maizoCaptureInput(int keyboard, const char *target)
                                                                                              "Pressione o botão ou tecla desejada.",
                         MAIZO_MUTED);
         fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2 + 42, ALIGN_CENTER, 560, 25, "START + SELECT cancela", MAIZO_MUTED);
+        guiDrawControllerNotification();
         rmEndFrame();
     }
     return -1;

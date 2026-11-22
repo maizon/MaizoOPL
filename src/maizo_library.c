@@ -165,6 +165,17 @@ static void remember(maizo_library_t *library)
     }
 }
 
+int maizoTextMatches(const char *text, const char *query)
+{
+    size_t length = strlen(query);
+    if (!length)
+        return 1;
+    for (; *text; text++)
+        if (!strncasecmp(text, query, length))
+            return 1;
+    return 0;
+}
+
 int maizoLibraryFilter(maizo_library_t *library, int tab)
 {
     size_t i;
@@ -185,7 +196,8 @@ int maizoLibraryFilter(maizo_library_t *library, int tab)
                     (tab == MAIZO_PS1_TAB && entry->platform == MAIZO_PS1) ||
                     (tab == MAIZO_APPS_TAB && entry->platform == MAIZO_APP) ||
                     (tab == MAIZO_FAVORITES && entry->favorite);
-        if (!match || (library->sourceFilter != MAIZO_SOURCE_ALL && entry->source != library->sourceFilter))
+        if (!match || (library->sourceFilter != MAIZO_SOURCE_ALL && entry->source != library->sourceFilter) ||
+            (!maizoTextMatches(entry->title, library->query) && !maizoTextMatches(entry->identity, library->query)))
             continue;
         if (tab < MAIZO_SETTINGS && entry->platform == library->remembered_platform[tab] &&
             strcmp(entry->identity, library->remembered[tab]) == 0)

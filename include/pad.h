@@ -46,4 +46,5 @@ void padStoreSettings(int *buffer);
 /** Restore's the button delay from specified integer array (has to have 16 items) */
 void padRestoreSettings(int *buffer);
 
+unsigned int maizoMenuConnectedPads(void);
 #endif

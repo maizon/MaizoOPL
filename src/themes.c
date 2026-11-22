@@ -587,6 +587,61 @@ static void drawGameImage(struct menu_list *menu, struct submenu_list *item, con
 /* Aurora/Freestyle-inspired dashboard: the original OPL game-case asset
  * frames each cover, with a real spine, depth and animated five-card track.
  * Artwork stays in the asynchronous ART cache; no separate texture manager. */
+static void drawMaizoLibraryList(mutable_image_t *art, theme_element_t *elem, int w, int h, int grid, int covers)
+{
+    int total = menuDashboardCount(), selected = menuDashboardPosition() - 1;
+    int columns = grid ? 4 : 1;
+    int rows = grid ? 2 : (h - 208) / 38;
+    if (rows < 1)
+        rows = 1;
+    int page = rows * columns, start = selected / page * page;
+    int rowHeight = (h - 206) / rows;
+    int cellWidth = (w - 64) / columns;
+    for (int i = 0; i < page && start + i < total; i++) {
+        maizo_entry_t *entry = menuDashboardSlot(start + i - selected);
+        if (!entry)
+            continue;
+        int active = start + i == selected;
+        int x = 32 + i % columns * cellWidth, y = 114 + i / columns * rowHeight;
+        maizoDrawPanel(x + 3, y + 2, cellWidth - 6, rowHeight - 5, active);
+        if (grid) {
+            menu_list_t *owner = entry->owner;
+            submenu_list_t *child = entry->item;
+            item_list_t *support = owner->item->userdata;
+            GSTEXTURE *cover = NULL;
+            if (covers && gEnableArt && art && art->cache && child->item.cache_id && child->item.cache_uid) {
+                char *startup = support->itemGetStartup(support, child->item.id);
+                if (startup && (active || guiInactiveFrames >= 5))
+                    cover = cachePrefetchTexture(art->cache, support, &child->item.cache_id[art->cache->userId], &child->item.cache_uid[art->cache->userId], startup);
+            }
+            int ch = rowHeight - 34, cw = rmWideScale(ch * 8 / 11);
+            if (cover && cover->Mem && cover->Height && cover->Width) {
+                cw = rmWideScale(ch * cover->Width / cover->Height);
+                if (cw > cellWidth - 18) {
+                    ch = ch * (cellWidth - 18) / cw;
+                    cw = cellWidth - 18;
+                }
+                rmDrawPixmap(cover, x + cellWidth / 2, y + 5 + ch / 2, ALIGN_CENTER, cw, ch, SCALING_NONE, gDefaultCol);
+            } else
+                maizoDrawIcon(entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : entry->platform == MAIZO_APP ? MAIZO_ICON_APPS : MAIZO_ICON_PS2,
+                              x + cellWidth / 2 - 18, y + ch / 2 - 12, 36, MAIZO_MUTED);
+            fntRenderString(elem->font, x + cellWidth / 2, y + rowHeight - 29, ALIGN_CENTER, cellWidth - 14, 25, entry->title, active ? MAIZO_TEXT : MAIZO_MUTED);
+        } else {
+            maizoDrawIcon(entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : entry->platform == MAIZO_APP ? MAIZO_ICON_APPS : MAIZO_ICON_PS2, x + 15, y + 9, 20, active ? MAIZO_BRIGHT : MAIZO_MUTED);
+            fntRenderString(elem->font, x + 47, y + 7, ALIGN_NONE, cellWidth - 160, 27, entry->title, active ? MAIZO_TEXT : MAIZO_MUTED);
+            menu_list_t *owner = entry->owner;
+            fntRenderString(elem->font, x + cellWidth - 14, y + 7, ALIGN_RIGHT, 104, 25, menuItemGetText(owner->item), MAIZO_MUTED);
+        }
+    }
+    maizo_entry_t *entry = menuDashboardSlot(0);
+    if (entry)
+        fntRenderString(elem->font, 32, h - 66, ALIGN_NONE, w - 150, 29, entry->title, MAIZO_TEXT);
+    char count[40];
+    snprintf(count, sizeof(count), "%d / %d", selected + 1, total);
+    fntRenderString(elem->font, w - 30, h - 63, ALIGN_RIGHT, 110, 25, count, MAIZO_MUTED);
+    fntRenderString(elem->font, 32, h - 31, ALIGN_NONE, w - 64, 24, "R3 Pesquisar  |  START Configurações  |  L1/R1 Abas", MAIZO_MUTED);
+}
+
 static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                               config_set_t *config, struct theme_element *elem)
 {
@@ -614,10 +669,16 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     rmDrawRect(0, h - 84, w, 1, MAIZO_DIVIDER);
     maizoDrawHeader(menuDashboardTab());
     fntRenderString(elem->font, 31, 82, ALIGN_NONE, 340, 28,
-                    "BIBLIOTECA  /  JOGOS", MAIZO_MUTED);
+                    menuDashboardQuery()[0] ? menuDashboardQuery() : "BIBLIOTECA  /  JOGOS", MAIZO_MUTED);
     position = menuDashboardPosition();
     total = menuDashboardCount();
 
+    int layout = menuDashboardLayout();
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_cover_mode", &covers);
+    if (layout) {
+        drawMaizoLibraryList(art, elem, w, h, layout == 1, covers);
+        return;
+    }
     if (!item || !art || !art->cache) {
         fntRenderString(elem->font, w / 2, h / 2, ALIGN_CENTER, w - 80, 32,
                         "Nenhuma capa disponivel", MAIZO_MUTED);
@@ -688,6 +749,15 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         if (!cover || !cover->Mem)
             cover = thmGetTexture(COVER_DEFAULT);
         if (cover && cover->Mem) {
+            if (cover->Width && cover->Height) {
+                int fitted = rmWideScale(ch * cover->Width / cover->Height);
+                if (fitted > cw)
+                    ch = ch * cw / fitted;
+                else
+                    cw = fitted;
+                x = cx - cw / 2;
+                y = cy - ch / 2;
+            }
             rmDrawPixmap(cover, cx, cy, ALIGN_CENTER, cw, ch,
                          SCALING_NONE, gDefaultCol);
         } else {
@@ -747,6 +817,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                       badgeX + 9, h - 64, 20, MAIZO_BRIGHT);
         fntRenderString(elem->font, badgeX + 36, h - 64,
                         ALIGN_NONE, 144, 25, origin, MAIZO_TEXT);
+        fntRenderString(elem->font, 32, h - 30, ALIGN_NONE, w - 232, 23, "R3 Pesquisar  |  START Configurações", MAIZO_MUTED);
         fntRenderString(elem->font, w - 30, h - 30,
                         ALIGN_RIGHT, 190, 23, counter, MAIZO_MUTED);
     }

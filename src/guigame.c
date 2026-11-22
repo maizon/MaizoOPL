@@ -756,6 +756,7 @@ void guiGameShowUsbDiagnostics(void)
             }
         }
         fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight - 50, ALIGN_CENTER, 590, 28, "SELECT: detalhes  |  START + VOLTAR: sair", MAIZO_MUTED);
+        guiDrawControllerNotification();
         rmEndFrame();
     }
 }

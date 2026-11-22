@@ -1321,10 +1321,14 @@ void *rpc_sf(int cmd, void *data, int size)
                     snapshot[12] |= 1u << port;
                 snapshot[pos] = snapshot[pos + 1] = 0xff;
                 snapshot[pos + 2] = snapshot[pos + 3] = 0x7f;
-                if (!ds34pad[port].enabled ||
-                    ds34pad[port].devId < 0 ||
-                    (!hid_report_ready[port] && ds34pad[port].type != MAIZOHID && ds34pad[port].type != MAIZO_KEYBOARD) ||
+                if (!ds34pad[port].enabled || ds34pad[port].devId < 0 ||
                     !(ds34pad[port].status & DS34USB_STATE_RUNNING))
+                    continue;
+                /* Connection is distinct from report readiness. Notify even
+                 * an idle Xbox/DS4 before it sends its first input packet. */
+                snapshot[15] |= ((ds34pad[port].type + 1) & 15) << (port * 4);
+                if (!hid_report_ready[port] && ds34pad[port].type != MAIZOHID &&
+                    ds34pad[port].type != MAIZO_KEYBOARD)
                     continue;
                 CpuSuspendIntr(&oldstate);
                 /* Deliver one observed short USB press once per EE poll. */
@@ -1338,9 +1342,7 @@ void *rpc_sf(int cmd, void *data, int size)
                 }
                 CpuResumeIntr(oldstate);
                 snapshot[11] |= 1u << port;
-                /* Packed per-slot protocol metadata. Existing button
-                 * payload and diagnostic offsets remain unchanged. */
-                snapshot[15] |= ((ds34pad[port].type + 1) & 15) << (port * 4);
+
             }
             snapshot[13] = maizo_usb_stage;
             snapshot[14] = maizo_usb_reports;

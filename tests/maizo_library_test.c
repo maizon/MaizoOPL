@@ -120,5 +120,18 @@ int main(void)
         assert(maizoLibraryFilter(&sources, MAIZO_ALL) && sources.view_count == 2);
         maizoLibraryClear(&sources);
     }
+    {
+        maizo_library_t query = {0};
+        assert(maizoLibraryAdd(&query, (void *)1, (void *)1, MAIZO_PS2, "SLUS_001", "Gran Turismo", 0));
+        assert(maizoLibraryAdd(&query, (void *)2, (void *)2, MAIZO_PS2, "SLUS_002", "Silent Hill", 0));
+        strcpy(query.query, "TURISMO");
+        assert(maizoLibraryFilter(&query, MAIZO_ALL));
+        assert(query.view_count == 1 && !strcmp(maizoLibrarySlot(&query, 0)->title, "Gran Turismo"));
+        strcpy(query.query, "slus_002");
+        assert(maizoLibraryFilter(&query, MAIZO_ALL) && query.view_count == 1);
+        query.query[0] = 0;
+        assert(maizoLibraryFilter(&query, MAIZO_ALL) && query.view_count == 2);
+        maizoLibraryClear(&query);
+    }
     return 0;
 }
