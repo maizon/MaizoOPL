@@ -488,7 +488,8 @@ static void usb_config_set(int result, int count, void *arg)
         ret = UsbControlTransfer(ds34pad[pad].controlEndp, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
                                  0x0b, 0, ds34pad[pad].hid_interface, 0, NULL,
                                  maizo_keyboard_configured, (void *)pad);
-        if (ret != USB_RC_OK) maizo_usb_stage = MAIZO_USB_CONFIG_FAIL;
+        if (ret != USB_RC_OK)
+            maizo_usb_stage = MAIZO_USB_CONFIG_FAIL;
         SignalSema(ds34pad[pad].sema);
         return;
     }
@@ -556,7 +557,10 @@ static void maizo_keyboard_configured(int resultCode, int bytes, void *arg)
     if (resultCode == USB_RC_OK) {
         ds34pad[pad].status |= DS34USB_STATE_RUNNING;
         maizo_usb_stage = MAIZO_USB_READY;
-    } else { maizo_usb_stage = MAIZO_USB_CONFIG_FAIL; maizo_usb_error = (u8)resultCode; }
+    } else {
+        maizo_usb_stage = MAIZO_USB_CONFIG_FAIL;
+        maizo_usb_error = (u8)resultCode;
+    }
 }
 
 static void maizo_descriptor_cb(int resultCode, int bytes, void *arg)
@@ -596,7 +600,8 @@ static void readReport(u8 *data, int bytes, int pad)
         u16 oldButtons = ds34pad[pad].ds2.nButtonState;
         if (maizoDecodeKeyboard(&ds34pad[pad].ds2, data, bytes, maizoProfiles)) {
             hid_pending[pad] |= maizohid_press_edges(oldButtons, ds34pad[pad].ds2.nButtonState);
-            hid_report_ready[pad] = 1; maizo_usb_stage = MAIZO_USB_READY;
+            hid_report_ready[pad] = 1;
+            maizo_usb_stage = MAIZO_USB_READY;
         }
         return;
     }
@@ -1182,7 +1187,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34USB_TWIN_DIAG   9
 #define DS34USB_USB_DIAG    10
 #define DS34USB_MENU_STATE  11
-#define DS34USB_PROFILES   12
+#define DS34USB_PROFILES    12
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)
@@ -1219,7 +1224,15 @@ void *rpc_sf(int cmd, void *data, int size)
             break;
         case DS34USB_PROFILES: {
             int oldstate;
-            if (size < MAIZO_PROFILE_SIZE || !memcmp(maizoProfiles, data, MAIZO_PROFILE_SIZE))
+            unsigned int i;
+            const u8 *incoming = data;
+            if (size < MAIZO_PROFILE_SIZE)
+                break;
+            for (i = 0; i < MAIZO_PROFILE_SIZE; i++) {
+                if (maizoProfiles[i] != incoming[i])
+                    break;
+            }
+            if (i == MAIZO_PROFILE_SIZE)
                 break;
             CpuSuspendIntr(&oldstate);
             mips_memcpy(maizoProfiles, data, MAIZO_PROFILE_SIZE);

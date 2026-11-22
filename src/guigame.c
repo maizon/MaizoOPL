@@ -840,7 +840,7 @@ static int guiGamePadEmuUpdater(int modified)
         diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_VIB, PadEmuPort && EnablePadEmu);
     }
     PadEmuSettings = (int)maizoPademuSetOptions(PadEmuSettings, PadEmuMode, PadEmuMtap,
-                                               PadEmuMtapPort, PadEmuWorkaround);
+                                                PadEmuMtapPort, PadEmuWorkaround);
 
     if (PadEmuMode == 1) {
         if (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED) {
@@ -953,7 +953,7 @@ void guiGameShowPadEmuConfig(int forceGlobal)
     maizoPadEmuMtap = (PadEmuSettings >> 24) & 1;
     maizoPadEmuEditPort = maizoPadEmuMtap ? 0 : maizoPademuPortChoice(PadEmuSettings);
     maizoPadEmuVibration = maizoPadEmuMtap ? ((PadEmuSettings >> 16) & 1) :
-                            !!((unsigned int)PadEmuSettings & MAIZO_PADEMU_VIB_BITS);
+                                             !!((unsigned int)PadEmuSettings & MAIZO_PADEMU_VIB_BITS);
     diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, maizoPadEmuEditPort);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, (PadEmuSettings >> 8) & 1);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, maizoPadEmuVibration);
@@ -1505,7 +1505,7 @@ static void guiGameLoadPadEmuConfig(config_set_t *configSet, config_set_t *confi
     maizoPadEmuMtap = (PadEmuSettings >> 24) & 1;
     maizoPadEmuEditPort = maizoPadEmuMtap ? 0 : maizoPademuPortChoice(PadEmuSettings);
     maizoPadEmuVibration = maizoPadEmuMtap ? ((PadEmuSettings >> 16) & 1) :
-                            !!((unsigned int)PadEmuSettings & MAIZO_PADEMU_VIB_BITS);
+                                             !!((unsigned int)PadEmuSettings & MAIZO_PADEMU_VIB_BITS);
     diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, maizoPadEmuEditPort);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, (PadEmuSettings >> 8) & 1);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, maizoPadEmuVibration);

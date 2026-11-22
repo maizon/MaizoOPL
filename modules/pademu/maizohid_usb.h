@@ -4,8 +4,8 @@
 /* Read only the USB descriptors already enumerated by ps2sdk.  Do not
  * assume the first interface/endpoint of a composite device is the pad. */
 static int maizohid_find_interface_kind(int devId, int keyboard,
-                                   UsbInterfaceDescriptor **found_interface,
-                                   UsbEndpointDescriptor **found_input)
+                                        UsbInterfaceDescriptor **found_interface,
+                                        UsbEndpointDescriptor **found_input)
 {
     UsbDeviceDescriptor *device;
     UsbConfigDescriptor *config;
@@ -38,8 +38,8 @@ static int maizohid_find_interface_kind(int devId, int keyboard,
                 iface = (UsbInterfaceDescriptor *)cursor;
                 if (iface->bInterfaceClass == 0x03 &&
                     (keyboard ? (iface->bInterfaceSubClass == 1 && iface->bInterfaceProtocol == 1) :
-                     !(iface->bInterfaceSubClass == 1 &&
-                       (iface->bInterfaceProtocol == 1 || iface->bInterfaceProtocol == 2))))
+                                !(iface->bInterfaceSubClass == 1 &&
+                                  (iface->bInterfaceProtocol == 1 || iface->bInterfaceProtocol == 2))))
                     candidate = iface;
             }
         } else if (cursor[1] == USB_DT_ENDPOINT && candidate &&

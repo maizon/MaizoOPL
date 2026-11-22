@@ -1087,8 +1087,7 @@ static void maizoShowMapping(void)
         {UI_BREAK},
         {UI_BUTTON, 7102, 1, 1, -1, 0, 0, {.label = {"Keyboard", -1}}},
         {UI_BREAK},
-        {UI_TERMINATOR}
-    };
+        {UI_TERMINATOR}};
     int result;
     while ((result = diaExecuteDialog(menu, -1, 1, NULL)) == 7101 || result == 7102) {
         int keyboard = result == 7102, offset = keyboard ? 16 : 0;
@@ -1096,25 +1095,24 @@ static void maizoShowMapping(void)
         struct UIItem ui[16 * 4 + 7] = {{0}};
         int i, n = 0, selected, j;
         maizoLoadInputProfiles(profiles);
-        ui[n++] = (struct UIItem){UI_LABEL, 0, 1, 1, -1, 0, 0,
-            {.label = {keyboard ? "Keyboard > DualShock" : "USB HID > DualShock", -1}}};
+        ui[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {keyboard ? "Keyboard > DualShock" : "USB HID > DualShock", -1}}};
         ui[n++].type = UI_BREAK;
         for (i = 0; i < 16; i++) {
             selected = profiles[offset + i];
             if (keyboard) {
                 selected = 0;
                 for (j = 0; j < (int)sizeof(keyCodes); j++)
-                    if (keyCodes[j] == profiles[offset + i]) selected = j;
+                    if (keyCodes[j] == profiles[offset + i])
+                        selected = j;
             }
-            ui[n++] = (struct UIItem){UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {padNames[i], -1}}};
+            ui[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {padNames[i], -1}}};
             ui[n++].type = UI_SPACER;
-            ui[n++] = (struct UIItem){UI_ENUM, 7200 + i, 1, 1, -1, 0, 0,
-                {.intvalue = {selected, selected, 0, 0, keyboard ? keyNames : padNames}}};
+            ui[n++] = (struct UIItem) {UI_ENUM, 7200 + i, 1, 1, -1, 0, 0, {.intvalue = {selected, selected, 0, 0, keyboard ? keyNames : padNames}}};
             ui[n++].type = UI_BREAK;
         }
-        ui[n++] = (struct UIItem){UI_BUTTON, 7300, 1, 1, -1, 0, 0, {.label = {"Restaurar padrao", -1}}};
+        ui[n++] = (struct UIItem) {UI_BUTTON, 7300, 1, 1, -1, 0, 0, {.label = {"Restaurar padrao", -1}}};
         ui[n++].type = UI_BREAK;
-        ui[n++] = (struct UIItem){UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar", -1}}};
+        ui[n++] = (struct UIItem) {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar", -1}}};
         ui[n++].type = UI_TERMINATOR;
         do {
             result = diaExecuteDialog(ui, -1, 1, NULL);
@@ -1123,7 +1121,8 @@ static void maizoShowMapping(void)
                     selected = i;
                     if (keyboard)
                         for (j = 0; j < (int)sizeof(keyCodes); j++)
-                            if (keyCodes[j] == maizoDefaultKeys[i]) selected = j;
+                            if (keyCodes[j] == maizoDefaultKeys[i])
+                                selected = j;
                     diaSetInt(ui, 7200 + i, selected);
                 }
             }
@@ -1133,7 +1132,8 @@ static void maizoShowMapping(void)
             config_set_t *config = configGetByType(CONFIG_OPL);
             for (i = 0; i < 16; i++) {
                 diaGetInt(ui, 7200 + i, &selected);
-                if (keyboard && (selected < 0 || selected >= (int)sizeof(keyCodes))) selected = 0;
+                if (keyboard && (selected < 0 || selected >= (int)sizeof(keyCodes)))
+                    selected = 0;
                 profiles[offset + i] = keyboard ? keyCodes[selected] : selected;
                 snprintf(key, sizeof(key), "maizo_input_%02d", offset + i);
                 configSetInt(config, key, profiles[offset + i]);

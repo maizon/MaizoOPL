@@ -16,7 +16,7 @@ static inline void maizoRemapHid(struct ds2report *out, const unsigned char *pro
     maizoInputSetButtons(out, mask);
 }
 static inline int maizoDecodeKeyboard(struct ds2report *out, const unsigned char *data,
-                                     unsigned int bytes, const unsigned char *profiles)
+                                      unsigned int bytes, const unsigned char *profiles)
 {
     unsigned int mask;
     if (!maizoKeyboardMask(data, bytes, profiles, &mask))

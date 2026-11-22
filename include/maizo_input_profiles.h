@@ -1,8 +1,8 @@
 #ifndef MAIZO_INPUT_PROFILES_H
 #define MAIZO_INPUT_PROFILES_H
 #define MAIZO_PROFILE_SIZE 32
-#define MAIZO_KEYBOARD 7
-static const unsigned char maizoDefaultKeys[16] = {42,8,21,40,82,79,81,80,20,26,4,22,6,27,29,25};
+#define MAIZO_KEYBOARD     7
+static const unsigned char maizoDefaultKeys[16] = {42, 8, 21, 40, 82, 79, 81, 80, 20, 26, 4, 22, 6, 27, 29, 25};
 static inline void maizoDefaultProfiles(unsigned char *profile)
 {
     unsigned int i;
@@ -27,7 +27,7 @@ static inline unsigned int maizoMapHid(unsigned int active, const unsigned char 
     return mapped;
 }
 static inline int maizoKeyboardMask(const unsigned char *report, unsigned int bytes,
-                                   const unsigned char *profile, unsigned int *mask)
+                                    const unsigned char *profile, unsigned int *mask)
 {
     unsigned int i, j;
     if (bytes < 8 || report[1] != 0)

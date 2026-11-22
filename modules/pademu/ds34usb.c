@@ -456,7 +456,7 @@ static void maizo_keyboard_configured(int resultCode, int bytes, void *arg)
     if (resultCode == USB_RC_OK) {
         ds34pad[pad].status |= DS34USB_STATE_RUNNING;
         ds34pad[pad].analog_btn = 1;
-    } 
+    }
 }
 
 static void usb_hid_descriptor_cb(int resultCode, int bytes, void *arg)
@@ -500,7 +500,6 @@ static void readReport(u8 *data, int bytes, int pad_idx)
         u16 oldButtons = ds34pad[pad_idx].ds2.nButtonState;
         if (maizoDecodeKeyboard(&ds34pad[pad_idx].ds2, data, bytes, maizoProfiles)) {
             hid_pending[pad_idx] |= maizohid_press_edges(oldButtons, ds34pad[pad_idx].ds2.nButtonState);
-            
         }
         return;
     }
