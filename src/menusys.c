@@ -24,6 +24,7 @@
 #include "include/ethsupport.h"
 #include "include/appsupport.h"
 #include "include/maizo_filemgr.h"
+#include "include/cheatman.h"
 
 enum MENU_IDs {
     MENU_SETTINGS = 0,
@@ -79,6 +80,7 @@ enum GAME_MENU_IDs {
     GAME_REMOVE_CHANGES,
     GAME_RENAME_GAME,
     GAME_DELETE_GAME,
+    GAME_CHEAT_ADVANCED,
 };
 
 // global menu variables
@@ -104,6 +106,7 @@ static submenu_list_t *mainMenuCurrent;
 static submenu_list_t *gameMenu;
 // active item in game settings
 static submenu_list_t *gameMenuCurrent;
+static int detailFocus, detailReturn;
 
 static submenu_list_t *appMenu;
 static submenu_list_t *appMenuCurrent;
@@ -670,14 +673,16 @@ void menuInitGameMenu(void)
         submenuDestroy(&gameMenu);
 
     // initialize the menu
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_COMPAT_SETTINGS, _STR_COMPAT_SETTINGS);
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_CHEAT_SETTINGS, _STR_CHEAT_SETTINGS);
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_GSM_SETTINGS, _STR_GSCONFIG);
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_VMC_SETTINGS, _STR_VMC_SCREEN);
+    submenuAppendItem(&gameMenu, -1, thmGetGuiValue() == 0 ? "Compatibilidade" : NULL, GAME_COMPAT_SETTINGS, _STR_COMPAT_SETTINGS);
+    submenuAppendItem(&gameMenu, -1, thmGetGuiValue() == 0 ? "Cheats do jogo" : NULL, GAME_CHEAT_SETTINGS, _STR_CHEAT_SETTINGS);
+    if (thmGetGuiValue() == 0)
+        submenuAppendItem(&gameMenu, -1, "Cheats: avançado", GAME_CHEAT_ADVANCED, -1);
+    submenuAppendItem(&gameMenu, -1, thmGetGuiValue() == 0 ? "Vídeo (GSM)" : NULL, GAME_GSM_SETTINGS, _STR_GSCONFIG);
+    submenuAppendItem(&gameMenu, -1, thmGetGuiValue() == 0 ? "Memory Card virtual" : NULL, GAME_VMC_SETTINGS, _STR_VMC_SCREEN);
 #ifdef PADEMU
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_PADEMU_SETTINGS, _STR_PADEMUCONFIG);
+    submenuAppendItem(&gameMenu, -1, thmGetGuiValue() == 0 ? "Controles (PadEmu)" : NULL, GAME_PADEMU_SETTINGS, _STR_PADEMUCONFIG);
 #endif
-    submenuAppendItem(&gameMenu, -1, NULL, GAME_OSD_LANGUAGE_SETTINGS, _STR_OSD_SETTINGS);
+    submenuAppendItem(&gameMenu, -1, thmGetGuiValue() == 0 ? "Idioma e região" : NULL, GAME_OSD_LANGUAGE_SETTINGS, _STR_OSD_SETTINGS);
     submenuAppendItem(&gameMenu, -1, NULL, GAME_SAVE_CHANGES, _STR_SAVE_CHANGES);
     submenuAppendItem(&gameMenu, -1, NULL, GAME_TEST_CHANGES, _STR_TEST);
     submenuAppendItem(&gameMenu, -1, NULL, GAME_REMOVE_CHANGES, _STR_REMOVE_ALL_SETTINGS);
@@ -1933,8 +1938,10 @@ static void dashboardShowContext(void)
         else
             source->execCross(source);
     } else if (result == 1002) {
+        detailReturn = 0;
         source->execTriangle(source);
     } else if (result == 1003) {
+        detailFocus = detailReturn = 0;
         source->execSquare(source);
     } else if (result == 1004) {
         dashboardToggleFavorite();
@@ -2017,6 +2024,7 @@ static void dashboardHandleInput(void)
             }
         }
     } else if (hasItem && getKeyOn(KEY_SQUARE)) {
+        detailFocus = detailReturn = 0;
         selected_item->item->execSquare(selected_item->item);
     } else if (hasItem && getKeyOn(KEY_TRIANGLE)) {
         dashboardShowContext();
@@ -2110,44 +2118,79 @@ void menuRenderInfo(void)
     item_list_t *list = selected_item->item->userdata;
 
     if (thmGetGuiValue() == 0) {
-        const char *identity = NULL;
-        char path[256];
-        int mode = list->mode;
         submenu_list_t *current = selected_item->item->current;
         if (!current || !selected_item->item->visible) {
             guiSwitchScreen(GUI_SCREEN_MAIN);
             return;
         }
-        if (list->itemGetStartup)
-            identity = list->itemGetStartup(list, current->item.id);
-        if (mode == APP_MODE && appGetItemPath(current->item.id, path, sizeof(path)))
-            identity = path;
-        guiDrawBGPlasma();
+        const char *identity = list->itemGetStartup ? list->itemGetStartup(list, current->item.id) : "";
+        int mode = list->mode;
+        int h = gTheme->usedHeight;
+        const int coverX = 32, coverY = 126, coverW = 150, coverH = 203;
+        const char *platform = mode == APP_MODE ? "Homebrew" : mode == PS1_MODE ? "PlayStation 1" : "PlayStation 2";
+        int canConfigure = !(list->flags & MODE_FLAG_NO_COMPAT) || (mode == APP_MODE && gEnableWrite);
+        int buttons = canConfigure ? 2 : 1;
+        if (detailFocus >= buttons)
+            detailFocus = 0;
+        rmDrawRect(0, 0, 640, h, MAIZO_BLACK);
         maizoDrawBrand();
-        fntRenderString(gTheme->fonts[0], 608, 20, ALIGN_RIGHT, 160, 28,
-                        "INFORMACOES", MAIZO_MUTED);
-        maizoDrawPanel(30, 110, 580, 285, 0);
-        maizoDrawIcon(mode == APP_MODE ? MAIZO_ICON_APPS :
-                      mode == PS1_MODE ? MAIZO_ICON_PS1 :
-                                         MAIZO_ICON_PS2,
-                      44, 126, 40, MAIZO_BRIGHT);
-        fntRenderString(gTheme->fonts[0], 98, 132, ALIGN_NONE, 486, 52,
-                        submenuItemGetText(&current->item), MAIZO_TEXT);
-        maizoDrawSeparator(44, 198, 548);
-        fntRenderString(gTheme->fonts[0], 48, 215, ALIGN_NONE, 520, 30,
-                        mode == APP_MODE ? "Aplicativo ELF" :
-                        mode == PS1_MODE ? "PlayStation 1" :
-                                           "PlayStation 2",
-                        MAIZO_MUTED);
-        if (identity && identity[0]) {
-            fntRenderString(gTheme->fonts[0], 48, 264, ALIGN_NONE, 520, 26,
-                            "Identificador / origem:", MAIZO_MUTED);
-            fntRenderString(gTheme->fonts[0], 48, 294, ALIGN_NONE, 520, 50,
-                            identity, MAIZO_TEXT);
-        } else
-            fntRenderString(gTheme->fonts[0], 48, 270, ALIGN_NONE, 520, 35,
-                            "Identificador nao informado", MAIZO_MUTED);
-        guiDrawSubMenuHints();
+        fntRenderString(gTheme->fonts[0], 608, 20, ALIGN_RIGHT, 180, 26, "DETALHES DO JOGO", MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0], 32, 66, ALIGN_NONE, 576, 43, submenuItemGetText(&current->item), MAIZO_TEXT);
+        maizoDrawPanel(coverX, coverY, coverW, coverH, 0);
+        GSTEXTURE *cover = thmSupremeDetailArt(list, current->item.id, 0);
+        if (cover && cover->Mem && cover->Width && cover->Height) {
+            int ch = coverH - 10, cw = rmWideScale(ch * cover->Width / cover->Height);
+            if (cw > coverW - 10) {
+                ch = ch * (coverW - 10) / cw;
+                cw = coverW - 10;
+            }
+            rmDrawPixmap(cover, coverX + coverW / 2, coverY + coverH / 2, ALIGN_CENTER, cw, ch, SCALING_NONE, gDefaultCol);
+        } else {
+            maizoDrawIcon(mode == APP_MODE ? MAIZO_ICON_APPS : mode == PS1_MODE ? MAIZO_ICON_PS1 : MAIZO_ICON_PS2,
+                          coverX + 52, coverY + 64, 48, MAIZO_BRIGHT);
+            fntRenderString(gTheme->fonts[0], coverX + coverW / 2, coverY + 126, ALIGN_CENTER, coverW - 14, 24, "Sem capa", MAIZO_MUTED);
+        }
+        fntRenderString(gTheme->fonts[0], 198, 126, ALIGN_NONE, 410, 25, platform, MAIZO_BRIGHT);
+        char metadata[160];
+        snprintf(metadata, sizeof(metadata), "%s  |  %s", identity ? identity : "", sourceNames[dashboardSource(list)]);
+        fntRenderString(gTheme->fonts[0], 198, 155, ALIGN_NONE, 410, 24, metadata, MAIZO_MUTED);
+        _menuRequestConfig();
+        char genre[64] = {0}, players[32] = {0}, year[24] = {0};
+        if (itemConfig && configRequestOwner == selected_item->item && itemConfigId == current->item.id) {
+            configGetStrCopy(itemConfig, "#Genre", genre, sizeof(genre));
+            configGetStrCopy(itemConfig, "#Players", players, sizeof(players));
+            configGetStrCopy(itemConfig, "#Release", year, sizeof(year));
+        }
+        snprintf(metadata, sizeof(metadata), "%s%s%s%s%s", genre, genre[0] && players[0] ? " | " : "", players, (genre[0] || players[0]) && year[0] ? " | " : "", year);
+        if (metadata[0])
+            fntRenderString(gTheme->fonts[0], 198, 182, ALIGN_NONE, 410, 24, metadata, MAIZO_MUTED);
+        for (int slot = 1; slot <= 2; slot++) {
+            const int x = 198 + (slot - 1) * 208, y = 213, w = 200, sh = 116;
+            maizoDrawPanel(x, y, w, sh, 0);
+            GSTEXTURE *shot = thmSupremeDetailArt(list, current->item.id, slot);
+            if (shot && shot->Mem && shot->Width && shot->Height) {
+                int ch = sh - 8, cw = rmWideScale(ch * shot->Width / shot->Height);
+                if (cw > w - 8) {
+                    ch = ch * (w - 8) / cw;
+                    cw = w - 8;
+                }
+                rmDrawPixmap(shot, x + w / 2, y + sh / 2, ALIGN_CENTER, cw, ch, SCALING_NONE, gDefaultCol);
+            } else {
+                maizoDrawIcon(MAIZO_ICON_VIDEO, x + 85, y + 27, 30, MAIZO_DISABLED);
+                fntRenderString(gTheme->fonts[0], x + w / 2, y + 67, ALIGN_CENTER, w - 12, 22, slot == 1 ? "Sem imagem" : "Sem segunda imagem", MAIZO_MUTED);
+            }
+        }
+        for (int i = 0; i < buttons; i++) {
+            int x = 32 + i * 292;
+            maizoDrawPanel(x, h - 129, canConfigure ? 280 : 576, 51, i == detailFocus);
+            maizoDrawIcon(i == 0 ? MAIZO_ICON_PLAY : MAIZO_ICON_SETTINGS, x + 13, h - 116, 25, MAIZO_BRIGHT);
+            fntRenderString(gTheme->fonts[0], x + 48, h - 114, ALIGN_NONE, 225, 28, i == 0 ? "Iniciar" : "Configurar jogo", MAIZO_TEXT);
+        }
+        rmDrawRect(0, h - 62, 640, 62, MAIZO_SURFACE);
+        maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 32, h - 38, "Selecionar");
+        maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, 202, h - 38, "Voltar");
+        if (canConfigure)
+            maizoDrawPromptHint(TRIANGLE_ICON, 355, h - 38, "Configurar");
         return;
     }
 
@@ -2162,6 +2205,27 @@ void menuRenderInfo(void)
 
 void menuHandleInputInfo()
 {
+    if (thmGetGuiValue() == 0) {
+        if (!selected_item || !selected_item->item->current)
+            return;
+        item_list_t *support = selected_item->item->userdata;
+        int canConfigure = !(support->flags & MODE_FLAG_NO_COMPAT) || (support->mode == APP_MODE && gEnableWrite);
+        if (canConfigure && (getKeyOn(KEY_LEFT) || getKeyOn(KEY_RIGHT)))
+            detailFocus ^= 1;
+        if (getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
+            detailFocus = detailReturn = 0;
+            guiSwitchScreen(GUI_SCREEN_MAIN);
+        } else if (canConfigure && (getKeyOn(KEY_TRIANGLE) || (detailFocus && getKeyOn(gSelectButton)))) {
+            detailReturn = 1;
+            selected_item->item->execTriangle(selected_item->item);
+        } else if (getKeyOn(gSelectButton) && !detailFocus) {
+            if (gSelectButton == KEY_CIRCLE)
+                selected_item->item->execCircle(selected_item->item);
+            else
+                selected_item->item->execCross(selected_item->item);
+        }
+        return;
+    }
     if (getKeyOn(KEY_CROSS)) {
         if (gSelectButton == KEY_CIRCLE)
             guiSwitchScreen(GUI_SCREEN_MAIN);
@@ -2211,25 +2275,32 @@ void menuRenderGameMenu()
         submenu_list_t *it;
         int index = 0, active = 0, first, y = 164;
         const int rx = 236, rw = 382;
-        const char *title = selected_item->item->current->item.text;
+        const char *title = submenuItemGetText(&selected_item->item->current->item);
         if (!gameMenuCurrent)
             gameMenuCurrent = gameMenu;
         for (it = gameMenu; it; it = it->next, index++)
             if (it == gameMenuCurrent)
                 active = index;
-        first = active >= 7 ? active - 6 : 0;
+        first = active >= 6 ? active - 5 : 0;
         rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
         maizoDrawHeader(MAIZO_SETTINGS);
         rmDrawRect(0, 70, 640, 1, MAIZO_DIVIDER);
 
         maizoDrawPanel(25, 106, 200, 302, 0);
-        maizoDrawIcon(MAIZO_ICON_PS2, 43, 125, 40, MAIZO_BRIGHT);
-        fntRenderString(gTheme->fonts[0], 44, 176, ALIGN_NONE,
-                        160, 70, title, MAIZO_TEXT);
-        maizoDrawSeparator(41, 257, 162);
-        fntRenderString(gTheme->fonts[0], 41, 276, ALIGN_NONE,
+        GSTEXTURE *cover = thmSupremeDetailArt(selected_item->item->userdata, selected_item->item->current->item.id, 0);
+        if (cover && cover->Mem && cover->Width && cover->Height) {
+            int w = rmWideScale(108 * cover->Width / cover->Height);
+            if (w > 152)
+                w = 152;
+            rmDrawPixmap(cover, 125, 185, ALIGN_CENTER, w, 108, SCALING_NONE, gDefaultCol);
+        } else
+            maizoDrawIcon(MAIZO_ICON_PS2, 100, 147, 42, MAIZO_BRIGHT);
+        fntRenderString(gTheme->fonts[0], 125, 246, ALIGN_CENTER,
+                        164, 25, title, MAIZO_TEXT);
+        maizoDrawSeparator(41, 275, 162);
+        fntRenderString(gTheme->fonts[0], 41, 289, ALIGN_NONE,
                         170, 28, "CONFIGURACAO", MAIZO_MUTED);
-        fntRenderString(gTheme->fonts[0], 41, 309, ALIGN_NONE,
+        fntRenderString(gTheme->fonts[0], 41, 322, ALIGN_NONE,
                         170, 58, gameConfigSource(), MAIZO_BRIGHT);
 
         maizoDrawPanel(rx, 106, rw, 302, 0);
@@ -2351,6 +2422,11 @@ void menuHandleInputGameMenu()
         if (menuID == GAME_COMPAT_SETTINGS) {
             guiGameShowCompatConfig(selected_item->item->current->item.id, selected_item->item->userdata, itemConfig);
         } else if (menuID == GAME_CHEAT_SETTINGS) {
+            if (thmGetGuiValue() == 0)
+                guiGameShowDatabaseCheats(selected_item->item->userdata, selected_item->item->current->item.id, itemConfig);
+            else
+                guiGameShowCheatConfig();
+        } else if (menuID == GAME_CHEAT_ADVANCED) {
             guiGameShowCheatConfig();
         } else if (menuID == GAME_GSM_SETTINGS) {
             guiGameShowGSConfig();
@@ -2388,7 +2464,8 @@ void menuHandleInputGameMenu()
     }
 
     if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
-        guiSwitchScreen(GUI_SCREEN_MAIN);
+        guiSwitchScreen(detailReturn ? GUI_SCREEN_INFO : GUI_SCREEN_MAIN);
+        detailReturn = 0;
     }
 }
 

@@ -12,6 +12,8 @@
 #include "include/ethsupport.h"
 #include "include/compatupd.h"
 #include "include/cheatman.h"
+#include "include/cheatconfig.h"
+#include "include/maizo_cheatdb.h"
 #include "include/system.h"
 #include "include/guigame.h"
 #include "include/ds34common.h"
@@ -451,6 +453,87 @@ static int guiGameCheatUpdater(int modified)
     }
 
     return 0;
+}
+
+static volatile int cheatLookupBusy;
+static int cheatLookupResult;
+static char cheatLookupSerial[32], cheatLookupTitle[256], cheatLookupPrefix[256];
+
+static void guiGameCheatLookup(void)
+{
+    cheatLookupResult = load_game_cheats(cheatLookupPrefix, cheatLookupSerial, cheatLookupTitle);
+    cheatLookupBusy = 0;
+}
+
+void guiGameShowDatabaseCheats(item_list_t *support, int id, config_set_t *cfg)
+{
+    if (!cfg || !support || !support->itemGetStartup || !support->itemGetPrefix)
+        return;
+    const char *serial = support->itemGetStartup(support, id);
+    const char *prefix = support->itemGetPrefix(support);
+    char title[256] = {0};
+    configGetStrCopy(cfg, CONFIG_ITEM_NAME, title, sizeof(title));
+    if (!title[0] && support->itemGetName)
+        snprintf(title, sizeof(title), "%s", support->itemGetName(support, id));
+    if (!serial || !prefix)
+        return;
+    snprintf(cheatLookupSerial, sizeof(cheatLookupSerial), "%s", serial);
+    snprintf(cheatLookupTitle, sizeof(cheatLookupTitle), "%s", title);
+    snprintf(cheatLookupPrefix, sizeof(cheatLookupPrefix), "%s", prefix);
+    InitCheatsConfig(cfg);
+    cheatLookupBusy = 1;
+    if (ioPutRequest(IO_CUSTOM_SIMPLEACTION, &guiGameCheatLookup) != IO_OK) {
+        cheatLookupBusy = 0;
+        guiMsgBox("Dispositivo ocupado. Tente novamente.", 0, NULL);
+        return;
+    }
+    while (cheatLookupBusy)
+        guiRenderTextScreen("Procurando cheats deste jogo...");
+    if (cheatLookupResult < 0) {
+        if (cheatDatabaseMatch() == -2)
+            guiMsgBox("Mais de uma versão encontrada. Use um TXT/CHT com ID exato dentro do ZIP.", 0, NULL);
+        else if (cheatDatabaseSource()[0] && cheatDatabaseMatch() < 0)
+            guiMsgBox("Banco ZIP inválido, muito grande ou incompatível.", 0, NULL);
+        else if (cheatDatabaseSource()[0])
+            guiMsgBox("Este jogo não foi localizado no primeiro banco encontrado.", 0, NULL);
+        else
+            guiMsgBox("Banco não encontrado. Coloque Cheats/CheatDatabase.zip na raiz do dispositivo.", 0, NULL);
+        return;
+    }
+    char oldCRC[16] = {0};
+    configGetStrCopy(cfg, "$CheatDBCRC", oldCRC, sizeof(oldCRC));
+    if (cheatDatabaseMatch() == MZDB_TITLE && strcmp(oldCRC, cheatDatabaseFingerprint())) {
+        char message[384];
+        snprintf(message, sizeof(message), "Correspondência por nome, sem ID confirmado: %.150s. Confira a região e versão do seu jogo. Continuar?", cheatDatabaseHeading());
+        if (!guiMsgBox(message, 1, NULL))
+            return;
+    }
+    cheatConfigLoadSelections(cfg);
+    if (cheatDatabaseMatch() > 0 && strcmp(oldCRC, cheatDatabaseFingerprint())) {
+        for (int i = 0; i < MAX_CODES && gCheats[i].name[0]; i++)
+            gCheats[i].enabled = cheatConfigIsMasterCode(gCheats[i].name);
+    }
+    if (!guiManageCheats(cfg))
+        return;
+    int enabled = cheatHasOptionalSelection();
+    if (cheatDatabaseMatch() > 0)
+        configSetStr(cfg, "$CheatDBCRC", cheatDatabaseFingerprint());
+    else
+        configRemoveKey(cfg, "$CheatDBCRC");
+    configSetInt(cfg, CONFIG_ITEM_CHEATSSOURCE, SETTINGS_PERGAME);
+    configSetInt(cfg, CONFIG_ITEM_ENABLECHEAT, enabled);
+    configSetInt(cfg, CONFIG_ITEM_CHEATMODE, 1);
+    /* Keep the existing game dialog synchronized, including Save/Test. */
+    gCheatSource = SETTINGS_PERGAME;
+    EnableCheat = enabled;
+    CheatMode = 1;
+    diaSetInt(diaCheatConfig, CHTCFG_CHEATSOURCE, gCheatSource);
+    diaSetInt(diaCheatConfig, CHTCFG_ENABLECHEAT, enabled);
+    diaSetInt(diaCheatConfig, CHTCFG_CHEATMODE, 1);
+    if (!configWrite(cfg))
+        guiMsgBox("Não foi possível salvar as seleções de cheats.", 0, NULL);
+    else if (cheatDatabaseSkipped())
+        guiMsgBox("Seleções salvas. Códigos parametrizados ou incompatíveis foram ignorados.", 0, NULL);
 }
 
 void guiGameShowCheatConfig(void)

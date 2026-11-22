@@ -26,6 +26,9 @@
 #include <unistd.h>
 #include "include/cheatman.h"
 #include "include/ioman.h"
+#include "include/maizo_cheatdb.h"
+#include "include/cheatdb_storage.h"
+#include <zlib.h>
 
 static int gEnableCheat; // Enables PS2RD Cheat Engine - 0 for Off, 1 for On
 static int gCheatMode;   // Cheat Mode - 0 Enable all cheats, 1 Cheats selected by user
@@ -64,242 +67,138 @@ const u32 *GetCheatsList(void)
     return gCheatList;
 }
 
-/*
- * make_code - Return a code object from string @s.
- */
-static code_t make_code(const char *s)
+static char cheatDbSource[80], cheatDbHeading[256], cheatDbFingerprint[16];
+static int cheatDbMatch;
+static int cheatSkipped;
+
+const char *cheatDatabaseSource(void) { return cheatDbSource; }
+const char *cheatDatabaseHeading(void) { return cheatDbHeading; }
+const char *cheatDatabaseFingerprint(void) { return cheatDbFingerprint; }
+int cheatDatabaseMatch(void) { return cheatDbMatch; }
+int cheatDatabaseSkipped(void) { return cheatSkipped; }
+
+/* Only strict RAW address/value pairs are fed to PS2RD. A partial code
+ * group or unresolved CheatDevice value map must never be run. */
+static int rawLine(const char *line, code_t *out)
 {
-    code_t code;
-    u32 address;
-    u32 value;
-    char digits[CODE_DIGITS];
-    int i = 0;
-
-    while (*s) {
-        if (isxdigit((int)*s))
-            digits[i++] = *s;
-        s++;
-    }
-
-    digits[i] = '\0';
-
-    sscanf(digits, "%08X %08X", &address, &value);
-
-    // Return Code Address and Value
-    code.addr = address;
-    code.val = value;
-    return code;
-}
-
-
-/*
- * is_cheat_code - Return non-zero if @s indicates a cheat code.
- *
- * Example: 10B8DAFA 00003F00
- */
-static int is_cheat_code(const char *s)
-{
-    int i = 0;
-
-    while (*s) {
-        if (isxdigit((int)*s)) {
-            if (++i > CODE_DIGITS)
+    unsigned int words[2] = {0, 0};
+    const char *p = line;
+    for (int w = 0; w < 2; w++) {
+        if (w) {
+            if (!isspace((unsigned char)*p))
                 return 0;
-        } else if (!isspace((int)*s)) {
-            return 0;
+            while (isspace((unsigned char)*p))
+                p++;
         }
-        s++;
-    }
-
-    return (i == CODE_DIGITS);
-}
-
-/*
- * parse_line - Parse the current line and return a filled (code found) or zeroed (code not found) object.
- */
-static code_t parse_line(const char *line, int linenumber)
-{
-    code_t code;
-    code.addr = 0;
-    code.val = 0;
-    int ret;
-    LOG("%4i  %s\n", linenumber, line);
-    ret = is_cheat_code(line);
-    if (ret) {
-        /* Process actual code and add it to the list. */
-        code = make_code(line);
-    }
-    return code;
-}
-
-/*
- * is_cmt_str - Return non-zero if @s indicates a comment.
- */
-static inline int is_cmt_str(const char *s)
-{
-    return (strlen(s) >= 2 && !strncmp(s, "//", 2)) || (*s == '#');
-}
-
-/*
- * chr_idx - Returns the index within @s of the first occurrence of the
- * specified char @c.  If no such char occurs in @s, then (-1) is returned.
- */
-static size_t chr_idx(const char *s, char c)
-{
-    size_t i = 0;
-
-    while (s[i] && (s[i] != c))
-        i++;
-
-    return (s[i] == c) ? i : -1;
-}
-
-/*
- * term_str - Terminate string @s where the callback functions returns non-zero.
- */
-static char *term_str(char *s, int (*callback)(const char *))
-{
-    if (callback != NULL) {
-        while (*s) {
-            if (callback(s)) {
-                *s = NUL;
-                break;
-            }
-            s++;
+        for (int i = 0; i < 8; i++) {
+            unsigned char c = *p;
+            if (!isxdigit(c))
+                return 0;
+            words[w] = (words[w] << 4) | (isdigit(c) ? c - '0' : tolower(c) - 'a' + 10);
+            p++;
         }
     }
-
-    return s;
-}
-
-/*
- * is_empty_str - Returns 1 if @s contains no printable chars other than white
- * space.  Otherwise, 0 is returned.
- */
-static int is_empty_str(const char *s)
-{
-    size_t slen = strlen(s);
-
-    while (slen--) {
-        if (isgraph((int)*s++))
-            return 0;
-    }
-
+    while (isspace((unsigned char)*p))
+        p++;
+    if (*p || !words[0])
+        return 0;
+    out->addr = words[0];
+    out->val = words[1];
     return 1;
 }
 
-/*
- * trim_str - Removes white space from both ends of the string @s.
- */
-static int trim_str(char *s)
+static void finishCheat(char name[CHEAT_NAME_MAX + 1], code_t *codes, int count, int bad, int *total)
 {
-    size_t first = 0;
-    size_t last;
-    size_t slen;
-    char *t = s;
-
-    /* Return if string is empty */
-    if (is_empty_str(s))
-        return -1;
-
-    /* Get first non-space char */
-    while (isspace((int)*t++))
-        first++;
-
-    /* Get last non-space char */
-    last = strlen(s) - 1;
-    t = &s[last];
-    while (isspace((int)*t--))
-        last--;
-
-    /* Kill leading/trailing spaces */
-    slen = last - first + 1;
-    memmove(s, s + first, slen);
-    s[slen] = NUL;
-
-    return slen;
-}
-
-/*
- * is_empty_substr - Returns 1 if the first @count chars of @s are not printable
- * (apart from white space).  Otherwise, 0 is returned.
- */
-static int is_empty_substr(const char *s, size_t count)
-{
-    while (count--) {
-        if (isgraph((int)*s++))
-            return 0;
+    if (!name[0] || (!count && !bad))
+        return;
+    if (bad || *total >= MAX_CODES) {
+        cheatSkipped++;
+        return;
     }
-
-    return 1;
+    cheat_entry_t *entry = &gCheats[(*total)++];
+    strncpy(entry->name, name, CHEAT_NAME_MAX);
+    memcpy(entry->codes, codes, count * sizeof(*codes));
+    entry->enabled = (gCheatMode == 0) || cheatConfigIsMasterCode(entry->name);
+    int hookOnly = 1;
+    for (int i = 0; i < count; i++)
+        if ((codes[i].addr & 0xfe000000) != 0x90000000)
+            hookOnly = 0;
+    if (cheatDbMatch > 0 && hookOnly && !cheatConfigIsMasterCode(entry->name)) {
+        snprintf(entry->name, sizeof(entry->name), "Master Code");
+        entry->enabled = 1;
+    }
 }
 
-/* Max line length to parse */
-#define CHEAT_LINE_MAX 255
-
-/**
- * parse_buf - Parse a text buffer for cheats.
- * @buf: buffer holding text (must be NUL-terminated!)
- * @return: 0: success, -1: error
- */
+/* Handles CRLF, EOF without newline, and bounded group sizes. */
 static int parse_buf(const char *buf)
 {
-    code_t code;
-    char line[CHEAT_LINE_MAX + 1];
-    int linenumber = 1;
-    int cheat_index = -1; // Starts at -1.. indicating no cheat being processed yet
-    int code_index = 0;
-    char temp_name[CHEAT_NAME_MAX + 1] = {0};
-
-    if (buf == NULL)
+    char line[512], name[CHEAT_NAME_MAX + 1] = {0};
+    code_t *codes = malloc(MAX_CHEATLIST * sizeof(*codes));
+    int total = 0, count = 0, bad = 0, inMap = 0;
+    if (!buf || !codes) {
+        free(codes);
         return -1;
-
-    while (*buf) {
-        /* Scanner */
-        int len = chr_idx(buf, LF);
-        if (len < 0)
-            len = strlen(buf);
-        else if (len > CHEAT_LINE_MAX)
-            len = CHEAT_LINE_MAX;
-
-        if (!is_empty_substr(buf, len)) {
-            strncpy(line, buf, len);
-            line[len] = NUL;
-
-            /* Screener */
-            term_str(line, is_cmt_str);
-            trim_str(line);
-
-            // Check if the line is a cheat name
-            if (!is_cheat_code(line) && strlen(line) > 0) {
-                // Store the cheat name temporarily
-                strncpy(temp_name, line, CHEAT_NAME_MAX);
-                temp_name[CHEAT_NAME_MAX] = NUL;
-                // Reset code index in case this is a new cheat
-                code_index = 0;
-            } else {
-                /* Parser */
-                code = parse_line(line, linenumber);
-                if (!(code.addr == 0 && code.val == 0)) {
-                    // Only add the cheat entry if we have a valid cheat name in temp_name
-                    if (cheat_index < MAX_CODES && temp_name[0] != NUL) {
-                        cheat_index++; // Move to the next cheat entry
-                        strncpy(gCheats[cheat_index].name, temp_name, CHEAT_NAME_MAX);
-                        gCheats[cheat_index].name[CHEAT_NAME_MAX] = NUL;
-                        gCheats[cheat_index].enabled = (gCheatMode == 0) || cheatConfigIsMasterCode(gCheats[cheat_index].name); // Auto mode enables all; select mode enables required code only
-                        temp_name[0] = NUL;                                                                                     // Clear temp_name after use
-                    }
-                    // Add the cheat code to the current cheat entry
-                    if (cheat_index >= 0 && code_index < MAX_CHEATLIST)
-                        gCheats[cheat_index].codes[code_index++] = code;
-                }
-            }
-        }
-        linenumber++;
-        buf += len + 1;
     }
-
-    return 0;
+    while (*buf) {
+        const char *end = strchr(buf, '\n');
+        size_t length = end ? (size_t)(end - buf) : strlen(buf);
+        if (length >= sizeof(line)) {
+            bad = 1;
+            buf += length + (end != NULL);
+            continue;
+        }
+        memcpy(line, buf, length);
+        line[length] = 0;
+        buf += length + (end != NULL);
+        char *p = line;
+        while (isspace((unsigned char)*p))
+            p++;
+        char *comment = strstr(p, "//");
+        if (comment)
+            *comment = 0;
+        if (*p == '#')
+            continue;
+        length = strlen(p);
+        while (length && isspace((unsigned char)p[length - 1]))
+            p[--length] = 0;
+        if (!length) {
+            if (inMap)
+                inMap = 0;
+            continue;
+        }
+        if (*p == '[') {
+            finishCheat(name, codes, count, bad, &total);
+            name[0] = 0;
+            count = bad = 0;
+            inMap = 1;
+            continue;
+        }
+        if (inMap)
+            continue;
+        code_t code;
+        if (rawLine(p, &code)) {
+            if (!name[0])
+                continue;
+            if (count >= MAX_CHEATLIST - 1)
+                bad = 1;
+            else
+                codes[count++] = code;
+        } else if (length >= 9 && isspace((unsigned char)p[8]) &&
+                   strspn(p, "0123456789abcdefABCDEF") == 8) {
+            bad = 1; /* invalid / parameterized code */
+        } else {
+            finishCheat(name, codes, count, bad, &total);
+            count = bad = 0;
+            if (*p == '"') {
+                name[0] = 0;
+                continue;
+            }
+            snprintf(name, sizeof(name), "%.*s", CHEAT_NAME_MAX, p);
+        }
+    }
+    finishCheat(name, codes, count, bad, &total);
+    free(codes);
+    return total ? 0 : -1;
 }
 
 /**
@@ -364,9 +263,10 @@ int load_cheats(const char *cheatfile)
     int ret;
 
     memset(gCheats, 0, sizeof(gCheats));
+    cheatSkipped = 0;
 
     LOG("%s: Reading cheat file '%s'...\n", __FUNCTION__, cheatfile);
-    buf = read_text_file(cheatfile, 0);
+    buf = read_text_file(cheatfile, 256 * 1024);
     if (buf == NULL) {
         LOG("%s: Could not read cheats file '%s'\n", __FUNCTION__, cheatfile);
         return -1;
@@ -381,23 +281,93 @@ int load_cheats(const char *cheatfile)
     return (gCheatMode == 0) ? 0 : 1;
 }
 
+/* Configure and launch through the same resolver. Local CHT is legacy
+ * fallback ONLY when no ZIP was found. Never merge regions or databases. */
+int load_game_cheats(const char *prefix, const char *serial, const char *title)
+{
+    char *text = NULL;
+    memset(gCheats, 0, sizeof(gCheats));
+    cheatSkipped = 0;
+    cheatDbSource[0] = cheatDbHeading[0] = cheatDbFingerprint[0] = 0;
+    cheatDbMatch = cheatDbLoad(serial, title, &text, cheatDbHeading, cheatDbSource);
+    if (cheatDbMatch > 0 && text) {
+        snprintf(cheatDbFingerprint, sizeof(cheatDbFingerprint), "%08lX", (unsigned long)crc32(0, (const unsigned char *)text, strlen(text)));
+        int result = parse_buf(text);
+        free(text);
+        return result < 0 ? -1 : 1; /* database always manual */
+    }
+    free(text);
+    if (cheatDbSource[0] || cheatDbMatch < 0)
+        return cheatDbMatch == MZDB_NONE ? -ENOENT : -EINVAL;
+    if (prefix && *prefix) {
+        char file[256];
+        if (snprintf(file, sizeof(file), "%sCHT/%s.cht", prefix, serial) < sizeof(file)) {
+            int result = load_cheats(file);
+            if (result >= 0) {
+                snprintf(cheatDbSource, sizeof(cheatDbSource), "%.79s", file);
+                return result;
+            }
+        }
+    }
+    return -ENOENT;
+}
+
+int cheatHasOptionalSelection(void)
+{
+    for (int i = 0; i < MAX_CODES && gCheats[i].name[0]; i++)
+        if (gCheats[i].enabled && !cheatConfigIsMasterCode(gCheats[i].name))
+            return 1;
+    return 0;
+}
+
+void cheatDisableLaunch(void)
+{
+    gEnableCheat = 0;
+    memset(gCheats, 0, sizeof(gCheats));
+    memset(gCheatList, 0, sizeof(gCheatList));
+}
+
+int cheatSelectionFits(void)
+{
+    int count = 0, hooks = 0, nextHook = 1;
+    for (int pass = 0; pass < 2; pass++)
+        for (int i = 0; i < MAX_CODES && gCheats[i].name[0]; i++) {
+            if (!gCheats[i].enabled || !!cheatConfigIsMasterCode(gCheats[i].name) != (pass == 0))
+                continue;
+            for (int j = 0; j < MAX_CHEATLIST && gCheats[i].codes[j].addr; j++) {
+                u32 addr = gCheats[i].codes[j].addr;
+                if ((addr & 0xfe000000) == 0x90000000 && nextHook)
+                    hooks++;
+                count += 2;
+                nextHook = (addr & 0xf0000000) != 0x40000000 && (addr & 0xf0000000) != 0x30000000;
+            }
+        }
+    return count <= MAX_CHEATLIST - 2 && hooks <= MAX_HOOKS;
+}
+
 void set_cheats_list(void)
 {
     int cheatCount = 0;
 
     memset((void *)gCheatList, 0, sizeof(gCheatList));
 
-    // Populate the cheat list
-    for (int i = 0; i < MAX_CODES; ++i) {
-        if (gCheats[i].enabled) {
-            for (int j = 0; j < MAX_CHEATLIST && gCheats[i].codes[j].addr != 0; ++j) {
-                if (cheatCount + 2 <= MAX_CHEATLIST) {
-                    // Store the address and value in gCheatList
-                    gCheatList[cheatCount++] = gCheats[i].codes[j].addr;
-                    gCheatList[cheatCount++] = gCheats[i].codes[j].val;
-                    LOG("%s: Setting cheat for eecore:\n%s\n%08X %08X\n", __FUNCTION__, gCheats[i].name, gCheats[i].codes[j].addr, gCheats[i].codes[j].val);
-                } else
-                    break;
+    int hooks = 0, nextHook = 1;
+    /* Master entries first, without truncating any enabled group. */
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < MAX_CODES && gCheats[i].name[0]; i++) {
+            if (!gCheats[i].enabled || !!cheatConfigIsMasterCode(gCheats[i].name) != (pass == 0))
+                continue;
+            for (int j = 0; j < MAX_CHEATLIST && gCheats[i].codes[j].addr; j++) {
+                u32 addr = gCheats[i].codes[j].addr;
+                if ((addr & 0xfe000000) == 0x90000000 && nextHook)
+                    hooks++;
+                if (hooks > MAX_HOOKS || cheatCount + 4 > MAX_CHEATLIST) {
+                    memset(gCheatList, 0, sizeof(gCheatList));
+                    return;
+                }
+                gCheatList[cheatCount++] = addr;
+                gCheatList[cheatCount++] = gCheats[i].codes[j].val;
+                nextHook = (addr & 0xf0000000) != 0x40000000 && (addr & 0xf0000000) != 0x30000000;
             }
         }
     }

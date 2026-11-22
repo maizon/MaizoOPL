@@ -2644,13 +2644,15 @@ int guiGameShowRemoveSettings(config_set_t *configSet, config_set_t *configGame)
     return 1;
 }
 
-void guiManageCheats(config_set_t *configSet)
+int guiManageCheats(config_set_t *configSet)
 {
     int offset = 0;
     int terminate = 0;
     int cheatCount = 0;
     int selectedCheat = 0;
-    int visibleCheats = thmGetGuiValue() == 0 ? 7 : 10;
+    int visibleCheats = thmGetGuiValue() == 0 ? (gTheme->usedHeight - 222) / 33 : 10;
+    if (visibleCheats < 1)
+        visibleCheats = 1;
 
     while (cheatCount < MAX_CODES && strlen(gCheats[cheatCount].name) > 0)
         cheatCount++;
@@ -2661,13 +2663,13 @@ void guiManageCheats(config_set_t *configSet)
         guiStartFrame();
         readPads();
 
-        if (getKeyOn(KEY_UP) && selectedCheat > 0) {
+        if (getKey(KEY_UP) && selectedCheat > 0) {
             selectedCheat -= 1;
             if (selectedCheat < offset)
                 offset = selectedCheat;
         }
 
-        if (getKeyOn(KEY_DOWN) && selectedCheat < cheatCount - 1) {
+        if (getKey(KEY_DOWN) && selectedCheat < cheatCount - 1) {
             selectedCheat += 1;
             if (selectedCheat >= offset + visibleCheats)
                 offset = selectedCheat - visibleCheats + 1;
@@ -2678,20 +2680,30 @@ void guiManageCheats(config_set_t *configSet)
                 gCheats[selectedCheat].enabled = !gCheats[selectedCheat].enabled;
         }
 
-        if (getKeyOn(KEY_START))
+        if (getKeyOn(KEY_START) && cheatSelectionFits())
             terminate = 1;
+        if (getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE))
+            terminate = -1;
+        if (getKeyOn(KEY_SQUARE))
+            for (int i = 0; i < cheatCount; i++)
+                gCheats[i].enabled = cheatConfigIsMasterCode(gCheats[i].name);
 
         guiShow();
 
         if (thmGetGuiValue() == 0) {
             rmDrawRect(0, 0, screenWidth, gTheme->usedHeight, MAIZO_BLACK);
             maizoDrawBrand();
-            maizoDrawPanel(29, 102, screenWidth - 58, 300, 0);
+            maizoDrawPanel(29, 102, screenWidth - 58, gTheme->usedHeight - 172, 0);
             maizoDrawIcon(MAIZO_ICON_CHEATS, 44, 112, 31, MAIZO_BRIGHT);
             fntRenderString(gTheme->fonts[0], 87, 119, ALIGN_NONE,
-                            screenWidth - 121, 29, _l(_STR_CHEAT_SELECTION),
+                            screenWidth - 121, 29, cheatDatabaseHeading()[0] ? cheatDatabaseHeading() : _l(_STR_CHEAT_SELECTION),
                             MAIZO_TEXT);
-            maizoDrawSeparator(47, 148, screenWidth - 94);
+            char status[128];
+            if (cheatSelectionFits())
+                snprintf(status, sizeof(status), "%d cheats | %.70s", cheatCount, cheatDatabaseSource());
+            else
+                snprintf(status, sizeof(status), "Limite de códigos atingido. Desative alguns para salvar.");
+            fntRenderString(gTheme->fonts[0], 47, 144, ALIGN_NONE, screenWidth - 94, 20, status, MAIZO_MUTED);
             if (cheatCount == 0)
                 fntRenderString(gTheme->fonts[0], 52, 211, ALIGN_NONE,
                                 screenWidth - 104, 33,
@@ -2717,7 +2729,9 @@ void guiManageCheats(config_set_t *configSet)
                            focused ? MAIZO_CARD : MAIZO_SURFACE);
                 if (focused)
                     rmDrawRect(45, y, 3, 31, MAIZO_ACCENT);
-                fntRenderString(gTheme->fonts[0], 60, y + 6,
+                if (cheatConfigIsMasterCode(gCheats[i].name))
+                    maizoDrawIcon(MAIZO_ICON_LOCK, 49, y + 8, 16, MAIZO_MUTED);
+                fntRenderString(gTheme->fonts[0], 70, y + 6,
                                 ALIGN_NONE, screenWidth - 205, 25,
                                 gCheats[i].name,
                                 focused ? MAIZO_TEXT : MAIZO_MUTED);
@@ -2726,7 +2740,7 @@ void guiManageCheats(config_set_t *configSet)
                                                 MAIZO_DIVIDER);
                 fntRenderString(gTheme->fonts[0], screenWidth - 104, y + 5,
                                 ALIGN_CENTER, 63, 22,
-                                gCheats[i].enabled ? "ON" : "OFF",
+                                cheatConfigIsMasterCode(gCheats[i].name) ? "AUTO" : gCheats[i].enabled ? "ON" : "OFF",
                                 MAIZO_TEXT);
             } else {
                 int enabled = gCheats[i].enabled;
@@ -2754,11 +2768,10 @@ void guiManageCheats(config_set_t *configSet)
         if (thmGetGuiValue() == 0) {
             rmDrawRect(0, gTheme->usedHeight - 60,
                        screenWidth, 60, MAIZO_SURFACE);
-            fntRenderString(gTheme->fonts[0], 34,
-                            gTheme->usedHeight - 38,
-                            ALIGN_NONE, screenWidth - 70, 25,
-                            "X/O ATIVAR   |   START SALVAR E VOLTAR",
-                            MAIZO_MUTED);
+            maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 32, gTheme->usedHeight - 39, "Alternar");
+            maizoDrawPromptHint(SQUARE_ICON, 158, gTheme->usedHeight - 39, "Limpar");
+            maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CROSS_ICON : CIRCLE_ICON, 270, gTheme->usedHeight - 39, "Cancelar");
+            fntRenderString(gTheme->fonts[0], 424, gTheme->usedHeight - 36, ALIGN_NONE, 190, 25, "START Salvar", MAIZO_TEXT);
         } else {
             guiDrawIconAndText(gSelectButton == KEY_CIRCLE ?
                                    CIRCLE_ICON :
@@ -2772,7 +2785,11 @@ void guiManageCheats(config_set_t *configSet)
         guiEndFrame();
     }
 
+    if (terminate < 0) {
+        cheatConfigLoadSelections(configSet);
+        return 0;
+    }
     cheatConfigSaveSelections(configSet);
-    configWrite(configSet);
     sfxPlay(SFX_CONFIRM);
+    return 1;
 }

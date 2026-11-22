@@ -320,7 +320,7 @@ static void itemExecCircle(struct menu_item *curMenu)
 
 static void itemExecSquare(struct menu_item *curMenu)
 {
-    if (curMenu->current && gTheme->infoElems.first)
+    if (curMenu->current && (thmGetGuiValue() == 0 || gTheme->infoElems.first))
         guiSwitchScreen(GUI_SCREEN_INFO);
 }
 

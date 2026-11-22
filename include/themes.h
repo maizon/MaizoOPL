@@ -117,6 +117,8 @@ typedef struct theme
     theme_element_t *appsItemsList;
 
     int gameCacheCount;
+    image_cache_t *detailArt[3];
+    int detailArtId[3], detailArtUid[3];
 
     theme_element_t *itemsList;
     theme_element_t *loadingIcon;
@@ -130,6 +132,7 @@ extern theme_t *gTheme;
 
 void thmRenderSupremeMain(struct menu_list *menu, struct submenu_list *item,
                           config_set_t *config);
+GSTEXTURE *thmSupremeDetailArt(item_list_t *support, int id, int slot);
 void thmInit(void);
 void thmReinit(const char *path);
 void thmReloadScreenExtents(void);

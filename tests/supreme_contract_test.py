@@ -192,3 +192,7 @@ for payload in prompt_assets:
         assert zlib.crc32(png[pos+4:end]) == struct.unpack(">I", png[end:end+4])[0]
         pos = end + 4
     assert pos == len(png) and png[-8:-4] == b"IEND"
+
+assert "guiGameShowDatabaseCheats" in menu and "CheatDatabase.zip" in read("src/cheatdb_storage.c")
+assert "thmSupremeDetailArt" in menu and "detailReturn" in menu
+assert "cheatDatabaseFingerprint" in read("src/supportbase.c")

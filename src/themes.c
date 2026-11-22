@@ -830,6 +830,16 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
     }
 }
 
+/* Cover / two screenshots, each with a single asynchronously loaded slot.
+ * Original ART files are optional and never block input or boot. */
+GSTEXTURE *thmSupremeDetailArt(item_list_t *support, int id, int slot)
+{
+    if (!gEnableArt || !gTheme || !support || !support->itemGetStartup || slot < 0 || slot > 2 || !gTheme->detailArt[slot])
+        return NULL;
+    char *identity = support->itemGetStartup(support, id);
+    return identity ? cachePrefetchTexture(gTheme->detailArt[slot], support, &gTheme->detailArtId[slot], &gTheme->detailArtUid[slot], identity) : NULL;
+}
+
 void thmRenderSupremeMain(struct menu_list *menu, struct submenu_list *item,
                           config_set_t *config)
 {
@@ -1420,6 +1430,10 @@ static void thmFree(theme_t *theme)
         freeGUIElems(&theme->appsMainElems);
         freeGUIElems(&theme->appsInfoElems);
 
+        for (int slot = 0; slot < 3; slot++)
+            if (theme->detailArt[slot])
+                cacheDestroyCache(theme->detailArt[slot]);
+
         // free textures
         GSTEXTURE *texture;
         int id = 0;
@@ -1546,6 +1560,15 @@ static void thmLoad(const char *themePath)
     newT->appsInfoElems.first = NULL;
     newT->appsInfoElems.last = NULL;
     newT->gameCacheCount = 0;
+    for (int slot = 0; slot < 3; slot++) {
+        newT->detailArt[slot] = NULL;
+        newT->detailArtId[slot] = newT->detailArtUid[slot] = -1;
+    }
+    if (!themePath) {
+        newT->detailArt[0] = cacheInitCache(-1, "ART", 1, "COV", 1);
+        newT->detailArt[1] = cacheInitCache(-1, "ART", 1, "SCR", 1);
+        newT->detailArt[2] = cacheInitCache(-1, "ART", 1, "SCR2", 1);
+    }
     newT->itemsList = NULL;
     newT->gamesItemsList = NULL;
     newT->appsItemsList = NULL;

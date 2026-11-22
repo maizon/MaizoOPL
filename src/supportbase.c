@@ -850,25 +850,31 @@ void sbCreateFolders(const char *path, int createDiscImgFolders)
         sbCreateFoldersFromList(path, discImgFolders);
 }
 
-int sbLoadCheats(const char *path, const char *file, config_set_t *configSet)
+int sbLoadCheats(const char *path, const char *file, const char *title, config_set_t *configSet)
 {
-    char cheatfile[64];
-    int cheatMode = 0;
-
-    if (GetCheatsEnabled()) {
-        snprintf(cheatfile, sizeof(cheatfile), "%sCHT/%s.cht", path, file);
-        LOG("Loading Cheat File %s\n", cheatfile);
-
-        if ((cheatMode = load_cheats(cheatfile)) < 0)
-            LOG("Error: failed to load cheats\n");
-        else {
-            LOG("Cheats found\n");
-            if (cheatMode == 1) {
-                cheatConfigLoadSelections(configSet);
-                guiManageCheats(configSet);
-            }
-        }
+    if (!GetCheatsEnabled())
+        return 0;
+    int result = load_game_cheats(path, file, title);
+    if (result < 0) {
+        cheatDisableLaunch();
+        return result;
     }
-
-    return cheatMode;
+    if (cheatDatabaseMatch() > 0) {
+        char saved[16] = {0};
+        /* Even exact serial databases must respect manual selection. If the
+         * content changed after approval, do not apply new codes silently. */
+        if (!configGetStrCopy(configSet, "$CheatDBCRC", saved, sizeof(saved)) ||
+            strcmp(saved, cheatDatabaseFingerprint())) {
+            cheatDisableLaunch();
+            return 0;
+        }
+        cheatConfigLoadSelections(configSet);
+        if (!cheatHasOptionalSelection())
+            cheatDisableLaunch();
+    } else if (result == 1) {
+        cheatConfigLoadSelections(configSet);
+        if (!cheatHasOptionalSelection())
+            cheatDisableLaunch();
+    }
+    return 0;
 }

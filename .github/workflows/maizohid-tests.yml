@@ -48,3 +48,5 @@ jobs:
           sudo apt-get install -y libpng-dev pkg-config
       - name: Test real PNG decoder with malformed artwork
         run: python3 tests/texture_host_test.py
+      - name: Test streaming CheatDevice ZIP database and identity isolation
+        run: python3 tests/maizo_cheatdb_test.py

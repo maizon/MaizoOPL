@@ -27,6 +27,8 @@ static void normalizeCheatName(const char *source, char *destination, size_t des
         }
 
         if (pendingSpace) {
+            if (output + 2 >= destinationSize)
+                break;
             destination[output++] = SPACE;
             pendingSpace = 0;
         }
@@ -45,6 +47,9 @@ int cheatConfigIsMasterCode(const char *name)
 
     return strcmp(normalized, "mastercode") == 0 ||
            strcmp(normalized, "master code") == 0 ||
+           strcmp(normalized, "enable") == 0 ||
+           strcmp(normalized, "enable code") == 0 ||
+           strcmp(normalized, "(m)") == 0 ||
            strcmp(normalized, "enable code (must be on)") == 0;
 }
 

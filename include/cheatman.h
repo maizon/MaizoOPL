@@ -73,6 +73,15 @@ void InitCheatsConfig(config_set_t *configSet);
 int GetCheatsEnabled(void);
 const u32 *GetCheatsList(void);
 int load_cheats(const char *cheatfile);
+int load_game_cheats(const char *prefix, const char *serial, const char *title);
+const char *cheatDatabaseSource(void);
+const char *cheatDatabaseHeading(void);
+const char *cheatDatabaseFingerprint(void);
+int cheatDatabaseMatch(void);
+int cheatDatabaseSkipped(void);
+int cheatHasOptionalSelection(void);
+int cheatSelectionFits(void);
+void cheatDisableLaunch(void);
 void set_cheats_list(void);
 
 #endif /* _CHEATMAN_H_ */
