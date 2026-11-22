@@ -1342,7 +1342,6 @@ void *rpc_sf(int cmd, void *data, int size)
                 }
                 CpuResumeIntr(oldstate);
                 snapshot[11] |= 1u << port;
-
             }
             snapshot[13] = maizo_usb_stage;
             snapshot[14] = maizo_usb_reports;

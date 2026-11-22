@@ -366,7 +366,8 @@ static const char *maizoPadTypeName(unsigned int type, int bt)
         "USB", "DualShock 3 USB", "DualShock 4 USB", "Guitarra USB",
         "Guitarra USB", "USB HID", "Twin USB", "Xbox 360 USB", "Teclado USB"};
     if (bt)
-        return type == 1 ? "DualShock 3 Bluetooth" : type == 2 ? "DualShock 4 Bluetooth" : "Bluetooth";
+        return type == 1 ? "DualShock 3 Bluetooth" : type == 2 ? "DualShock 4 Bluetooth" :
+                                                                 "Bluetooth";
     return names[type < sizeof(names) / sizeof(names[0]) ? type : 0];
 }
 

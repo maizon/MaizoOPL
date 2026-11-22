@@ -1851,7 +1851,9 @@ void menuRenderMain(void)
             guiDrawBGPlasma();
             maizoDrawHeader(dashboard.tab);
             fntRenderString(gTheme->fonts[0], 320, 224, ALIGN_CENTER, 560, 48,
-                            dashboardError ? "Memória insuficiente para a biblioteca" : dashboard.query[0] ? "Nenhum resultado para a pesquisa" : "Nenhum item nesta aba", MAIZO_MUTED);
+                            dashboardError ? "Memória insuficiente para a biblioteca" : dashboard.query[0] ? "Nenhum resultado para a pesquisa" :
+                                                                                                             "Nenhum item nesta aba",
+                            MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 320, 290, ALIGN_CENTER, 560, 48,
                             "START: configuração | SELECT: atualizar | R3: pesquisar", MAIZO_MUTED);
             return;

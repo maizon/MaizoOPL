@@ -623,11 +623,14 @@ static void drawMaizoLibraryList(mutable_image_t *art, theme_element_t *elem, in
                 }
                 rmDrawPixmap(cover, x + cellWidth / 2, y + 5 + ch / 2, ALIGN_CENTER, cw, ch, SCALING_NONE, gDefaultCol);
             } else
-                maizoDrawIcon(entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : entry->platform == MAIZO_APP ? MAIZO_ICON_APPS : MAIZO_ICON_PS2,
+                maizoDrawIcon(entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
+                                                                                                             MAIZO_ICON_PS2,
                               x + cellWidth / 2 - 18, y + ch / 2 - 12, 36, MAIZO_MUTED);
             fntRenderString(elem->font, x + cellWidth / 2, y + rowHeight - 29, ALIGN_CENTER, cellWidth - 14, 25, entry->title, active ? MAIZO_TEXT : MAIZO_MUTED);
         } else {
-            maizoDrawIcon(entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : entry->platform == MAIZO_APP ? MAIZO_ICON_APPS : MAIZO_ICON_PS2, x + 15, y + 9, 20, active ? MAIZO_BRIGHT : MAIZO_MUTED);
+            maizoDrawIcon(entry->platform == MAIZO_PS1 ? MAIZO_ICON_PS1 : entry->platform == MAIZO_APP ? MAIZO_ICON_APPS :
+                                                                                                         MAIZO_ICON_PS2,
+                          x + 15, y + 9, 20, active ? MAIZO_BRIGHT : MAIZO_MUTED);
             fntRenderString(elem->font, x + 47, y + 7, ALIGN_NONE, cellWidth - 160, 27, entry->title, active ? MAIZO_TEXT : MAIZO_MUTED);
             menu_list_t *owner = entry->owner;
             fntRenderString(elem->font, x + cellWidth - 14, y + 7, ALIGN_RIGHT, 104, 25, menuItemGetText(owner->item), MAIZO_MUTED);
