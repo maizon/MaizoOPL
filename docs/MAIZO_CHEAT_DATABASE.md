@@ -9,3 +9,5 @@ Quadrado abre os detalhes, imagens ART/<ID>_COV.png, ART/<ID>_SCR.png e ART/<ID>
 Referência do formato: https://github.com/root670/CheatDevicePS2 e https://israpps.github.io/CheatDevicePS2/Documentation/Cheats.html.
 
 Validação física necessária: combinação de arquivos reais, MC nativo, FAT32, exFAT, SMB, versões de jogos, renderização CRT e limites do PS2RD.
+
+Seleções novas identificam também o conteúdo RAW de cada grupo, evitando escolher outra cheat com nome duplicado. O limite de códigos e hooks é aplicado antes de salvar e novamente antes de iniciar. L1/R1 avançam páginas; a lista mostra quantas opções estão ativadas. O firmware do motor também rejeita listas maiores que seus buffers.

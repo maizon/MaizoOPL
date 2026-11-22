@@ -487,13 +487,17 @@ void guiGameShowDatabaseCheats(item_list_t *support, int id, config_set_t *cfg)
         guiMsgBox("Dispositivo ocupado. Tente novamente.", 0, NULL);
         return;
     }
-    while (cheatLookupBusy)
+    while (cheatLookupBusy) {
+        readPads();
         guiRenderTextScreen("Procurando cheats deste jogo...");
+    }
     if (cheatLookupResult < 0) {
-        if (cheatDatabaseMatch() == -2)
+        if (cheatDatabaseMatch() == MZDB_AMBIGUOUS)
             guiMsgBox("Mais de uma versão encontrada. Use um TXT/CHT com ID exato dentro do ZIP.", 0, NULL);
         else if (cheatDatabaseSource()[0] && cheatDatabaseMatch() < 0)
             guiMsgBox("Banco ZIP inválido, muito grande ou incompatível.", 0, NULL);
+        else if (cheatDatabaseMatch() > 0)
+            guiMsgBox("Jogo localizado, mas sem códigos RAW compatíveis com PS2RD.", 0, NULL);
         else if (cheatDatabaseSource()[0])
             guiMsgBox("Este jogo não foi localizado no primeiro banco encontrado.", 0, NULL);
         else

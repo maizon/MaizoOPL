@@ -50,3 +50,5 @@ jobs:
         run: python3 tests/texture_host_test.py
       - name: Test streaming CheatDevice ZIP database and identity isolation
         run: python3 tests/maizo_cheatdb_test.py
+      - name: Test cheat selection identity and duplicate labels
+        run: python3 tests/maizo_cheatselection_test.py

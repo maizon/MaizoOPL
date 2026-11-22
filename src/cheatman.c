@@ -161,11 +161,8 @@ static int parse_buf(const char *buf)
         length = strlen(p);
         while (length && isspace((unsigned char)p[length - 1]))
             p[--length] = 0;
-        if (!length) {
-            if (inMap)
-                inMap = 0;
+        if (!length)
             continue;
-        }
         if (*p == '[') {
             finishCheat(name, codes, count, bad, &total);
             name[0] = 0;
@@ -173,8 +170,15 @@ static int parse_buf(const char *buf)
             inMap = 1;
             continue;
         }
-        if (inMap)
-            continue;
+        if (inMap) {
+            size_t digits = strspn(p, "0123456789abcdefABCDEF");
+            const char *sep = p + digits;
+            while (isspace((unsigned char)*sep))
+                sep++;
+            if (digits >= 1 && digits <= 8 && (*sep == ':' || *sep == '=' || *sep == '-'))
+                continue;
+            inMap = 0;
+        }
         code_t code;
         if (rawLine(p, &code)) {
             if (!name[0])
@@ -342,7 +346,7 @@ int cheatSelectionFits(void)
                 nextHook = (addr & 0xf0000000) != 0x40000000 && (addr & 0xf0000000) != 0x30000000;
             }
         }
-    return count <= MAX_CHEATLIST - 2 && hooks <= MAX_HOOKS;
+    return count <= MAX_CHEATLIST - 2 && hooks <= MAX_HOOKS && count / 2 - hooks <= MAX_CODES;
 }
 
 void set_cheats_list(void)
@@ -350,6 +354,8 @@ void set_cheats_list(void)
     int cheatCount = 0;
 
     memset((void *)gCheatList, 0, sizeof(gCheatList));
+    if (!cheatSelectionFits())
+        return;
 
     int hooks = 0, nextHook = 1;
     /* Master entries first, without truncating any enabled group. */

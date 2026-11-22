@@ -876,5 +876,9 @@ int sbLoadCheats(const char *path, const char *file, const char *title, config_s
         if (!cheatHasOptionalSelection())
             cheatDisableLaunch();
     }
+    if (GetCheatsEnabled() && !cheatSelectionFits()) {
+        cheatDisableLaunch();
+        return -EINVAL;
+    }
     return 0;
 }

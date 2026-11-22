@@ -1821,6 +1821,7 @@ void menuHandleInputMenu()
                 sysPowerOff();
         }
 
+        settingsBreadcrumb = NULL;
         // so the exit press wont propagate twice
         readPads();
     }
@@ -2115,11 +2116,17 @@ void menuHandleInputMain()
 
 void menuRenderInfo(void)
 {
+    if (!selected_item || !selected_item->item || !selected_item->item->userdata) {
+        detailFocus = detailReturn = 0;
+        guiSwitchScreen(GUI_SCREEN_MAIN);
+        return;
+    }
     item_list_t *list = selected_item->item->userdata;
 
     if (thmGetGuiValue() == 0) {
         submenu_list_t *current = selected_item->item->current;
         if (!current || !selected_item->item->visible) {
+            detailFocus = detailReturn = 0;
             guiSwitchScreen(GUI_SCREEN_MAIN);
             return;
         }
@@ -2276,6 +2283,10 @@ void menuRenderGameMenu()
     if (thmGetGuiValue() == 0) {
         submenu_list_t *it;
         int index = 0, active = 0, first, y = 164;
+        int panelHeight = gTheme->usedHeight - 178;
+        int rows = (panelHeight - 76) / 38;
+        if (rows < 1)
+            rows = 1;
         const int rx = 236, rw = 382;
         const char *title = submenuItemGetText(&selected_item->item->current->item);
         if (!gameMenuCurrent)
@@ -2283,18 +2294,22 @@ void menuRenderGameMenu()
         for (it = gameMenu; it; it = it->next, index++)
             if (it == gameMenuCurrent)
                 active = index;
-        first = active >= 6 ? active - 5 : 0;
+        first = active >= rows ? active - rows + 1 : 0;
+        if (first > index - rows && index > rows)
+            first = index - rows;
         rmDrawRect(0, 0, 640, gTheme->usedHeight, MAIZO_BLACK);
         maizoDrawHeader(MAIZO_SETTINGS);
         rmDrawRect(0, 70, 640, 1, MAIZO_DIVIDER);
 
-        maizoDrawPanel(25, 106, 200, 302, 0);
+        maizoDrawPanel(25, 106, 200, panelHeight, 0);
         GSTEXTURE *cover = thmSupremeDetailArt(selected_item->item->userdata, selected_item->item->current->item.id, 0);
         if (cover && cover->Mem && cover->Width && cover->Height) {
-            int w = rmWideScale(108 * cover->Width / cover->Height);
-            if (w > 152)
+            int h = 108, w = rmWideScale(h * cover->Width / cover->Height);
+            if (w > 152) {
+                h = h * 152 / w;
                 w = 152;
-            rmDrawPixmap(cover, 125, 185, ALIGN_CENTER, w, 108, SCALING_NONE, gDefaultCol);
+            }
+            rmDrawPixmap(cover, 125, 185, ALIGN_CENTER, w, h, SCALING_NONE, gDefaultCol);
         } else
             maizoDrawIcon(MAIZO_ICON_PS2, 100, 147, 42, MAIZO_BRIGHT);
         fntRenderString(gTheme->fonts[0], 125, 246, ALIGN_CENTER,
@@ -2305,7 +2320,7 @@ void menuRenderGameMenu()
         fntRenderString(gTheme->fonts[0], 41, 322, ALIGN_NONE,
                         170, 58, gameConfigSource(), MAIZO_BRIGHT);
 
-        maizoDrawPanel(rx, 106, rw, 302, 0);
+        maizoDrawPanel(rx, 106, rw, panelHeight, 0);
         maizoDrawIcon(MAIZO_ICON_SETTINGS, rx + 13, 117, 26, MAIZO_BRIGHT);
         fntRenderString(gTheme->fonts[0], rx + 48, 118,
                         ALIGN_NONE, rw - 62, 29,
@@ -2314,7 +2329,7 @@ void menuRenderGameMenu()
         index = 0;
         for (it = gameMenu; it; it = it->next, index++) {
             int focused;
-            if (index < first || index >= first + 6)
+            if (index < first || index >= first + rows)
                 continue;
             focused = it == gameMenuCurrent;
             rmDrawRect(rx + 10, y, rw - 20, 35,
@@ -2344,10 +2359,12 @@ void menuRenderGameMenu()
                           focused ? MAIZO_BRIGHT : MAIZO_DISABLED);
             y += 38;
         }
-        if (index > 6)
-            fntRenderString(gTheme->fonts[0], rx + rw - 18, 391,
-                            ALIGN_RIGHT, 230, 22, "MAIS OPCOES",
-                            MAIZO_MUTED);
+        if (index > rows) {
+            char position[32];
+            snprintf(position, sizeof(position), "%d / %d", active + 1, index);
+            fntRenderString(gTheme->fonts[0], rx + rw - 18, 106 + panelHeight - 22,
+                            ALIGN_RIGHT, 100, 20, position, MAIZO_MUTED);
+        }
         maizoSettingsFooter("POR JOGO");
         return;
     }
@@ -2421,6 +2438,7 @@ void menuHandleInputGameMenu()
 
         sfxPlay(SFX_CONFIRM);
 
+        settingsBreadcrumb = "POR JOGO";
         if (menuID == GAME_COMPAT_SETTINGS) {
             guiGameShowCompatConfig(selected_item->item->current->item.id, selected_item->item->userdata, itemConfig);
         } else if (menuID == GAME_CHEAT_SETTINGS) {

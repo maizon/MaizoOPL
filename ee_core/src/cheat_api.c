@@ -51,11 +51,19 @@ void SetupCheats()
             break;
 
         if (((code.addr & 0xfe000000) == 0x90000000) && nextCodeCanBeHook == 1) {
+            if (j >= MAX_HOOKS * 2) {
+                numhooks = numcodes = 0;
+                return;
+            }
             hooklist[j] = code.addr & 0x01FFFFFC;
             j++;
             hooklist[j] = code.val;
             j++;
         } else {
+            if (k >= MAX_CODES * 2) {
+                numhooks = numcodes = 0;
+                return;
+            }
             codelist[k] = code.addr;
             k++;
             codelist[k] = code.val;

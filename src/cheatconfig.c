@@ -64,6 +64,27 @@ static int cheatNamesMatch(const char *first, const char *second)
     return strcmp(normalizedFirst, normalizedSecond) == 0;
 }
 
+/* Persist the actual code group, not merely its display name. Two different
+ * cheats can share a label, and databases can reorder their entries. */
+static unsigned int cheatCodeKey(const cheat_entry_t *entry)
+{
+    unsigned int hash = 2166136261u;
+    for (int i = 0; i < MAX_CHEATLIST && entry->codes[i].addr; i++) {
+        unsigned int words[2] = {entry->codes[i].addr, entry->codes[i].val};
+        for (int w = 0; w < 2; w++)
+            for (int b = 0; b < 4; b++) {
+                hash ^= (words[w] >> (b * 8)) & 255;
+                hash *= 16777619u;
+            }
+    }
+    return hash;
+}
+
+static void cheatSelectionKey(const cheat_entry_t *entry, char saved[CONFIG_KEY_VALUE_LEN])
+{
+    snprintf(saved, CONFIG_KEY_VALUE_LEN, "@%08X:%s", cheatCodeKey(entry), entry->name);
+}
+
 void cheatConfigLoadSelections(config_set_t *configSet)
 {
     int cheatIndex;
@@ -84,13 +105,23 @@ void cheatConfigLoadSelections(config_set_t *configSet)
         if (!configGetStrCopy(configSet, key, savedName, sizeof(savedName)))
             break;
 
+        int candidate = -1, matches = 0;
         for (cheatIndex = 0; cheatIndex < MAX_CODES && gCheats[cheatIndex].name[0] != NUL; cheatIndex++) {
-            if (!cheatConfigIsMasterCode(gCheats[cheatIndex].name) &&
-                cheatNamesMatch(gCheats[cheatIndex].name, savedName)) {
-                gCheats[cheatIndex].enabled = 1;
-                break;
+            if (cheatConfigIsMasterCode(gCheats[cheatIndex].name))
+                continue;
+            char current[CONFIG_KEY_VALUE_LEN];
+            cheatSelectionKey(&gCheats[cheatIndex], current);
+            if ((savedName[0] == '@' && savedName[9] == ':' && !strncmp(savedName, current, 10) &&
+                 cheatNamesMatch(savedName + 10, current + 10)) ||
+                (savedName[0] != '@' && cheatNamesMatch(gCheats[cheatIndex].name, savedName))) {
+                candidate = cheatIndex;
+                matches++;
             }
         }
+        /* Fail closed on ambiguous legacy labels instead of activating the
+         * first unrelated group bearing the same name. */
+        if (matches == 1)
+            gCheats[candidate].enabled = 1;
     }
 
     /* Database changes must never leave the required code disabled. */
@@ -118,7 +149,9 @@ void cheatConfigSaveSelections(config_set_t *configSet)
     for (cheatIndex = 0; cheatIndex < MAX_CODES && gCheats[cheatIndex].name[0] != NUL; cheatIndex++) {
         if (gCheats[cheatIndex].enabled && !cheatConfigIsMasterCode(gCheats[cheatIndex].name)) {
             snprintf(key, sizeof(key), "%s%03d", CONFIG_ITEM_CHEAT_SELECTION_PREFIX, selectionIndex++);
-            configSetStr(configSet, key, gCheats[cheatIndex].name);
+            char value[CONFIG_KEY_VALUE_LEN];
+            cheatSelectionKey(&gCheats[cheatIndex], value);
+            configSetStr(configSet, key, value);
         }
     }
 }

@@ -362,6 +362,8 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
         if (!scanMember(read_at, ctx, dataOffset, compressed, uncompressed, method, u32le(h + 16), s))
             goto done;
     }
+    if (central != centralEnd)
+        goto done;
     if (s->ambiguous)
         result = MZDB_AMBIGUOUS;
     else {
