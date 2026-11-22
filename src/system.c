@@ -181,11 +181,35 @@ void sysShutdownDev9(void)
     }
 }
 
+#ifdef PADEMU
+/* Menu service lifetime follows the current IOP, not per-game settings. */
+static int menuUsbWanted, menuUsbLoaded, menuUsbLoadAttempts;
+
+int sysMenuUsbRecover(void)
+{
+    if (!menuUsbWanted)
+        return 0;
+    if (!menuUsbLoaded) {
+        /* Bound allocation attempts on a persistent module load failure. */
+        if (menuUsbLoadAttempts >= 3)
+            return 0;
+        ++menuUsbLoadAttempts;
+        menuUsbLoaded = sysLoadModuleBuffer(&ds34usb_irx, size_ds34usb_irx, 0, NULL) == 0;
+    }
+    if (!menuUsbLoaded || !ds34usb_init())
+        return 0;
+    return ds34usb_reinit_ports(0x03);
+}
+#endif
+
 void sysReset(int modload_mask)
 {
 #ifdef PADEMU
     ds34usb_reset();
     ds34bt_reset();
+    ds34usb_deinit();
+    ds34bt_deinit();
+    menuUsbWanted = menuUsbLoaded = menuUsbLoadAttempts = 0;
 #endif
     fileXioExit();
     SifExitIopHeap();
@@ -271,17 +295,13 @@ void sysReset(int modload_mask)
 #ifdef PADEMU
     int ds3pads = 0x03; // two real IOP USB slots; game multitap is independent
 
-    ds34usb_deinit();
-    ds34bt_deinit();
+    menuUsbWanted = (modload_mask & SYS_LOAD_USB_MODULES) != 0;
 
-    if (modload_mask & SYS_LOAD_USB_MODULES) {
+    if (menuUsbWanted) {
         LOG("[DS34_USB]:\n");
         /* Menu USB is independent of the per-game PadEmu port mask.
          * Register and bind before Bluetooth; the menu IRX defaults to both slots. */
-        if (sysLoadModuleBuffer(&ds34usb_irx, size_ds34usb_irx, 0, NULL) == 0) {
-            if (ds34usb_init())
-                ds34usb_reinit_ports(0x03);
-        }
+        sysMenuUsbRecover();
         LOG("[DS34_BT]:\n");
         if (sysLoadModuleBuffer(&ds34bt_irx, size_ds34bt_irx, 4, (char *)&ds3pads) == 0)
             ds34bt_init();

@@ -11,18 +11,25 @@
 #define MAIZO_MENU_MAGIC0        0x4d
 #define MAIZO_MENU_MAGIC1        0x5a
 #define MAIZO_MENU_VERSION       2
+#define MAIZO_MENU_PORT_SIZE     32
+#define MAIZO_MENU_PORT_MAGIC1   0x50
+#define MAIZO_MENU_PORT_VERSION  1
 
 static inline unsigned int maizoMenuPadType(const unsigned char snapshot[16], unsigned int slot)
 {
     return slot < MAIZO_MENU_SLOTS ? (snapshot[15] >> (slot * 4)) & 15u : 0;
 }
 
+static inline int maizoMenuSnapshotOK(const unsigned char snapshot[16])
+{
+    return snapshot && snapshot[8] == MAIZO_MENU_MAGIC0 &&
+           snapshot[9] == MAIZO_MENU_MAGIC1 && snapshot[10] == MAIZO_MENU_VERSION;
+}
+
 static unsigned int maizoMenuPadValidMask(const unsigned char snapshot[16])
 {
     unsigned int mask = 0, slot;
-    if (!snapshot || snapshot[8] != MAIZO_MENU_MAGIC0 ||
-        snapshot[9] != MAIZO_MENU_MAGIC1 ||
-        snapshot[10] != MAIZO_MENU_VERSION)
+    if (!maizoMenuSnapshotOK(snapshot))
         return 0;
     for (slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
         unsigned int offset = slot * 4;
@@ -34,6 +41,55 @@ static unsigned int maizoMenuPadValidMask(const unsigned char snapshot[16])
             mask |= 1u << slot;
     }
     return mask;
+}
+
+/* Neutral decoded reports are valid. Recover only missing connected slots,
+ * or both slots after a transport failure. */
+static inline unsigned int maizoMenuFallbackMask(const unsigned char snapshot[16])
+{
+    unsigned int slot, mask = 0;
+    if (!maizoMenuSnapshotOK(snapshot))
+        return (1u << MAIZO_MENU_SLOTS) - 1;
+    for (slot = 0; slot < MAIZO_MENU_SLOTS; ++slot)
+        if (maizoMenuPadType(snapshot, slot))
+            mask |= 1u << slot;
+    return mask & ~maizoMenuPadValidMask(snapshot);
+}
+
+static inline int maizoMenuMergeFallback(unsigned char snapshot[16], unsigned int slot,
+                                         const unsigned char report[18])
+{
+    unsigned int pos = slot * 4;
+    if (slot >= MAIZO_MENU_SLOTS || !report || !(report[0] || report[1]))
+        return 0;
+    snapshot[pos] = report[0];
+    snapshot[pos + 1] = report[1];
+    snapshot[pos + 2] = report[4];
+    snapshot[pos + 3] = report[5];
+    snapshot[11] |= 1u << slot;
+    snapshot[12] |= 1u << slot;
+    return 1;
+}
+
+/* The per-port RPC has its own header and slot identity. Reject transport
+ * zeros, a reply from another port, and invalid/stale report data. */
+static inline int maizoMenuMergePort(unsigned char snapshot[16], unsigned int slot,
+                                     const unsigned char reply[MAIZO_MENU_PORT_SIZE])
+{
+    unsigned int bit;
+    if (slot >= MAIZO_MENU_SLOTS || !reply ||
+        reply[0] != MAIZO_MENU_MAGIC0 || reply[1] != MAIZO_MENU_PORT_MAGIC1 ||
+        reply[2] != MAIZO_MENU_PORT_VERSION || reply[3] != slot ||
+        reply[4] > 8)
+        return 0;
+    bit = 1u << slot;
+    snapshot[15] &= ~(15u << (slot * 4));
+    snapshot[15] |= reply[4] << (slot * 4);
+    snapshot[11] &= ~bit;
+    snapshot[12] &= ~bit;
+    if (reply[4] && reply[5])
+        maizoMenuMergeFallback(snapshot, slot, reply + 8);
+    return 1;
 }
 
 static unsigned int maizoMenuPadNeutralMask(const unsigned char snapshot[16])

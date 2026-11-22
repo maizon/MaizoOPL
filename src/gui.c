@@ -274,7 +274,7 @@ void guiShowSupremeDiagnostics(void)
 #ifdef PADEMU
     snprintf(features, sizeof(features),
              maizoIsPhysicalRescueMode() ?
-                 "Somente PS2; segure L1+R1+START para reativar USB/BT" :
+                 "Resgate PS2; solte L1+R1+START para reativar USB/BT" :
                  "PadEmu: ativo; emergencia PS2: segure L1+R1+START");
 #else
     snprintf(features, sizeof(features), "PadEmu: nao incluido nesta compilacao");

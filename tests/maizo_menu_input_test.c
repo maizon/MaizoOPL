@@ -71,6 +71,45 @@ int main(void)
     s[10] = 0xff; /* Wrong RPC version cannot issue input */
     assert(maizoMenuPadValidMask(s) == 0);
 
+    /* Typed connection without a valid report needs per-slot fallback.
+     * Preserve good P1 when only P2 requires recovery. */
+    make_snapshot(s);
+    assert(maizoMenuFallbackMask(junk) == 3);
+    assert(maizoMenuFallbackMask(s) == 0);
+    s[15] = 5 | (7 << 4);
+    s[11] = 1;
+    assert(maizoMenuFallbackMask(s) == 2);
+    unsigned char report[18] = {0};
+    assert(!maizoMenuMergeFallback(s, 1, report));
+    assert(maizoMenuFallbackMask(s) == 2);
+    report[0] = 0xf7;
+    report[1] = 0xff;
+    report[4] = report[5] = 127;
+    assert(maizoMenuMergeFallback(s, 1, report));
+    assert(maizoMenuPadValidMask(s) == 3);
+    assert(maizoMenuFallbackMask(s) == 0);
+    assert(maizoMenuPadMask(s, 1, 1, 3, centers) == 8);
+    assert(!maizoMenuMergeFallback(s, 2, report));
+
+    unsigned char alternate[MAIZO_MENU_PORT_SIZE] = {0};
+    assert(!maizoMenuMergePort(s, 1, alternate));
+    alternate[0] = MAIZO_MENU_MAGIC0;
+    alternate[1] = MAIZO_MENU_PORT_MAGIC1;
+    alternate[2] = MAIZO_MENU_PORT_VERSION;
+    alternate[3] = 0;
+    assert(!maizoMenuMergePort(s, 1, alternate));
+    alternate[3] = 1;
+    alternate[4] = 8; /* connected keyboard, no decoded sample yet */
+    assert(maizoMenuMergePort(s, 1, alternate));
+    assert(maizoMenuPadType(s, 1) == 8 && maizoMenuPadValidMask(s) == 1);
+    alternate[5] = 1;
+    memcpy(alternate + 8, report, 18);
+    assert(maizoMenuMergePort(s, 1, alternate));
+    assert(maizoMenuPadMask(s, 1, 1, 3, centers) == 8);
+    alternate[4] = 0; /* confirmed unplug */
+    assert(maizoMenuMergePort(s, 1, alternate));
+    assert(maizoMenuPadType(s, 1) == 0 && maizoMenuPadValidMask(s) == 1);
+
     puts("MAIZO: fail-closed HID, P1/P2, neutral arming and ghost DOWN tests OK");
     return 0;
 }

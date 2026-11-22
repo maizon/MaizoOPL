@@ -1213,6 +1213,7 @@ static int rpc_buf[64] __attribute((aligned(16)));
 #define DS34USB_MENU_STATE  11
 #define DS34USB_PROFILES    12
 #define DS34USB_CAPTURE     13
+#define DS34USB_MENU_PORT   14
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 void rpc_thread(void *data)
@@ -1229,9 +1230,12 @@ void *rpc_sf(int cmd, void *data, int size)
         case DS34USB_INIT:
             ds34usb_init(*(u8 *)data);
             break;
-        case DS34USB_GET_STATUS:
-            *(u8 *)data = ds34usb_get_status(*(u8 *)data);
+        case DS34USB_GET_STATUS: {
+            unsigned int port = size > 0 ? *(u8 *)data : MAX_PADS;
+            /* Status is a byte; do not block the RPC server on a USB lock. */
+            *(u8 *)data = port < MAX_PADS ? ds34pad[port].status : 0;
             break;
+        }
         case DS34USB_GET_BDADDR:
             *(u8 *)data = ds34usb_get_bdaddr(((u8 *)data + 1), *(u8 *)data);
             break;
@@ -1249,11 +1253,11 @@ void *rpc_sf(int cmd, void *data, int size)
             int oldstate;
             hid_stream_pump();
             mips_memset(data, 0, 18);
-            if (port < MAX_PADS && (ds34pad[port].status & DS34USB_STATE_RUNNING)) {
-                CpuSuspendIntr(&oldstate);
+            CpuSuspendIntr(&oldstate);
+            if (port < MAX_PADS && ds34pad[port].enabled && ds34pad[port].devId >= 0 &&
+                (ds34pad[port].status & DS34USB_STATE_RUNNING) && hid_report_ready[port])
                 hid_copy_snapshot(data, 18, port);
-                CpuResumeIntr(oldstate);
-            }
+            CpuResumeIntr(oldstate);
             break;
         }
         case DS34USB_PROFILES: {
@@ -1301,6 +1305,34 @@ void *rpc_sf(int cmd, void *data, int size)
             CpuResumeIntr(intr);
             break;
         }
+        case DS34USB_MENU_PORT: {
+            u8 *out = data;
+            int intr;
+            unsigned int port = MAX_PADS;
+            if (size >= 4 && out[0] == MAIZO_MENU_MAGIC0 &&
+                out[1] == MAIZO_MENU_PORT_MAGIC1 && out[2] == MAIZO_MENU_PORT_VERSION)
+                port = out[3];
+            mips_memset(out, 0, MAIZO_MENU_PORT_SIZE);
+            if (port >= MAX_PADS)
+                break;
+            hid_stream_pump();
+            out[0] = MAIZO_MENU_MAGIC0;
+            out[1] = MAIZO_MENU_PORT_MAGIC1;
+            out[2] = MAIZO_MENU_PORT_VERSION;
+            out[3] = port;
+            CpuSuspendIntr(&intr);
+            if (ds34pad[port].enabled && ds34pad[port].devId >= 0 &&
+                (ds34pad[port].status & DS34USB_STATE_CONNECTED)) {
+                out[4] = ds34pad[port].type + 1;
+                if ((ds34pad[port].status & DS34USB_STATE_RUNNING) &&
+                    hid_report_ready[port]) {
+                    out[5] = 1;
+                    hid_copy_snapshot(out + 8, 18, port);
+                }
+            }
+            CpuResumeIntr(intr);
+            break;
+        }
         case DS34USB_MENU_STATE: {
             u8 *snapshot = (u8 *)data;
             int port;
@@ -1313,24 +1345,23 @@ void *rpc_sf(int cmd, void *data, int size)
             snapshot[8] = MAIZO_MENU_MAGIC0;
             snapshot[9] = MAIZO_MENU_MAGIC1;
             snapshot[10] = MAIZO_MENU_VERSION;
+            int oldstate;
+            CpuSuspendIntr(&oldstate);
             for (port = 0; port < MAX_PADS; port++) {
                 unsigned int pos = port * 4;
-                int oldstate;
                 /* Only decoded input may establish a stick center. */
                 if (hid_report_ready[port])
                     snapshot[12] |= 1u << port;
                 snapshot[pos] = snapshot[pos + 1] = 0xff;
                 snapshot[pos + 2] = snapshot[pos + 3] = 0x7f;
                 if (!ds34pad[port].enabled || ds34pad[port].devId < 0 ||
-                    !(ds34pad[port].status & DS34USB_STATE_RUNNING))
+                    !(ds34pad[port].status & DS34USB_STATE_CONNECTED))
                     continue;
                 /* Connection is distinct from report readiness. Notify even
                  * an idle Xbox/DS4 before it sends its first input packet. */
                 snapshot[15] |= ((ds34pad[port].type + 1) & 15) << (port * 4);
-                if (!hid_report_ready[port] && ds34pad[port].type != MAIZOHID &&
-                    ds34pad[port].type != MAIZO_KEYBOARD)
+                if (!(ds34pad[port].status & DS34USB_STATE_RUNNING) || !hid_report_ready[port])
                     continue;
-                CpuSuspendIntr(&oldstate);
                 /* Deliver one observed short USB press once per EE poll. */
                 {
                     u8 report[18];
@@ -1340,11 +1371,11 @@ void *rpc_sf(int cmd, void *data, int size)
                     snapshot[pos + 2] = report[4];
                     snapshot[pos + 3] = report[5];
                 }
-                CpuResumeIntr(oldstate);
                 snapshot[11] |= 1u << port;
             }
             snapshot[13] = maizo_usb_stage;
             snapshot[14] = maizo_usb_reports;
+            CpuResumeIntr(oldstate);
             break;
         }
         case DS34USB_RESET:

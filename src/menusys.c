@@ -1690,7 +1690,7 @@ void menuHandleInputMenu()
                 guiShowNetConfig();
         } else if (id == MENU_PAD_HELP) {
 #ifdef PADEMU
-            guiMsgBox("USB e Bluetooth ativos no menu, sem iniciar jogo. A emulação nos jogos é independente. L1+R1+START no controle original alterna o modo de resgate.", 0, NULL);
+            guiMsgBox("USB e Bluetooth ativos no menu, sem iniciar jogo. A emulação nos jogos é independente. Segure L1+R1+START no controle original para resgate temporário; solte para voltar.", 0, NULL);
             guiGameShowUsbDiagnostics();
 #endif
         } else if (id == MENU_SOURCE_FILTER || id == MENU_LIBRARY_SORT || id == MENU_COVER_MODE || id == MENU_ANIMATIONS) {

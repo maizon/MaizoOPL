@@ -16,6 +16,7 @@
 #define DS34USB_MENU_STATE  11
 #define DS34USB_PROFILES    12
 #define DS34USB_CAPTURE     13
+#define DS34USB_MENU_PORT   14
 #define DS34USB_BIND_RPC_ID 0x18E3878E
 
 static SifRpcClientData_t ds34usb __attribute__((aligned(64)));
@@ -33,9 +34,11 @@ static int bind_client(SifRpcClientData_t *client)
 {
     int tries;
     client->server = NULL;
-    for (tries = 0; tries < 1000; tries++) {
-        if (SifBindRpc(client, DS34USB_BIND_RPC_ID, 0) < 0)
-            return 0;
+    for (tries = 0; tries < 16; tries++) {
+        if (SifBindRpc(client, DS34USB_BIND_RPC_ID, 0) < 0) {
+            nopdelay();
+            continue;
+        }
         if (client->server)
             return 1;
         nopdelay();
@@ -54,8 +57,13 @@ int ds34usb_init()
     }
     if (rpc_lock < 0)
         return 0;
-    ds34usb_inited = bind_client(&ds34usb);
-    menuusb_inited = ds34usb_inited && bind_client(&menuusb);
+    if (PollSema(rpc_lock) < 0)
+        return 0;
+    if (!ds34usb_inited)
+        ds34usb_inited = bind_client(&ds34usb);
+    if (ds34usb_inited && !menuusb_inited)
+        menuusb_inited = bind_client(&menuusb);
+    SignalSema(rpc_lock);
     return ds34usb_inited;
 }
 
@@ -74,10 +82,14 @@ static int rpc_transaction(int cmd, const void *input, int input_size,
     SifRpcClientData_t *client;
     u8 *tx, *rx;
     int ok;
-    if (!ds34usb_inited || rpc_lock < 0)
+    if (rpc_lock < 0)
         return 0;
-    if (WaitSema(rpc_lock) < 0)
+    if ((menu ? PollSema(rpc_lock) : WaitSema(rpc_lock)) < 0)
         return 0;
+    if (!ds34usb_inited) {
+        SignalSema(rpc_lock);
+        return 0;
+    }
     client = menu && menuusb_inited ? &menuusb : &ds34usb;
     tx = menu ? menu_request : rpc_request;
     rx = menu ? menu_reply : rpc_reply;
@@ -89,13 +101,22 @@ static int rpc_transaction(int cmd, const void *input, int input_size,
                     output_size ? rx : NULL, output_size, NULL, NULL) == 0;
     if (ok && output_size)
         memcpy(output, rx, output_size);
+    if (!ok) {
+        /* Rebind on the next recovery tick. Keep the other client if possible. */
+        if (client == &menuusb)
+            menuusb_inited = 0;
+        else {
+            ds34usb_inited = 0;
+            menuusb_inited = 0;
+        }
+    }
     SignalSema(rpc_lock);
     return ok;
 }
 
 int ds34usb_reinit_ports(u8 ports)
 {
-    return rpc_transaction(DS34USB_INIT, &ports, 1, NULL, 0, 0);
+    return rpc_transaction(DS34USB_INIT, &ports, 1, NULL, 0, 1);
 }
 
 int ds34usb_get_usb_diag(u8 info[16])
@@ -124,10 +145,23 @@ int ds34usb_get_menu_state(u8 out[16])
     return out && rpc_transaction(DS34USB_MENU_STATE, request, 16, out, 16, 1);
 }
 
+int ds34usb_get_menu_port(int port, u8 out[32])
+{
+    const u8 request[4] = {0x4d, 0x50, 1, port};
+    return out && port >= 0 && port < 2 &&
+           rpc_transaction(DS34USB_MENU_PORT, request, sizeof(request), out, 32, 1);
+}
+
+int ds34usb_get_status_checked(int port, u8 *status)
+{
+    u8 input = port;
+    return status && rpc_transaction(DS34USB_GET_STATUS, &input, 1, status, 1, 0);
+}
+
 int ds34usb_get_status(int port)
 {
-    u8 input = port, status = 0;
-    rpc_transaction(DS34USB_GET_STATUS, &input, 1, &status, 1, 0);
+    u8 status = 0;
+    ds34usb_get_status_checked(port, &status);
     return status;
 }
 
