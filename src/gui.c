@@ -2740,7 +2740,8 @@ int guiManageCheats(config_set_t *configSet)
                                                 MAIZO_DIVIDER);
                 fntRenderString(gTheme->fonts[0], screenWidth - 104, y + 5,
                                 ALIGN_CENTER, 63, 22,
-                                cheatConfigIsMasterCode(gCheats[i].name) ? "AUTO" : gCheats[i].enabled ? "ON" : "OFF",
+                                cheatConfigIsMasterCode(gCheats[i].name) ? "AUTO" : gCheats[i].enabled ? "ON" :
+                                                                                                         "OFF",
                                 MAIZO_TEXT);
             } else {
                 int enabled = gCheats[i].enabled;

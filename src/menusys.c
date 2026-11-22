@@ -2127,7 +2127,8 @@ void menuRenderInfo(void)
         int mode = list->mode;
         int h = gTheme->usedHeight;
         const int coverX = 32, coverY = 126, coverW = 150, coverH = 203;
-        const char *platform = mode == APP_MODE ? "Homebrew" : mode == PS1_MODE ? "PlayStation 1" : "PlayStation 2";
+        const char *platform = mode == APP_MODE ? "Homebrew" : mode == PS1_MODE ? "PlayStation 1" :
+                                                                                  "PlayStation 2";
         int canConfigure = !(list->flags & MODE_FLAG_NO_COMPAT) || (mode == APP_MODE && gEnableWrite);
         int buttons = canConfigure ? 2 : 1;
         if (detailFocus >= buttons)
@@ -2146,7 +2147,8 @@ void menuRenderInfo(void)
             }
             rmDrawPixmap(cover, coverX + coverW / 2, coverY + coverH / 2, ALIGN_CENTER, cw, ch, SCALING_NONE, gDefaultCol);
         } else {
-            maizoDrawIcon(mode == APP_MODE ? MAIZO_ICON_APPS : mode == PS1_MODE ? MAIZO_ICON_PS1 : MAIZO_ICON_PS2,
+            maizoDrawIcon(mode == APP_MODE ? MAIZO_ICON_APPS : mode == PS1_MODE ? MAIZO_ICON_PS1 :
+                                                                                  MAIZO_ICON_PS2,
                           coverX + 52, coverY + 64, 48, MAIZO_BRIGHT);
             fntRenderString(gTheme->fonts[0], coverX + coverW / 2, coverY + 126, ALIGN_CENTER, coverW - 14, 24, "Sem capa", MAIZO_MUTED);
         }

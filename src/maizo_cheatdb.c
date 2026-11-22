@@ -7,10 +7,10 @@
 #include <strings.h>
 #include <zlib.h>
 
-#define DB_TEXT_LIMIT (256u * 1024u)
+#define DB_TEXT_LIMIT    (256u * 1024u)
 #define DB_ARCHIVE_LIMIT (128u * 1024u * 1024u)
-#define DB_SCAN_LIMIT (64u * 1024u * 1024u)
-#define DB_CHUNK 8192
+#define DB_SCAN_LIMIT    (64u * 1024u * 1024u)
+#define DB_CHUNK         8192
 
 static uint16_t u16le(const unsigned char *p)
 {
@@ -279,6 +279,7 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
     int result = MZDB_INVALID;
     uint32_t tailSize, central = 0, centralEnd = 0, scanned = 0;
     unsigned int members = 0;
+    int foundEnd = 0;
     *text = NULL;
     heading[0] = 0;
     if (size < 22 || size > DB_ARCHIVE_LIMIT)
@@ -304,9 +305,10 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
         if (central > eocd || length > eocd - central || members == 65535)
             goto done;
         centralEnd = central + length;
+        foundEnd = 1;
         break;
     }
-    if (!centralEnd && members)
+    if (!foundEnd || (!centralEnd && members))
         goto done;
     if (!centralEnd) {
         result = MZDB_NONE;

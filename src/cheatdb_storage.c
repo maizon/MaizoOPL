@@ -16,7 +16,8 @@ typedef struct
 static int mcResult(int result)
 {
     int value;
-    return result < 0 ? result : mcSync(MC_WAIT, NULL, &value) == 1 ? value : -1;
+    return result < 0 ? result : mcSync(MC_WAIT, NULL, &value) == 1 ? value :
+                                                                      -1;
 }
 
 static int readDb(void *ctx, uint32_t offset, void *out, size_t length)

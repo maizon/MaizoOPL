@@ -48,6 +48,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert find(blob, b"SLES_123.45")[1].startswith(b"Wrong Region")
         assert find(blob, b"SLUS_999.99", b"Missing")[0] == 0
         assert find(blob[:-5])[0] < 0
+        assert find(b"not a zip" * 20)[0] < 0
+        assert find(archive([]))[0] == 0
         result, text, _ = find(archive([("CheatDatabase.txt", aggregate), ("CHT/SLUS_123.45.cht", valid)], method))
         assert result == 2 and b"Money" in text
         assert find(archive([("one.txt", aggregate), ("two.txt", '"Game One (USA)"\nAnother\n20123456 12345678')]))[0] == -2
