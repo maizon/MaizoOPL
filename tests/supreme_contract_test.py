@@ -29,7 +29,7 @@ assert "maizo_animation_mode" in ui
 assert "guiFrameId - focusStartFrame" in menu
 assert "cachePrefetchTexture" in art
 assert "thmRenderSupremeMain" in menu
-assert "CASE_OVERLAY" in art
+assert "rmDrawPixmap(cover" in art
 assert "hid_stream_thread" in read("modules/ds34usb/iop/ds34usb.c")
 assert "hid_stream_thread" in read("modules/pademu/ds34usb.c")
 assert "maizoPademuSetSlot" in read("src/guigame.c")
@@ -57,7 +57,7 @@ required_callbacks = (
 )
 for callback in required_callbacks:
     assert callback in menu, f"Lost callback: {callback}"
-assert "if (previous->owner == entry->owner)" in library
+assert "previous->owner == entry->owner && previous->item == entry->item" in library
 print("MAIZO Supreme: menu wiring, licensed glyphs, HID, and settings contract passed")
 
 # One shared MAIZO renderer for original dialog models and callbacks.
@@ -65,7 +65,7 @@ assert "maizoDialogLayout" in dia
 assert "maizoSettingsFooter" in menu
 assert "maizoSettingsActionIcon" in menu
 assert '"SELECIONADO"' not in art
-assert "rmDrawOverlayPixmap(caseBox" in art
+assert "rmDrawOverlayPixmap(caseBox" not in art
 assert "rmDrawPixmap(caseBox" not in art
 assert "ds34usb_get_menu_state" in read("src/pad.c")
 assert "DS34USB_MENU_STATE" in driver
@@ -111,16 +111,20 @@ assert "fm_exists(dest)" in fm
 assert "maizo_filemgr.o" in read("Makefile")
 
 assert "maizoUsbCenters" in read("src/pad.c")
-assert "rmDrawOverlayPixmap(caseBox" in read("src/themes.c")
-assert "frontRight = cw * 92 / 100" in read("src/themes.c")
+assert "rmDrawOverlayPixmap(caseBox" not in read("src/themes.c")
 assert "snapshot[12] |= 1u << port" in read("modules/ds34usb/iop/ds34usb.c")
 assert "READY:%02X SLOT:%02X" in read("src/guigame.c")
 
-# Cover is confined to the front panel, not projected across the full case.
-case = read("src/themes.c")
-assert "frontLeft = cw * 9 / 100" in case
-assert "frontRight = cw * 92 / 100" in case
-assert "frontLeft, topLeft, frontRight, topRight" in case
-assert "frontLeft, bottomLeft, frontRight, bottomRight" in case
-assert "rmDrawOverlayPixmap(caseBox" in case
-assert 'badgeX - 47, 32, current->title' not in case
+# Flat cover only, plus shared keyboard/USB mapping.
+assert "caseBox" not in art
+assert "rmDrawPixmap(cover" in art
+assert 'badgeX - 47, 32, current->title' not in art
+assert "DS34,XB360,USB,KEYBOARD" in read("src/guigame.c")
+assert "maizoPademuAssignPorts" in read("src/guigame.c")
+assert "maizoPademuPortChoice" in read("src/guigame.c")
+assert "maizoShowMapping" in gui
+assert "maizoDecodeKeyboard" in menu_driver
+assert "maizoDecodeKeyboard" in read("modules/pademu/ds34usb.c")
+assert "MaizoInputProfiles" in read("ee_core/src/iopmgr.c")
+assert "maizoRemapHid" in menu_driver
+assert "maizoRemapHid" in read("modules/pademu/ds34usb.c")

@@ -91,7 +91,11 @@ static int compareTitle(const void *a, const void *b)
 {
     const maizo_entry_t *left = a, *right = b;
     int result = strcasecmp(left->title, right->title);
-    return result ? result : compareIdentity(a, b);
+    if (!result)
+        result = compareIdentity(a, b);
+    if (result)
+        return result;
+    return left->ordinal < right->ordinal ? -1 : left->ordinal > right->ordinal;
 }
 
 static int comparePlatformTitle(const void *a, const void *b)
@@ -118,13 +122,13 @@ void maizoLibrarySortMode(maizo_library_t *library, int mode)
         maizo_entry_t *entry = &library->entries[read];
         size_t scan;
         int duplicate = 0;
-        /* Separate devices with the same disc ID are distinct installations.
-         * Deduplicate only repeated items from the same real source. */
+        /* A disc ID identifies metadata, not an installation. Preserve even
+         * same-ID entries from one source, unless it is the same list item. */
         for (scan = write; scan > 0; scan--) {
             maizo_entry_t *previous = &library->entries[scan - 1];
             if (compareIdentity(previous, entry) != 0)
                 break;
-            if (previous->owner == entry->owner) {
+            if (previous->owner == entry->owner && previous->item == entry->item && entry->item != NULL) {
                 previous->favorite |= entry->favorite;
                 duplicate = 1;
                 break;

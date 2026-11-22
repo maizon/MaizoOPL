@@ -802,7 +802,8 @@ static int maizoDialogLayout(struct UIItem *ui, struct UIItem *cur,
                         selected ? MAIZO_TEXT : MAIZO_MUTED);
 
         {
-            int n = 0, valueLeft = x + width * 57 / 100;
+            int n = 0, valueLeft = x + (firstLabel ? width * 57 / 100 :
+                ((begin->type == UI_ENUM && controls == 1) ? 42 : width * 57 / 100));
             int valueWidth = x + width - 11 - valueLeft;
             for (p = begin; p < end; ++p) {
                 char numeric[24];

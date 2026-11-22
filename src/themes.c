@@ -658,7 +658,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         int index = order[slot], selected = index == 2;
         int hPct = selected ? 50 : (index == 0 || index == 4 ? 28 : 39);
         int ch, cw, cx, cy, x, y;
-        GSTEXTURE *cover, *caseBox;
+        GSTEXTURE *cover;
         maizo_entry_t *entry = visible[index];
 
         if (!entry)
@@ -679,11 +679,6 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
         x = cx - cw / 2;
         y = cy - ch / 2;
 
-        /* The original OPL theme draws case.png AFTER its warped front
-         * cover, using the case's transparent border / plastic spine.
-         * Restore that compositor instead of a guessed black inset. */
-        rmDrawRect(x + 6, y + 7, cw, ch, GS_SETREG_RGBA(0, 0, 0, 0x55));
-
         cover = textures[index];
         if (!cover || !cover->Mem)
             cover = covers && art->defaultTexture ?
@@ -691,35 +686,7 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                         NULL;
         if (!cover || !cover->Mem)
             cover = thmGetTexture(COVER_DEFAULT);
-        caseBox = thmGetTexture(entry->platform == MAIZO_APP ?
-                                    APPS_CASE_OVERLAY :
-                                    CASE_OVERLAY);
-
-        if (caseBox && caseBox->Mem && cover && cover->Mem) {
-            /*
-             * The original 3D-case artwork and its front-cover window are
-             * different shapes. The previous implementation stretched the
-             * inlay over 100% of the case (0..cw), leaking the cover past
-             * the transparent plastic rim and creating the apparent second
-             * cover behind every game in the CRT photos.
-             *
-             * Place the inlay INSIDE the physical front panel. Keep a
-             * real spine on the left and translucent plastic on the right.
-             * All offsets are in local virtual-screen pixels because
-             * rmDrawOverlayPixmap scales them in renderman.c. Relative
-             * geometry preserves the approved centre/side animations.
-             */
-            int frontLeft = cw * 9 / 100;
-            int frontRight = cw * 92 / 100;
-            int topLeft = ch * 5 / 100;
-            int topRight = ch * 7 / 100;
-            int bottomLeft = ch * 92 / 100;
-            int bottomRight = ch * 94 / 100;
-            rmDrawOverlayPixmap(caseBox, cx, cy, ALIGN_CENTER, cw, ch,
-                                SCALING_NONE, gDefaultCol, cover,
-                                frontLeft, topLeft, frontRight, topRight,
-                                frontLeft, bottomLeft, frontRight, bottomRight);
-        } else if (cover && cover->Mem) {
+        if (cover && cover->Mem) {
             rmDrawPixmap(cover, cx, cy, ALIGN_CENTER, cw, ch,
                          SCALING_NONE, gDefaultCol);
         } else {
@@ -1618,10 +1585,7 @@ static void thmLoad(const char *themePath)
     if (!themePath) {
         for (i = ELF_FORMAT; i <= VMODE_PAL; i++)
             thmLoadResource(&newT->textures[i], i, NULL, GS_PSM_CT32, 1);
-        /* Reuse OPL's actual PS2 box templates, including transparency.
-         * Both are loaded once per theme, not once per cover frame. */
-        texLoadInternal(&newT->textures[CASE_OVERLAY], CASE_OVERLAY);
-        texLoadInternal(&newT->textures[APPS_CASE_OVERLAY], APPS_CASE_OVERLAY);
+        /* Dashboard uses flat cover art; no case overlays. */
     }
 
     gTheme = newT;

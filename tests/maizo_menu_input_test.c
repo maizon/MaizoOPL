@@ -31,7 +31,7 @@ int main(void)
     assert(maizoMenuPadMask(s, 1, 1, 3, centers) == 0);
 
     s[11] = 3;
-    s[15] = 7 | (5 << 3);
+    s[15] = 7 | (5 << 4);
     assert(maizoMenuPadType(s, 0) == 7);
     assert(maizoMenuPadType(s, 1) == 5);
     assert(maizoMenuPadType(s, 2) == 0);

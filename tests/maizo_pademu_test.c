@@ -3,12 +3,18 @@
 #include "maizo_pademu_bits.h"
 #include "maizo_sio2_guard.h"
 #include "maizohid_latch.h"
+#include "maizo_input_profiles.h"
 
 int main(void)
 {
     unsigned int settings = 0;
     unsigned char data[40] = {0};
 
+    assert(maizoPademuPortChoice(0x200u) == 1);
+    assert(maizoPademuPortChoice(0x100u) == 0);
+    assert(maizoPademuPortChoice(0x300u) == 2);
+    assert(maizoPademuPortChoice(0) == 3);
+    assert(maizoPademuAssignPorts(0x000f0f00, 1, 1) == 0x00020200);
     /* Global P1 and P2 must be independently writable. */
     settings = maizoPademuSetSlot(settings, 0, 1, 0);
     settings = maizoPademuSetSlot(settings, 1, 1, 1);
@@ -95,6 +101,19 @@ int main(void)
         assert(maizoSio2MixedStatus(0x11100, 1) == 0x1100);
     }
 
+    {
+        unsigned char profiles[32], keyboard[8] = {0, 0, 29};
+        unsigned int mask;
+        maizoDefaultProfiles(profiles);
+        assert(maizoMapHid(1u << 14, profiles) == (1u << 14));
+        profiles[13] = 14;
+        profiles[14] = 16;
+        assert(maizoMapHid(1u << 14, profiles) == (1u << 13));
+        assert(maizoKeyboardMask(keyboard, 8, profiles, &mask) && mask == (1u << 14));
+        keyboard[2] = 1;
+        assert(!maizoKeyboardMask(keyboard, 8, profiles, &mask));
+        assert(!maizoKeyboardMask(keyboard, 4, profiles, &mask));
+    }
     puts("MAIZO: PadEmu P2, multitap, SIO2 and short USB press tests passed");
     return 0;
 }

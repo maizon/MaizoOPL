@@ -26,6 +26,10 @@
 #include "include/cheatman.h"
 #include "include/sound.h"
 #include "include/guigame.h"
+#ifdef PADEMU
+#include <libds34usb.h>
+#include "include/maizo_profile_config.h"
+#endif
 
 #include <limits.h>
 #include <stdlib.h>
@@ -1070,6 +1074,78 @@ void guiShowAudioConfig(void)
     diaExecuteDialog(diaAudioConfig, -1, 1, guiAudioUpdater);
 }
 
+#ifdef PADEMU
+static void maizoShowMapping(void)
+{
+    static const char *padNames[] = {"Select", "L3", "R3", "Start", "Cima", "Direita", "Baixo", "Esquerda", "L2", "R2", "L1", "R1", "Triangulo", "Circulo", "X", "Quadrado", "Desativado", NULL};
+    static const char *keyNames[] = {"Desativado", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Enter", "Esc", "Backspace", "Tab", "Espaco", "Direita", "Esquerda", "Baixo", "Cima", "Ctrl E", "Shift E", "Alt E", "Ctrl D", "Shift D", "Alt D", NULL};
+    static const unsigned char keyCodes[] = {0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 79, 80, 81, 82, 224, 225, 226, 228, 229, 230};
+    struct UIItem menu[] = {
+        {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Mapeamento de botoes", -1}}},
+        {UI_BREAK},
+        {UI_BUTTON, 7101, 1, 1, -1, 0, 0, {.label = {"USB HID", -1}}},
+        {UI_BREAK},
+        {UI_BUTTON, 7102, 1, 1, -1, 0, 0, {.label = {"Keyboard", -1}}},
+        {UI_BREAK},
+        {UI_TERMINATOR}
+    };
+    int result;
+    while ((result = diaExecuteDialog(menu, -1, 1, NULL)) == 7101 || result == 7102) {
+        int keyboard = result == 7102, offset = keyboard ? 16 : 0;
+        unsigned char profiles[MAIZO_PROFILE_SIZE];
+        struct UIItem ui[16 * 4 + 7] = {{0}};
+        int i, n = 0, selected, j;
+        maizoLoadInputProfiles(profiles);
+        ui[n++] = (struct UIItem){UI_LABEL, 0, 1, 1, -1, 0, 0,
+            {.label = {keyboard ? "Keyboard > DualShock" : "USB HID > DualShock", -1}}};
+        ui[n++].type = UI_BREAK;
+        for (i = 0; i < 16; i++) {
+            selected = profiles[offset + i];
+            if (keyboard) {
+                selected = 0;
+                for (j = 0; j < (int)sizeof(keyCodes); j++)
+                    if (keyCodes[j] == profiles[offset + i]) selected = j;
+            }
+            ui[n++] = (struct UIItem){UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {padNames[i], -1}}};
+            ui[n++].type = UI_SPACER;
+            ui[n++] = (struct UIItem){UI_ENUM, 7200 + i, 1, 1, -1, 0, 0,
+                {.intvalue = {selected, selected, 0, 0, keyboard ? keyNames : padNames}}};
+            ui[n++].type = UI_BREAK;
+        }
+        ui[n++] = (struct UIItem){UI_BUTTON, 7300, 1, 1, -1, 0, 0, {.label = {"Restaurar padrao", -1}}};
+        ui[n++].type = UI_BREAK;
+        ui[n++] = (struct UIItem){UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar", -1}}};
+        ui[n++].type = UI_TERMINATOR;
+        do {
+            result = diaExecuteDialog(ui, -1, 1, NULL);
+            if (result == 7300) {
+                for (i = 0; i < 16; i++) {
+                    selected = i;
+                    if (keyboard)
+                        for (j = 0; j < (int)sizeof(keyCodes); j++)
+                            if (keyCodes[j] == maizoDefaultKeys[i]) selected = j;
+                    diaSetInt(ui, 7200 + i, selected);
+                }
+            }
+        } while (result == 7300);
+        if (result == UIID_BTN_OK) {
+            char key[24];
+            config_set_t *config = configGetByType(CONFIG_OPL);
+            for (i = 0; i < 16; i++) {
+                diaGetInt(ui, 7200 + i, &selected);
+                if (keyboard && (selected < 0 || selected >= (int)sizeof(keyCodes))) selected = 0;
+                profiles[offset + i] = keyboard ? keyCodes[selected] : selected;
+                snprintf(key, sizeof(key), "maizo_input_%02d", offset + i);
+                configSetInt(config, key, profiles[offset + i]);
+            }
+            ds34usb_set_profiles(profiles);
+            if (!saveConfig(CONFIG_OPL, 0))
+                guiMsgBox("Falha ao salvar mapeamento.", 0, NULL);
+        }
+    }
+}
+#endif
+
 void guiShowControllerConfig(void)
 {
     int value;
@@ -1102,6 +1178,8 @@ void guiShowControllerConfig(void)
 #ifdef PADEMU
         if (result == PADEMU_GLOBAL_BUTTON) {
             guiGameShowPadEmuConfig(1);
+        } else if (result == MAIZO_MAPPING_BUTTON) {
+            maizoShowMapping();
         } else if (result == PADMACRO_GLOBAL_BUTTON) {
             guiGameShowPadMacroConfig(1);
         }

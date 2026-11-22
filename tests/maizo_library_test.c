@@ -96,6 +96,16 @@ int main(void)
 {
     testLibrary();
     testLargeRefresh();
+    {
+        maizo_library_t library = {0};
+        int source, original, modified;
+        assert(maizoLibraryAdd(&library, &source, &original, MAIZO_PS2, "SLUS_000.00", "Original", 0));
+        assert(maizoLibraryAdd(&library, &source, &modified, MAIZO_PS2, "SLUS_000.00", "Mod", 0));
+        maizoLibrarySort(&library);
+        assert(maizoLibraryFilter(&library, MAIZO_ALL));
+        assert(library.view_count == 2);
+        maizoLibraryClear(&library);
+    }
     puts("MAIZO library: stable sources, sort modes, favorites, hotplug and 12000-item navigation passed");
     return 0;
 }

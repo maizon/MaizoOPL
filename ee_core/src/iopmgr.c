@@ -197,10 +197,11 @@ int New_Reset_Iop(const char *arg, int arglen)
 
 #ifdef PADEMU
     if (iop_reboot_count >= 2 && config->EnablePadEmuOp) {
-        char args_for_pademu[31];
+        char args_for_pademu[63];
         memcpy(args_for_pademu, &config->PadEmuSettings, 4);
         memcpy(args_for_pademu + 4, &config->PadMacroSettings, 4);
         memcpy(args_for_pademu + 8, config->MaizoBtPair, 23);
+        memcpy(args_for_pademu + 31, config->MaizoInputProfiles, 32);
         LoadOPLModule(OPL_MODULE_ID_PADEMU, 0, sizeof(args_for_pademu), args_for_pademu);
     }
 #endif

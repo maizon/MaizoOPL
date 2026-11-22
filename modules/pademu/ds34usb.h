@@ -12,6 +12,7 @@
 #define GUITAR_GH 2
 #define GUITAR_RB 3
 #define MAIZOHID  4
+void ds34usb_set_profiles(const unsigned char *profiles);
 
 #define MODEL_GUITAR 1
 #define MODEL_PS2    3

@@ -49,8 +49,8 @@ static u32 time_since_last = 0;
 
 static unsigned short pad_count;
 #ifdef PADEMU
-/* Input safety: a new/untrusted HID or BT stream must publish one clean
- * neutral state before it is allowed to issue dashboard navigation. */
+/* USB input is accepted only from a validated driver snapshot.
+ * Bluetooth retains its neutral-report safety gate. */
 static unsigned int maizoUsbArmed;
 static unsigned int maizoUsbNotified, maizoBtNotified;
 static u8 maizoUsbCenters[4] = {127, 127, 127, 127};
@@ -348,9 +348,16 @@ static int maizoReadRemotePads(void)
                     static const char *const names[] = {
                         "USB", "DualShock 3 USB", "DualShock 4 USB",
                         "Guitarra USB", "Guitarra USB", "USB HID",
-                        "Twin USB", "Xbox 360 USB"};
-                    guiNotifyController(names[maizoMenuPadType(snapshot, slot)], slot + 1);
+                        "Twin USB", "Xbox 360 USB", "Teclado USB"};
+                    unsigned int type = maizoMenuPadType(snapshot, slot);
+                    guiNotifyController(type < sizeof(names) / sizeof(names[0]) ? names[type] : names[0], slot + 1);
                     maizoUsbNotified |= bit;
+                }
+            }
+            for (int slot = 0; slot < MAIZO_MENU_SLOTS; ++slot) {
+                if (!(valid & (1u << slot))) {
+                    maizoUsbCenters[slot * 2] = 127;
+                    maizoUsbCenters[slot * 2 + 1] = 127;
                 }
             }
             maizoUsbArmed &= valid;
@@ -361,7 +368,8 @@ static int maizoReadRemotePads(void)
                     maizoUsbCenters[slot * 2 + 1] = snapshot[slot * 4 + 3];
                 }
             }
-            maizoUsbArmed |= neutral;
+            /* A validated decoded report is usable immediately. */
+            maizoUsbArmed |= valid;
             remote = maizoMenuPadMask(snapshot, gXSensitivity,
                                       gYSensitivity, maizoUsbArmed,
                                       maizoUsbCenters);

@@ -574,8 +574,8 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_BOOL, PADCFG_PADEMU_ENABLE, 1, 1, _STR_HINT_PADEMU_ENABLE, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},
 
-    {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {NULL, _STR_PADEMU_MODE}}},
-    {UI_SPACER},
+    {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {"Pad emulator mode", -1}}},
+    {UI_BREAK},
     {UI_ENUM, PADCFG_PADEMU_MODE, 1, 1, _STR_HINT_PADEMU_MODE, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},
 
@@ -595,7 +595,7 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_ENUM, PADCFG_PADPORT, 1, 1, _STR_HINT_PAD_PORT, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},
 
-    {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {NULL, _STR_PADEMU_PORT}}},
+    {UI_LABEL, PADCFG_PADEMU_PORT_LABEL, 1, 1, -1, -50, 0, {.label = {NULL, _STR_PADEMU_PORT}}},
     {UI_SPACER},
     {UI_BOOL, PADCFG_PADEMU_PORT, 1, 1, _STR_HINT_PADEMU_PORT, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},
@@ -1083,6 +1083,8 @@ struct UIItem diaControllerConfig[] = {
 #ifdef PADEMU
     {UI_BREAK},
     {UI_BUTTON, PADEMU_GLOBAL_BUTTON, 1, 1, -1, 0, 0, {.label = {NULL, _STR_PADEMUCONFIG}}},
+    {UI_BREAK},
+    {UI_BUTTON, MAIZO_MAPPING_BUTTON, 1, 1, -1, 0, 0, {.label = {"Mapeamento de botoes", -1}}},
     {UI_BREAK},
     {UI_BUTTON, PADMACRO_GLOBAL_BUTTON, 1, 1, -1, 0, 0, {.label = {NULL, _STR_PADMACROCONFIG}}},
     {UI_BREAK},

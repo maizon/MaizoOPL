@@ -38,4 +38,16 @@ static unsigned int maizoPademuSetOptions(unsigned int original, int mode, int m
     return original;
 }
 
+static inline unsigned int maizoPademuPortChoice(unsigned int settings)
+{
+    static const unsigned char choice[4] = {3, 0, 1, 2};
+    return choice[(settings >> 8) & 3u];
+}
+static inline unsigned int maizoPademuAssignPorts(unsigned int settings, unsigned int choice, int vibration)
+{
+    static const unsigned char masks[4] = {1, 2, 3, 0};
+    unsigned int mask = choice < 4 ? masks[choice] : 0;
+    settings &= ~(MAIZO_PADEMU_PORT_BITS | MAIZO_PADEMU_VIB_BITS);
+    return settings | (mask << 8) | (vibration ? mask << 16 : 0);
+}
 #endif

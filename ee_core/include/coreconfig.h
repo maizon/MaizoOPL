@@ -65,6 +65,7 @@ struct EECoreConfig_t
     int PadEmuSettings;
     int PadMacroSettings;
     unsigned char MaizoBtPair[23];
+    unsigned char MaizoInputProfiles[32];
 
     int EnableGSMOp;
     struct GsmConfig_t GsmConfig;

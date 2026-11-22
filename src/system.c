@@ -31,6 +31,7 @@
 #ifdef PADEMU
 #include <libds34bt.h>
 #include <libds34usb.h>
+#include "include/maizo_profile_config.h"
 #endif
 
 #define NEWLIB_PORT_AWARE
@@ -941,6 +942,7 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     config->EnablePadEmuOp = gEnablePadEmu;
     config->PadEmuSettings = (unsigned int)(gPadEmuSettings >> 8);
     config->PadMacroSettings = (unsigned int)(gPadMacroSettings);
+    maizoLoadInputProfiles(config->MaizoInputProfiles);
     memset(config->MaizoBtPair, 0, sizeof(config->MaizoBtPair));
     if (gEnablePadEmu && (gPadEmuSettings & 0xFF))
         ds34bt_get_pair_key(config->MaizoBtPair);

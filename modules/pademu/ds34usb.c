@@ -12,7 +12,7 @@
 #include "maizotwin.h"
 #include "maizohid.h"
 #include "maizohid_usb.h"
-#include "maizohid_latch.h"
+#include "maizo_input_decode.h"
 #include "maizox360_usb.h"
 #include "sys_utils.h"
 #include "padmacro.h"
@@ -74,6 +74,7 @@ UsbDriver usb_driver = {NULL, NULL, "ds34usb", usb_probe, usb_connect, usb_disco
 static void DS3USB_init(int pad);
 static void readReport(u8 *data, int bytes, int pad);
 static void usb_hid_descriptor_cb(int resultCode, int bytes, void *arg);
+static void maizo_keyboard_configured(int resultCode, int bytes, void *arg);
 static u8 maizo_hid_descriptor[MAX_PADS][MAIZOHID_MAX_DESCRIPTOR] __attribute__((aligned(4)));
 static int LEDRumble(u8 *led, u8 lrum, u8 rrum, int pad);
 
@@ -93,6 +94,14 @@ static volatile u8 hid_stream_state[MAX_PADS]; /* 0=idle, 1=inflight, 2=complete
 static volatile int hid_stream_result[MAX_PADS], hid_stream_bytes[MAX_PADS];
 static volatile unsigned int hid_stream_generation[MAX_PADS];
 static u16 hid_pending[MAX_PADS];
+static unsigned char maizoProfiles[MAIZO_PROFILE_SIZE];
+static int maizoProfilesLoaded;
+void ds34usb_set_profiles(const unsigned char *profiles)
+{
+    mips_memcpy(maizoProfiles, profiles, MAIZO_PROFILE_SIZE);
+    maizoSanitizeProfiles(maizoProfiles);
+    maizoProfilesLoaded = 1;
+}
 static u8 hid_stream_buffers[MAX_PADS][MAX_BUFFER_SIZE] __attribute__((aligned(4)));
 static volatile int hid_stream_stop;
 static int hid_stream_thread_id = -1;
@@ -131,7 +140,7 @@ int usb_probe(int devId)
         return 1;
 
     /* A valid HID gamepad interface is not restricted to one VID/PID. */
-    return maizohid_find_interface(devId, NULL, NULL);
+    return maizohid_find_interface(devId, NULL, NULL) || maizoKeyboardFind(devId, NULL, NULL);
 }
 
 int usb_connect(int devId)
@@ -143,7 +152,7 @@ int usb_connect(int devId)
     UsbEndpointDescriptor *endpoint;
     UsbInterfaceDescriptor *hid_interface = NULL;
     UsbEndpointDescriptor *hid_endpoint = NULL;
-    int generic_hid;
+    int generic_hid, keyboard;
 
     DPRINTF("DS34USB: connect: devId=%i\n", devId);
 
@@ -173,6 +182,7 @@ int usb_connect(int devId)
     }
     interface = (UsbInterfaceDescriptor *)((char *)config + config->bLength);
     generic_hid = maizohid_find_interface(devId, &hid_interface, &hid_endpoint);
+    keyboard = !generic_hid && maizoKeyboardFind(devId, &hid_interface, &hid_endpoint);
 
     if (device->idVendor == MAIZOX360_VID && device->idProduct == MAIZOX360_PID) {
         endpoint = maizox360_find_input(devId, device);
@@ -209,6 +219,10 @@ int usb_connect(int devId)
             }
         }
         epCount = interface->bNumEndpoints - 1;
+    } else if (keyboard) {
+        ds34pad[pad].type = MAIZO_KEYBOARD;
+        ds34pad[pad].hid_interface = hid_interface->bInterfaceNumber;
+        epCount = 0;
     } else if (generic_hid &&
                !(device->idVendor == DS34_VID &&
                  (device->idProduct == DS3_PID || device->idProduct == DS4_PID ||
@@ -233,7 +247,7 @@ int usb_connect(int devId)
         epCount = 20; // ds4 v2 returns interface->bNumEndpoints as 0
     }
 
-    endpoint = (ds34pad[pad].type == MAIZOHID || ds34pad[pad].type == MAIZOX360) ?
+    endpoint = (ds34pad[pad].type == MAIZOHID || ds34pad[pad].type == MAIZOX360 || ds34pad[pad].type == MAIZO_KEYBOARD) ?
                    hid_endpoint :
                    (UsbEndpointDescriptor *)UsbGetDeviceStaticDescriptor(devId, NULL, USB_DT_ENDPOINT);
 
@@ -243,7 +257,7 @@ int usb_connect(int devId)
                 ds34pad[pad].interruptEndp = UsbOpenEndpointAligned(devId, endpoint);
                 if (ds34pad[pad].type == TWINHID) {
                     ds34pad[pad].hid_packet_size = MAIZOTWIN_PACKET;
-                } else if (ds34pad[pad].type == MAIZOHID) {
+                } else if (ds34pad[pad].type == MAIZOHID || ds34pad[pad].type == MAIZO_KEYBOARD) {
                     unsigned int packet = ((unsigned int)endpoint->wMaxPacketSizeHB << 8) | endpoint->wMaxPacketSizeLB;
                     /* Low-speed HID often uses 8-byte reports: requesting 64
                      * bytes can require eight polls or never complete. */
@@ -263,7 +277,7 @@ int usb_connect(int devId)
 
     /* HID gamepads may have only an interrupt-IN endpoint. */
     if (ds34pad[pad].interruptEndp < 0 ||
-        ((ds34pad[pad].type != MAIZOHID && ds34pad[pad].type != TWINHID && ds34pad[pad].type != MAIZOX360) &&
+        ((ds34pad[pad].type != MAIZOHID && ds34pad[pad].type != TWINHID && ds34pad[pad].type != MAIZOX360 && ds34pad[pad].type != MAIZO_KEYBOARD) &&
          ds34pad[pad].outEndp < 0)) {
         usb_release(pad);
         return 1;
@@ -371,6 +385,15 @@ static void usb_config_set(int result, int count, void *arg)
     }
     ds34pad[pad].status |= DS34USB_STATE_CONFIGURED;
 
+    if (ds34pad[pad].type == MAIZO_KEYBOARD) {
+        ret = UsbControlTransfer(ds34pad[pad].controlEndp, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+                                 0x0b, 0, ds34pad[pad].hid_interface, 0, NULL,
+                                 maizo_keyboard_configured, (void *)pad);
+        (void)ret;
+        SignalSema(ds34pad[pad].sema);
+        return;
+    }
+
     if (ds34pad[pad].type == MAIZOX360) {
         ds34pad[pad].status |= DS34USB_STATE_RUNNING;
         ds34pad[pad].analog_btn = 1;
@@ -423,6 +446,19 @@ static void usb_config_set(int result, int count, void *arg)
     SignalSema(ds34pad[pad].sema);
 }
 
+static void maizo_keyboard_configured(int resultCode, int bytes, void *arg)
+{
+    int pad = (int)arg;
+    (void)bytes;
+    if (pad < 0 || pad >= MAX_PADS || ds34pad[pad].type != MAIZO_KEYBOARD ||
+        ds34pad[pad].devId < 0)
+        return;
+    if (resultCode == USB_RC_OK) {
+        ds34pad[pad].status |= DS34USB_STATE_RUNNING;
+        ds34pad[pad].analog_btn = 1;
+    } 
+}
+
 static void usb_hid_descriptor_cb(int resultCode, int bytes, void *arg)
 {
     int pad = (int)arg;
@@ -460,6 +496,14 @@ static void readReport(u8 *data, int bytes, int pad_idx)
 {
     ds34usb_device *pad = &ds34pad[pad_idx];
 
+    if (ds34pad[pad_idx].type == MAIZO_KEYBOARD) {
+        u16 oldButtons = ds34pad[pad_idx].ds2.nButtonState;
+        if (maizoDecodeKeyboard(&ds34pad[pad_idx].ds2, data, bytes, maizoProfiles)) {
+            hid_pending[pad_idx] |= maizohid_press_edges(oldButtons, ds34pad[pad_idx].ds2.nButtonState);
+            
+        }
+        return;
+    }
     if (ds34pad[pad_idx].type == MAIZOX360) {
         u16 oldButtons = ds34pad[pad_idx].ds2.nButtonState;
         if (maizox360_decode(data, bytes, &ds34pad[pad_idx].ds2)) {
@@ -482,10 +526,11 @@ static void readReport(u8 *data, int bytes, int pad_idx)
     }
     if (pad->type == MAIZOHID) {
         u16 oldButtons = pad->ds2.nButtonState;
-        if (maizohid_decode(&pad->hid_layout, data, bytes, &pad->ds2))
+        if (maizohid_decode(&pad->hid_layout, data, bytes, &pad->ds2)) {
+            maizoRemapHid(&pad->ds2, maizoProfiles);
             hid_pending[pad_idx] |=
                 maizohid_press_edges(oldButtons, pad->ds2.nButtonState);
-        else
+        } else
             DPRINTF("MAIZOHID: ignored short / unrecognized input report\n");
         return;
     }
@@ -585,7 +630,7 @@ static int LEDRumble(u8 *led, u8 lrum, u8 rrum, int pad)
 {
     int ret = 0;
 
-    if (ds34pad[pad].type == MAIZOHID || ds34pad[pad].type == MAIZOX360)
+    if (ds34pad[pad].type == MAIZOHID || ds34pad[pad].type == MAIZOX360 || ds34pad[pad].type == MAIZO_KEYBOARD)
         return USB_RC_OK; /* No undocumented output/rumble commands. */
 
     PollSema(ds34pad[pad].cmd_sema);
@@ -664,7 +709,7 @@ static void hid_stream_thread(void *arg)
             if (!device->enabled || device->devId < 0 ||
                 device->interruptEndp < 0 ||
                 !(device->status & DS34USB_STATE_RUNNING) ||
-                (device->type != MAIZOHID && device->type != TWINHID && device->type != MAIZOX360) ||
+                (device->type != MAIZOHID && device->type != TWINHID && device->type != MAIZOX360 && device->type != MAIZO_KEYBOARD) ||
                 (device->type == TWINHID && pad != twin_root))
                 continue;
 
@@ -722,7 +767,7 @@ void ds34usb_set_rumble(u8 lrum, u8 rrum, int port)
 {
     if (port < 0 || port >= MAX_PADS ||
         ds34pad[port].type == MAIZOHID || ds34pad[port].type == TWINHID ||
-        ds34pad[port].type == MAIZOX360)
+        ds34pad[port].type == MAIZOX360 || ds34pad[port].type == MAIZO_KEYBOARD)
         return; /* These receivers have no verified output protocol. */
     WaitSema(ds34pad[port].sema);
 
@@ -762,7 +807,7 @@ int ds34usb_get_data(u8 *dst, int size, int port)
     if (hid_stream_thread_id > 0 &&
         (ds34pad[port].type == MAIZOHID ||
          ds34pad[port].type == TWINHID ||
-         ds34pad[port].type == MAIZOX360)) {
+         ds34pad[port].type == MAIZOX360 || ds34pad[port].type == MAIZO_KEYBOARD)) {
         int oldstate;
         if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
             return 0;
@@ -785,7 +830,7 @@ int ds34usb_get_data(u8 *dst, int size, int port)
     ret = UsbInterruptTransfer(ds34pad[reader].interruptEndp, usb_buf,
                                (ds34pad[reader].type == MAIZOHID ||
                                 ds34pad[reader].type == TWINHID ||
-                                ds34pad[reader].type == MAIZOX360) ?
+                                ds34pad[reader].type == MAIZOX360 || ds34pad[reader].type == MAIZO_KEYBOARD) ?
                                    ds34pad[reader].hid_packet_size :
                                    MAX_BUFFER_SIZE,
                                usb_data_cb, (void *)reader);
@@ -804,7 +849,7 @@ int ds34usb_get_data(u8 *dst, int size, int port)
     ret = ds34pad[port].analog_btn & 1;
 
     if (ds34pad[port].update_rum) {
-        if (ds34pad[port].type != MAIZOHID && ds34pad[port].type != TWINHID && ds34pad[port].type != MAIZOX360) {
+        if (ds34pad[port].type != MAIZOHID && ds34pad[port].type != TWINHID && ds34pad[port].type != MAIZOX360 && ds34pad[port].type != MAIZO_KEYBOARD) {
             cmdret = LEDRumble(ds34pad[port].oldled, ds34pad[port].lrum, ds34pad[port].rrum, port);
             if (cmdret == USB_RC_OK)
                 TransferWait(ds34pad[port].cmd_sema);
@@ -847,7 +892,7 @@ int ds34usb_get_status(int port)
     if (port < 0 || port >= MAX_PADS || !ds34pad[port].enabled)
         return 0;
     if (ds34pad[port].type == MAIZOHID || ds34pad[port].type == TWINHID ||
-        ds34pad[port].type == MAIZOX360)
+        ds34pad[port].type == MAIZOX360 || ds34pad[port].type == MAIZO_KEYBOARD)
         return ds34pad[port].status; /* Cached, no USB wait in SIO2. */
 
     WaitSema(ds34pad[port].sema);
@@ -876,6 +921,8 @@ int ds34usb_init(u8 pads, u8 options)
 {
     int pad;
 
+    if (!maizoProfilesLoaded)
+        maizoDefaultProfiles(maizoProfiles);
     for (pad = 0; pad < MAX_PADS; pad++) {
         ds34pad[pad].status = 0;
         ds34pad[pad].devId = -1;

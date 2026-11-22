@@ -99,29 +99,16 @@ extern struct irx_export_table _exp_pademu;
 
 int _start(int argc, char *argv[])
 {
-    union
-    {
-        struct
-        {
-            u8 pad_enable;
-            u8 pad_vibration;
-            u8 mtap_enabled : 1;
-            u8 mtap_port    : 1;
-            u8 pad_options  : 1;
-        };
-        int raw;
-    } PadEmuSettings_local;
     u8 pad_vibration = 0x03;
 
     pad_enable = 0x03;
 
     if (argc > 1) {
-        mips_memcpy(&PadEmuSettings_local.raw, argv[1], 4);
-        pad_enable = PadEmuSettings_local.pad_enable;
-        pad_vibration = PadEmuSettings_local.pad_vibration;
-        mtap_enabled = PadEmuSettings_local.mtap_enabled;
-        mtap_port = PadEmuSettings_local.mtap_port;
-        pad_options = PadEmuSettings_local.pad_options; // enable workaround for fake ds3
+        pad_enable = (u8)argv[1][0] & 0x0f;
+        pad_vibration = (u8)argv[1][1] & 0x0f;
+        mtap_enabled = (u8)argv[1][2] & 1;
+        mtap_port = ((u8)argv[1][2] >> 1) & 1;
+        pad_options = ((u8)argv[1][2] >> 2) & 1;
         u32 macro_settings = 0xAB;
         mips_memcpy(&macro_settings, argv[1] + 4, 4);
         padMacroInit(macro_settings);
@@ -146,6 +133,9 @@ int _start(int argc, char *argv[])
 #ifdef BT
     if (argc > 1)
         ds34bt_seed_pair_key((const u8 *)argv[1] + 8);
+#elif defined(USB)
+    if (argc > 1)
+        ds34usb_set_profiles((const u8 *)argv[1] + 31);
 #endif
     pademu_setup(pad_enable, pad_vibration);
 
@@ -260,7 +250,6 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
     unsigned int physical, other, firstLen, secondLen = 0;
     unsigned int firstIn, firstOut, secondIn, secondOut, emulated;
     int first, second = -1, offset = -1;
-    u8 savedFirst = 0, savedSecond = 0;
 
     if (!td || !td->in || !td->out || td->in_size < 3 ||
         td->out_size < 3)
@@ -308,24 +297,17 @@ void pademu_hookSio2man(sio2_transfer_data_t *td, Sio2McProc sio2proc)
     if (!pad_inited)
         goto native;
 
-    /* Keep the original SIO2 response for non-emulated physical ports.
-     * Only mask and overwrite the emulated command's own byte range. */
+    /* An enabled but disconnected virtual slot must not disable a real pad. */
+    if (first >= 0 && !(PAD_GET_STATUS(first) & PAD_STATE_RUNNING))
+        first = -1;
+    if (second >= 0 && !(PAD_GET_STATUS(second) & PAD_STATE_RUNNING))
+        second = -1;
+    if (first < 0 && second < 0)
+        goto native;
+
+    /* Preserve the native transaction verbatim; replace only the virtual response. */
     if (first < 0 || (offset >= 0 && second < 0)) {
-        if (first >= 0) {
-            savedFirst = td->in[0];
-            td->in[0] = 0;
-        }
-        if (second >= 0) {
-            savedSecond = td->in[offset];
-            td->in[offset] = 0;
-        }
         sio2proc(td);
-        if (first >= 0)
-            td->in[0] = savedFirst;
-        if (second >= 0)
-            td->in[offset] = savedSecond;
-        /* A virtual device deliberately masked on the bus is no longer
-         * a missing physical controller from PADMAN's point of view. */
         emulated = (first >= 0 ? 1u : 0u) | (second >= 0 ? 2u : 0u);
         td->stat6c = maizoSio2MixedStatus(td->stat6c, emulated);
     } else {

@@ -46,6 +46,7 @@ int configGetStat(config_set_t *configSet, iox_stat_t *stat);
 #ifdef PADEMU
 #include <libds34bt.h>
 #include <libds34usb.h>
+#include "include/maizo_profile_config.h"
 #endif
 
 #ifdef __EESIO_DEBUG
@@ -1195,6 +1196,13 @@ void applyConfig(int themeID, int langID, int skipDeviceRefresh)
         gDefaultDevice = APP_MODE;
 
     guiUpdateScrollSpeed();
+#ifdef PADEMU
+    {
+        unsigned char profiles[MAIZO_PROFILE_SIZE];
+        maizoLoadInputProfiles(profiles);
+        ds34usb_set_profiles(profiles);
+    }
+#endif
 
     guiSetFrameHook(&menuUpdateHook);
 

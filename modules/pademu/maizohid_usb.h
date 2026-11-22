@@ -3,7 +3,7 @@
 
 /* Read only the USB descriptors already enumerated by ps2sdk.  Do not
  * assume the first interface/endpoint of a composite device is the pad. */
-static int maizohid_find_interface(int devId,
+static int maizohid_find_interface_kind(int devId, int keyboard,
                                    UsbInterfaceDescriptor **found_interface,
                                    UsbEndpointDescriptor **found_input)
 {
@@ -36,10 +36,10 @@ static int maizohid_find_interface(int devId,
             candidate = NULL;
             if (length >= sizeof(UsbInterfaceDescriptor)) {
                 iface = (UsbInterfaceDescriptor *)cursor;
-                /* Never claim boot-keyboard or boot-mouse interfaces. */
                 if (iface->bInterfaceClass == 0x03 &&
-                    !(iface->bInterfaceSubClass == 1 &&
-                      (iface->bInterfaceProtocol == 1 || iface->bInterfaceProtocol == 2)))
+                    (keyboard ? (iface->bInterfaceSubClass == 1 && iface->bInterfaceProtocol == 1) :
+                     !(iface->bInterfaceSubClass == 1 &&
+                       (iface->bInterfaceProtocol == 1 || iface->bInterfaceProtocol == 2))))
                     candidate = iface;
             }
         } else if (cursor[1] == USB_DT_ENDPOINT && candidate &&
@@ -57,6 +57,15 @@ static int maizohid_find_interface(int devId,
         cursor += length;
     }
     return 0;
+}
+
+static inline int maizohid_find_interface(int devId, UsbInterfaceDescriptor **iface, UsbEndpointDescriptor **ep)
+{
+    return maizohid_find_interface_kind(devId, 0, iface, ep);
+}
+static inline int maizoKeyboardFind(int devId, UsbInterfaceDescriptor **iface, UsbEndpointDescriptor **ep)
+{
+    return maizohid_find_interface_kind(devId, 1, iface, ep);
 }
 
 /* Ask the gamepad for its advertised report descriptor length (Microntek
