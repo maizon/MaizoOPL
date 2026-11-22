@@ -642,7 +642,9 @@ static void drawMaizoLibraryList(mutable_image_t *art, theme_element_t *elem, in
     char count[40];
     snprintf(count, sizeof(count), "%d / %d", selected + 1, total);
     fntRenderString(elem->font, w - 30, h - 63, ALIGN_RIGHT, 110, 25, count, MAIZO_MUTED);
-    fntRenderString(elem->font, 32, h - 31, ALIGN_NONE, w - 64, 24, "R3 Pesquisar  |  START Configurações  |  L1/R1 Abas", MAIZO_MUTED);
+    maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 32, h - 34, "Iniciar");
+    maizoDrawPromptHint(TRIANGLE_ICON, 136, h - 34, "Opções");
+    fntRenderString(elem->font, 256, h - 31, ALIGN_NONE, w - 282, 24, "R3 Pesquisa | START Ajustes | L1/R1 Abas", MAIZO_MUTED);
 }
 
 static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
@@ -820,7 +822,9 @@ static void drawMaizoCarousel(struct menu_list *menu, struct submenu_list *item,
                       badgeX + 9, h - 64, 20, MAIZO_BRIGHT);
         fntRenderString(elem->font, badgeX + 36, h - 64,
                         ALIGN_NONE, 144, 25, origin, MAIZO_TEXT);
-        fntRenderString(elem->font, 32, h - 30, ALIGN_NONE, w - 232, 23, "R3 Pesquisar  |  START Configurações", MAIZO_MUTED);
+        maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 32, h - 33, "Iniciar");
+        maizoDrawPromptHint(TRIANGLE_ICON, 136, h - 33, "Opções");
+        fntRenderString(elem->font, 254, h - 30, ALIGN_NONE, w - 450, 23, "R3 Pesquisa | START", MAIZO_MUTED);
         fntRenderString(elem->font, w - 30, h - 30,
                         ALIGN_RIGHT, 190, 23, counter, MAIZO_MUTED);
     }

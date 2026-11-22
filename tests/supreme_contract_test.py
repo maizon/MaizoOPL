@@ -175,3 +175,20 @@ assert "MAIZO_PROMPT_PS_SOUTH + style * 4 + index" in ui
 assert "maizoDrawPromptHint" in dia and "maizoDrawPromptHint" in menu
 assert "CC0" in read("assets/maizo/xelu/README.md")
 assert read("include/maizo_prompt_png.h").count("static const unsigned char maizo_") == 12
+
+# Validate the actual vendored CC0 PNG bytes, not just the presence of names.
+import re, struct, zlib
+prompt_assets = re.findall(r"static const unsigned char maizo_\w+\[\].*?= \{(.*?)\};", read("include/maizo_prompt_png.h"), re.S)
+assert len(prompt_assets) == 12
+for payload in prompt_assets:
+    png = bytes(int(x, 16) for x in re.findall(r"0x[0-9a-f]{2}", payload))
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert struct.unpack(">II", png[16:24]) == (100, 100)
+    pos = 8
+    while pos < len(png):
+        size = struct.unpack(">I", png[pos:pos+4])[0]
+        end = pos + 8 + size
+        assert end + 4 <= len(png)
+        assert zlib.crc32(png[pos+4:end]) == struct.unpack(">I", png[end:end+4])[0]
+        pos = end + 4
+    assert pos == len(png) and png[-8:-4] == b"IEND"

@@ -619,10 +619,11 @@ static void fm_draw(void)
                screenWidth, 63, MAIZO_SURFACE);
     fntRenderString(gTheme->fonts[0], 20, gTheme->usedHeight - 57,
                     ALIGN_NONE, screenWidth - 38, 25, fm.status, MAIZO_TEXT);
-    fntRenderString(gTheme->fonts[0], 20, gTheme->usedHeight - 32,
-                    ALIGN_NONE, screenWidth - 38, 24,
-                    "X/O ABRIR  L/R PAINEL  L2/R2 UNIDADE  [] COPIAR  /\\ COLAR  START OPÇÕES",
-                    MAIZO_MUTED);
+    maizoDrawPromptHint(gSelectButton == KEY_CIRCLE ? CIRCLE_ICON : CROSS_ICON, 20, gTheme->usedHeight - 37, "Abrir");
+    maizoDrawPromptHint(SQUARE_ICON, 117, gTheme->usedHeight - 37, "Copiar");
+    maizoDrawPromptHint(TRIANGLE_ICON, 220, gTheme->usedHeight - 37, "Colar");
+    fntRenderString(gTheme->fonts[0], 319, gTheme->usedHeight - 34, ALIGN_NONE, screenWidth - 337, 23,
+                    "L/R Painel  L2/R2 Unidade  START Opções", MAIZO_MUTED);
 }
 
 static void fm_wlaunch(void)

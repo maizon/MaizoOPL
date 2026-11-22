@@ -219,11 +219,16 @@ int maizoPromptStyle(void)
 static int maizoFaceIndex(int iconId)
 {
     switch (iconId) {
-        case CROSS_ICON: return 0;
-        case CIRCLE_ICON: return 1;
-        case SQUARE_ICON: return 2;
-        case TRIANGLE_ICON: return 3;
-        default: return -1;
+        case CROSS_ICON:
+            return 0;
+        case CIRCLE_ICON:
+            return 1;
+        case SQUARE_ICON:
+            return 2;
+        case TRIANGLE_ICON:
+            return 3;
+        default:
+            return -1;
     }
 }
 

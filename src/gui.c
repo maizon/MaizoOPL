@@ -2190,9 +2190,9 @@ static void guiSelectPromptStyle(int welcome)
         fntRenderString(gTheme->fonts[0], 32, 66, ALIGN_NONE, 576, 42, welcome ? "Bem-vindo ao MAIZO Supreme" : "Estilo dos botões", MAIZO_TEXT);
         if (welcome) {
 #ifdef PADEMU
-            guiWelcomeFeature(MAIZO_ICON_PAD, 32, 125, "Dois jogadores", "Até dois controles USB");
+            guiWelcomeFeature(MAIZO_ICON_PAD, 32, 125, "Dois controles USB", "Menu e jogos compatíveis");
             guiWelcomeFeature(MAIZO_ICON_KEYBOARD, 325, 125, "USB + teclado", "Podem jogar juntos");
-            guiWelcomeFeature(MAIZO_ICON_BLUETOOTH, 32, 190, "DS3, DS4 e Xbox 360", "USB / Bluetooth compatível");
+            guiWelcomeFeature(MAIZO_ICON_BLUETOOTH, 32, 190, "DS3, DS4 e Xbox 360", "DualShock USB/BT; Xbox USB");
             guiWelcomeFeature(MAIZO_ICON_LIBRARY, 325, 190, "Uma só biblioteca", "PS2, PS1 e aplicativos");
 #else
             guiWelcomeFeature(MAIZO_ICON_PAD, 32, 125, "Controle original", "PadEmu nesta build: ausente");
