@@ -1562,10 +1562,16 @@ void menuHandleInputMenu()
             const char *sortNames[] = {"Nome", "Plataforma", "Origem", NULL};
             const char *animationNames[] = {"Desligadas", "Suaves", "Completas", NULL};
             const char *coverNames[] = {"Ocultar", "Mostrar", NULL};
-            const char **names = id == MENU_LIBRARY_SORT ? sortNames : id == MENU_ANIMATIONS ? animationNames : id == MENU_COVER_MODE ? coverNames : (const char **)sourceNames;
-            const char *key = id == MENU_LIBRARY_SORT ? "maizo_sort_mode" : id == MENU_ANIMATIONS ? "maizo_animation_mode" : id == MENU_COVER_MODE ? "maizo_cover_mode" : "maizo_source_filter";
-            int value = id == MENU_COVER_MODE ? 1 : id == MENU_ANIMATIONS ? maizoAnimationMode() : 0;
-            int max = id == MENU_SOURCE_FILTER ? MAIZO_SOURCE_COUNT : id == MENU_COVER_MODE ? 2 : 3;
+            const char **names = id == MENU_LIBRARY_SORT ? sortNames : id == MENU_ANIMATIONS ? animationNames :
+                                                                   id == MENU_COVER_MODE     ? coverNames :
+                                                                                               (const char **)sourceNames;
+            const char *key = id == MENU_LIBRARY_SORT ? "maizo_sort_mode" : id == MENU_ANIMATIONS ? "maizo_animation_mode" :
+                                                                        id == MENU_COVER_MODE     ? "maizo_cover_mode" :
+                                                                                                    "maizo_source_filter";
+            int value = id == MENU_COVER_MODE ? 1 : id == MENU_ANIMATIONS ? maizoAnimationMode() :
+                                                                            0;
+            int max = id == MENU_SOURCE_FILTER ? MAIZO_SOURCE_COUNT : id == MENU_COVER_MODE ? 2 :
+                                                                                              3;
             struct UIItem choices[] = {
                 {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {submenuItemGetText(&mainMenuCurrent->item), -1}}},
                 {UI_SPLITTER},

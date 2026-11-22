@@ -15,9 +15,15 @@ enum maizo_tab { MAIZO_ALL,
                  MAIZO_SETTINGS,
                  MAIZO_TAB_COUNT };
 
-enum maizo_source { MAIZO_SOURCE_ALL, MAIZO_SOURCE_USB, MAIZO_SOURCE_SMB,
-                    MAIZO_SOURCE_MX4SIO, MAIZO_SOURCE_HDD, MAIZO_SOURCE_ILINK,
-                    MAIZO_SOURCE_APP, MAIZO_SOURCE_PS1, MAIZO_SOURCE_COUNT };
+enum maizo_source { MAIZO_SOURCE_ALL,
+                    MAIZO_SOURCE_USB,
+                    MAIZO_SOURCE_SMB,
+                    MAIZO_SOURCE_MX4SIO,
+                    MAIZO_SOURCE_HDD,
+                    MAIZO_SOURCE_ILINK,
+                    MAIZO_SOURCE_APP,
+                    MAIZO_SOURCE_PS1,
+                    MAIZO_SOURCE_COUNT };
 
 typedef struct
 {

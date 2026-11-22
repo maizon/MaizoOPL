@@ -50,7 +50,11 @@ static struct
     char clipboard[FM_PATH], status[164];
     unsigned char clipboardDir;
     int batchCount;
-    struct { char path[FM_PATH]; unsigned char folder; } batch[FM_ITEMS];
+    struct
+    {
+        char path[FM_PATH];
+        unsigned char folder;
+    } batch[FM_ITEMS];
 } fm;
 
 static int screenWidth;
@@ -573,7 +577,8 @@ static void fm_draw_pane(fm_pane_t *pane, int x, int focused)
             rmDrawRect(x + 9, y, 269, 27, MAIZO_CARD);
             rmDrawRect(x + 9, y, 3, 27, MAIZO_ACCENT);
         }
-        maizoDrawIcon(entry->marked ? MAIZO_ICON_CHECK : entry->folder ? MAIZO_ICON_FOLDER : MAIZO_ICON_FILE,
+        maizoDrawIcon(entry->marked ? MAIZO_ICON_CHECK : entry->folder ? MAIZO_ICON_FOLDER :
+                                                                         MAIZO_ICON_FILE,
                       x + 14, y + 3, 20,
                       entry->folder ? MAIZO_ACCENT : MAIZO_MUTED);
         fntRenderString(gTheme->fonts[0], x + 43, y + 3,

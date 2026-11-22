@@ -815,7 +815,10 @@ static void guiConfigureSource(int source, const char *name)
     if (!usb)
         mask &= ~(1 << MAIZO_SOURCE_USB);
     visible = !!(mask & (1 << source));
-    startup = bdm ? gBDMStartMode : source == MAIZO_SOURCE_SMB ? gETHStartMode : source == MAIZO_SOURCE_HDD ? gHDDStartMode : source == MAIZO_SOURCE_APP ? gAPPStartMode : gPS1StartMode;
+    startup = bdm ? gBDMStartMode : source == MAIZO_SOURCE_SMB ? gETHStartMode :
+                                source == MAIZO_SOURCE_HDD     ? gHDDStartMode :
+                                source == MAIZO_SOURCE_APP     ? gAPPStartMode :
+                                                                 gPS1StartMode;
     if ((source == MAIZO_SOURCE_MX4SIO && !gEnableMX4SIO) || (source == MAIZO_SOURCE_ILINK && !gEnableILK))
         startup = 0;
     diaSetInt(options, 301, visible);
@@ -872,9 +875,15 @@ void guiShowStorageConfig(void)
         options[n++] = (struct UIItem) {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"FONTES DE JOGOS", -1}}};
         options[n++].type = UI_SPLITTER;
         for (int source = 1; source < MAIZO_SOURCE_COUNT; source++) {
-            int enabled = source == MAIZO_SOURCE_USB ? gBDMStartMode : source == MAIZO_SOURCE_MX4SIO ? gEnableMX4SIO : source == MAIZO_SOURCE_ILINK ? gEnableILK : source == MAIZO_SOURCE_HDD ? (gHDDStartMode || gEnableBdmHDD) : source == MAIZO_SOURCE_SMB ? gETHStartMode : source == MAIZO_SOURCE_APP ? gAPPStartMode : gPS1StartMode;
+            int enabled = source == MAIZO_SOURCE_USB ? gBDMStartMode : source == MAIZO_SOURCE_MX4SIO ? gEnableMX4SIO :
+                                                                   source == MAIZO_SOURCE_ILINK      ? gEnableILK :
+                                                                   source == MAIZO_SOURCE_HDD        ? (gHDDStartMode || gEnableBdmHDD) :
+                                                                   source == MAIZO_SOURCE_SMB        ? gETHStartMode :
+                                                                   source == MAIZO_SOURCE_APP        ? gAPPStartMode :
+                                                                                                       gPS1StartMode;
             snprintf(labels[source], sizeof(labels[source]), "%s - %s", names[source],
-                     !enabled ? "Desativado" : menuMaizoSourceAvailable(source) ? "Disponível" : "Aguardando");
+                     !enabled ? "Desativado" : menuMaizoSourceAvailable(source) ? "Disponível" :
+                                                                                  "Aguardando");
             options[n++] = (struct UIItem) {UI_BUTTON, 400 + source, 1, 1, -1, 0, 0, {.label = {labels[source], -1}}};
             options[n++].type = UI_BREAK;
         }
@@ -1352,7 +1361,9 @@ static int maizoCaptureInput(int keyboard, const char *target)
         maizoDrawBrand();
         fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2 - 45, ALIGN_CENTER, 560, 32, target, MAIZO_TEXT);
         fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2, ALIGN_CENTER, 560, 29,
-                        !ready ? "Conecte o dispositivo e pressione uma tecla." : !neutral ? "Solte todos os botões." : "Pressione o botão ou tecla desejada.", MAIZO_MUTED);
+                        !ready ? "Conecte o dispositivo e pressione uma tecla." : !neutral ? "Solte todos os botões." :
+                                                                                             "Pressione o botão ou tecla desejada.",
+                        MAIZO_MUTED);
         fntRenderString(gTheme->fonts[0], 320, gTheme->usedHeight / 2 + 42, ALIGN_CENTER, 560, 25, "START + SELECT cancela", MAIZO_MUTED);
         rmEndFrame();
     }
