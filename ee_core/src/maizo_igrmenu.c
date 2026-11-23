@@ -17,6 +17,7 @@
 #include "maizo_igrmenu.h"
 #include "maizo_igr_state.h"
 #include "maizo_igr_filter.h"
+#include "maizo_gs_runtime.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -147,10 +148,20 @@ static void mzPage(const maizo_igr_state_t *s)
         mzLine(45,11,s->filter_caps&2?4:5,
                s->filter_caps&2?(s->filter_mode==2?"SMOOTH        ON":"SMOOTH       OFF"):
                                 "SMOOTH    INDISP.");
-        mzLine(55,11,5,"AA1: CONTROLE DO JOGO");
-        mzLine(65,11,5,"TEXTURA: DO JOGO");
-        mzLine(75,11,4,"VOLTAR");
-        mzLine(105,8,5,"GS 2 CIRCUITOS / 480I");
+        mzLine(55,11,s->draw_caps&1?4:5,
+               !(s->draw_caps&1)?"AA1: INDISPONIVEL":
+               ((s->draw_modes&3)==1?"AA1: ON":
+                (s->draw_modes&3)==2?"AA1: OFF":"AA1: JOGO"));
+        mzLine(65,11,s->draw_caps&2?4:5,
+               !(s->draw_caps&2)?"BILINEAR: INDISP.":
+               (((s->draw_modes>>2)&3)==1?"BILINEAR: ON":
+                ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":"BILINEAR: JOGO"));
+        mzLine(75,11,s->draw_caps&4?4:5,
+               !(s->draw_caps&4)?"DITHER: INDISP.":
+               (((s->draw_modes>>4)&3)==1?"DITHER: ON":
+                ((s->draw_modes>>4)&3)==2?"DITHER: OFF":"DITHER: JOGO"));
+        mzLine(85,11,4,"VOLTAR");
+        mzLine(105,8,5,"FILTRO REQUER GAME HOOK");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG. MAIZO");
         mzLine(35,11,4,"VOLTAR");
@@ -436,6 +447,13 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
     }
     if(!mzFrame())return MAIZO_IGR_UNAVAILABLE;
     mzState.filter_caps=mzFilterCapabilities();
+    /* A DRAW switch is only actionable if a verified pre-DMA game
+     * adapter registered support. Stock commercial games do not. */
+    mzState.draw_caps=mzGsRuntimeCaps();
+    mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
+        (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2) |
+        (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4);
+    mzState.draw_changed=0;
     if(mzState.filter_mode!=(int)MaizoGsFilterMode)
         mzState.filter_mode=0; /* Another SetGsCrt cancelled the filter. */
     ctrl=*MZ_D_CTRL;
@@ -478,6 +496,17 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
             if(!mzFilterApply(desired))
                 mzState.filter_mode=(int)MaizoGsFilterMode;
             mzState.filter_caps=mzFilterCapabilities();
+        }
+        if(mzState.draw_changed){
+            unsigned int features=mzState.draw_changed;
+            if(features&MZ_DRAW_AA1)
+                mzGsRuntimeSetMode(MZ_DRAW_AA1,mzState.draw_modes&3u);
+            if(features&MZ_DRAW_BILINEAR)
+                mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,(mzState.draw_modes>>2)&3u);
+            if(features&MZ_DRAW_DITHER)
+                mzGsRuntimeSetMode(MZ_DRAW_DITHER,(mzState.draw_modes>>4)&3u);
+            mzState.draw_changed=0;
+            mzState.draw_caps=mzGsRuntimeCaps();
         }
         if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
         if(action==MZ_ACTION_EXIT){result=MAIZO_IGR_EXIT;break;}

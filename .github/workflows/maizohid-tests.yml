@@ -65,6 +65,12 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_gs_trusted_refs_test.c -o /tmp/maizo_gs_trusted_refs
           /tmp/maizo_gs_trusted_refs
+      - name: Validate MAIZO GS opt-in runtime and fail-closed menu controls
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            ee_core/src/maizo_gs_runtime.c tests/maizo_gs_runtime_test.c \
+            -o /tmp/maizo_gs_runtime
+          /tmp/maizo_gs_runtime
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract

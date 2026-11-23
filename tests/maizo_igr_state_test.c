@@ -30,6 +30,27 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==0);
     maizoIgrStep(&s,MZ_KEY_DOWN);s.filter_caps=1;
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==1);
+    /* Drawing filters are unavailable unless an adapter was registered. */
+    for(int i=0;i<2;i++)maizoIgrStep(&s,MZ_KEY_DOWN);
+    assert(s.selected==3);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.draw_modes==0 && s.draw_changed==0);
+    s.draw_caps=1|4; /* AA1 and dithering, NOT bilinear */
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert((s.draw_modes&3u)==1 && (s.draw_changed&1u));
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert((s.draw_modes&3u)==2);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert((s.draw_modes&3u)==0);
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(((s.draw_modes>>2)&3u)==0); /* No phantom bilinear toggle */
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(((s.draw_modes>>4)&3u)==1);
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    assert(s.selected==6);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_VIDEO);
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
-    puts("MAIZO IGR navigation + filters ON/OFF safety OK");return 0;
+    puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;
 }

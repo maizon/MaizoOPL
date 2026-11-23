@@ -47,7 +47,7 @@ endif
 # IGS and the overlay each need scarce protected EE-core RAM.
 # Keep IGS variants unmodified; use the overlay in the standard build.
 ifneq ($(IGS),1)
-EE_OBJS += maizo_igrmenu.o
+EE_OBJS += maizo_igrmenu.o maizo_gs_runtime.o
 EE_CFLAGS += -DMAIZO_IGR_MENU
 endif
 

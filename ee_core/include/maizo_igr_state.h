@@ -6,12 +6,14 @@ enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
        MZ_KEY_OK=0x4000, MZ_KEY_BACK=0x2000, MZ_KEY_START=0x0008 };
 typedef struct { int page, selected, confirm, field_fix; int width, height, x, y, changed;
-             int filter_mode, filter_caps, filter_changed; } maizo_igr_state_t;
+             int filter_mode, filter_caps, filter_changed;
+             unsigned int draw_caps, draw_modes, draw_changed; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
 {
     s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;s->field_fix=!!field_fix;
     s->width=s->height=s->x=s->y=0;s->changed=0;
     s->filter_mode=s->filter_caps=s->filter_changed=0;
+    s->draw_caps=s->draw_modes=s->draw_changed=0;
 }
 static int maizoIgrPageCount(int page)
 {
@@ -21,7 +23,7 @@ static int maizoIgrPageCount(int page)
     case MZ_PAGE_PADS: return 2;
     case MZ_PAGE_GAME: return 3;
     case MZ_PAGE_SYSTEM: return 4;
-    case MZ_PAGE_FILTERS: return 6;
+    case MZ_PAGE_FILTERS: return 7;
     default: return 1;
     }
 }
@@ -70,7 +72,17 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             target=(target==2)?0:2;
         }else if(s->selected==1){
             target=(target==1)?0:1;
-        }else if(s->selected==5){
+        }else if(s->selected>=3 && s->selected<=5){
+            unsigned int bit=1u<<(s->selected-3);
+            unsigned int shift=2u*(s->selected-3);
+            if(s->draw_caps&bit){
+                unsigned int old=(s->draw_modes>>shift)&3u;
+                unsigned int next=(old+1u)%3u; /* GAME -> ON -> OFF */
+                s->draw_modes=(s->draw_modes&~(3u<<shift))|(next<<shift);
+                s->draw_changed|=bit;
+            }
+            return MZ_ACTION_NONE;
+        }else if(s->selected==6){
             s->page=MZ_PAGE_VIDEO;s->selected=6;
             return MZ_ACTION_NONE;
         }
