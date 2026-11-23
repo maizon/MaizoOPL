@@ -76,6 +76,7 @@ int main(void)
         assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,16,&guard,0,0)
                ==MZ_GS_DMA_BAD_PACKET);
     assert(!mzGsRuntimeCaps());
+    assert(mzGsRuntimeFailures() == 3u); /* failure telemetry survives detach */
     assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,16,&guard,0,0)
            ==MZ_GS_DMA_SKIPPED);
     puts("MAIZO GS runtime: opt-in PATH1/PATH2/PATH3 policy and fallback PASS");

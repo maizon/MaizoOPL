@@ -113,8 +113,13 @@ static inline void mzGsRuntimeRecord(int result)
         mzRuntimeConsecutiveFailures = 0;
     } else if (result < 0) {
         mzRuntimeFailures++;
-        if (++mzRuntimeConsecutiveFailures >= 3u)
-            mzGsRuntimeReset();
+        if (++mzRuntimeConsecutiveFailures >= 3u) {
+            /* Fail closed but preserve counters for field diagnostics.
+             * A new game launch or explicit reset clears the counters. */
+            mzRuntimeCapabilities = 0;
+            mzRuntimeModes = 0;
+            mzRuntimeConsecutiveFailures = 0;
+        }
     }
 }
 

@@ -78,3 +78,47 @@ adaptadores cooperativos, e a variante de diagnóstico `EESIO_DEBUG=1`
 usa IGR original em vez do overlay. A build release e as demais
 variantes com IGR mantêm o menu MAIZO; não se expande a região protegida
 para cima de memória usada por módulos e jogos.
+
+## Novos adaptadores: VIF1 misto e cópia reversível
+
+`maizo_gs_vif1_mixed.h` aceita streams VIF1 *completos* contendo:
+- `DIRECT` e `DIRECTHL` (payloads GIF validados e transformados);
+- `STCYCL`, `OFFSET`, `BASE`, `ITOP`, `STMOD`,
+  `MSKPATH3`, `MARK`, `FLUSH*`, `MSCAL*`, `MSCNT`;
+- `STMASK`, `STROW`, `STCOL`, `MPG` e tipos conhecidos de `UNPACK`.
+
+Somente payloads GIF são alterados: **comandos e dados de VU1 ficam
+bit a bit idênticos**. O comprimento de UNPACK é calculado conforme
+`NUM` e o ciclo `CL/WL`; quando não existe STCYCL neste buffer, a
+origem é ambígua e o pacote é rejeitado. Comandos VIF que podem disparar
+interrupção/stall (bit I) ou códigos desconhecidos são recusados.
+
+A validação ocorre em duas passagens. Se um comando mais tarde
+estiver truncado ou incompatível, o fluxo original inteiro é
+preservado. Isto não equivale a interceptar jogos automaticamente:
+o renderer ainda precisa ser reconhecido e chamar o adaptador
+antes da transferência real, com buffers exclusivos e DMA ociosa.
+
+`maizo_gs_shadow.h` oferece `mzGsRuntimeStageShadow` para um
+adaptador cooperativo. Em vez de modificar comandos reutilizáveis
+do jogo, copia um buffer para scratch de propriedade do chamador,
+aplica filtros nele e devolve ao chamador o ponteiro que deverá enviar
+à DMA. Ao selecionar JOGO, o ponteiro passa a ser o **original**.
+Isso torna a alternância ON/OFF reversível para pacotes futuros,
+sem afirmar reversão de estados GS previamente enviados.
+Rejeita sobreposição entre origem e destino e não aceita REF/REFE,
+que necessitam de shadowing de todas as regiões referenciadas.
+
+A proteção após três pacotes inválidos agora preserva a contagem
+de falhas para diagnóstico, mas desativa os filtros.
+
+### Critérios para avaliar 80% com honestidade
+
+Os testes host e as builds garantem **contratos do código**, não
+percentual de jogos. A meta de 80% só pode ser medida a partir de uma
+amostra real de versões/regiões de jogos, anotando:
+(1) hook reconhecido, (2) filtros realmente alterando a imagem,
+(3) estabilidade em gameplay, (4) FPS comparado ao jogo original,
+(5) restauração do comportamento quando desligado.
+Até medir tais dados, nenhuma porcentagem global de funcionamento
+é defensável.
