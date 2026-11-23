@@ -1,24 +1,27 @@
 /* MAIZO In-Game PRO state model, fixed footprint, host-testable. */
 #ifndef MAIZO_IGR_STATE_H
 #define MAIZO_IGR_STATE_H
-enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM };
+enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS };
 enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
        MZ_KEY_OK=0x4000, MZ_KEY_BACK=0x2000, MZ_KEY_START=0x0008 };
-typedef struct { int page, selected, confirm, field_fix; int width, height, x, y, changed; } maizo_igr_state_t;
+typedef struct { int page, selected, confirm, field_fix; int width, height, x, y, changed;
+             int filter_mode, filter_caps, filter_changed; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
 {
     s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;s->field_fix=!!field_fix;
     s->width=s->height=s->x=s->y=0;s->changed=0;
+    s->filter_mode=s->filter_caps=s->filter_changed=0;
 }
 static int maizoIgrPageCount(int page)
 {
     switch(page) {
     case MZ_PAGE_MAIN: return 6;
-    case MZ_PAGE_VIDEO: return 8;
+    case MZ_PAGE_VIDEO: return 9;
     case MZ_PAGE_PADS: return 2;
     case MZ_PAGE_GAME: return 3;
     case MZ_PAGE_SYSTEM: return 4;
+    case MZ_PAGE_FILTERS: return 6;
     default: return 1;
     }
 }
@@ -57,8 +60,26 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
     if(s->page==MZ_PAGE_VIDEO) {
         if(s->selected==4){s->width=s->width==0?6:0;s->changed=1;}
         else if(s->selected==5){s->field_fix^=1;s->changed=1;}
-        else if(s->selected==6){s->width=s->height=s->x=s->y=0;s->changed=1;}
-        else if(s->selected==7){s->page=MZ_PAGE_MAIN;s->selected=1;}
+        else if(s->selected==6){s->page=MZ_PAGE_FILTERS;s->selected=0;}
+        else if(s->selected==7){s->width=s->height=s->x=s->y=0;s->changed=1;}
+        else if(s->selected==8){s->page=MZ_PAGE_MAIN;s->selected=1;}
+    }else if(s->page==MZ_PAGE_FILTERS){
+        int target=s->filter_mode;
+        if(s->selected==0 || s->selected==2){
+            /* Deflicker and Smooth are the SAME low-cost GS scanout filter. */
+            target=(target==2)?0:2;
+        }else if(s->selected==1){
+            target=(target==1)?0:1;
+        }else if(s->selected==5){
+            s->page=MZ_PAGE_VIDEO;s->selected=6;
+            return MZ_ACTION_NONE;
+        }
+        /* Never offer fake effects in unsupported video modes. */
+        if(target!=s->filter_mode &&
+           (target==0 || (s->filter_caps & target)==target)){
+            s->filter_mode=target;
+            s->filter_changed=1;
+        }
     }else if(s->page==MZ_PAGE_PADS){
         if(s->selected==1){s->page=MZ_PAGE_MAIN;s->selected=2;}
     }else if(s->page==MZ_PAGE_GAME){

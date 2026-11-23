@@ -57,3 +57,49 @@ IGS screenshot code together on all variants. Builds with `IGS=1` retain
 IGS and disable the overlay hook entirely; standard `IGS=0` builds
 include MAIZO In-Game PRO. This follows the principle of never enlarging
 the low-memory region or placing permanent overlay code in game RAM.
+
+## Filtros de hardware (MAIZO GS Filter, opt-in)
+
+**Imagem e vídeo → Filtros gráficos** oferece controles ON/OFF. Os filtros
+são **mutuamente exclusivos** e cada opção só é ativada se a leitura dos
+registradores originais do GS confirmar compatibilidade:
+
+- **Deflicker ON/OFF**: é exatamente o modo Smooth. Quando o jogo usa
+  480i/576i em **interlace FRAME** com **um único read circuit**, passa a
+  usar os dois circuitos sobre o MESMO framebuffer, com deslocamento de
+  uma linha e mistura de alpha fixa **0x70**. É filtro vertical de duas
+  amostras, não shader nem pós-processamento via CPU.
+- **Smooth ON/OFF**: alias amigável para esse Deflicker de hardware.
+  Não processa texturas, não remove automaticamente todos os serrilhados.
+- **Sharp ON/OFF**: só fica habilitado quando o jogo já usa uma
+  composição de dois circuitos no mesmo framebuffer (deslocamento
+  vertical de até uma linha). Nesses casos, usa somente o circuito
+  **sem deslocamento**. Não inventa nitidez/resolução em jogos que já
+  usam um circuito único.
+- **Original**: ambos OFF. Restaura os registros PMODE, DISPFB1/2 e
+  DISPLAY1/2 como observados pelo GSM do jogo.
+- AA1, filtragem bilinear e dithering são indicados como **controlados
+  pelo jogo**, e NÃO possuem botões fictícios ON/OFF. Esses efeitos são
+  registrados no caminho de desenho (PRIM/TEX1/DTHE) e não equivalem
+  aos ajustes do circuito de saída da imagem.
+
+### Proteções
+
+1. Modo padrão OFF, mesmo com o menu In-Game ativado.
+2. Não aplica Deflicker em modos progressivos nem em jogos com duas
+   imagens independentes nos circuitos de saída.
+3. Durante trocas de framebuffer, o hook GSM atualiza o outro circuito,
+   evitando misturar frames distintos (ghosting).
+4. Em alterações inesperadas do PMODE ou de SetGsCrt, cancela o filtro.
+5. Restaura a imagem original ao desligar.
+6. Sem carregamento dinâmico, textures, threading adicional ou CPU
+   trabalhando por frame: aproveita os writes de GS já interceptados
+   pelo próprio GSM.
+7. Recurso não aparece em compilações com IGS por falta de memória
+   protegida no EE, sem afetar a captura de tela existente.
+8. Compatibilidade universal não é possível: se o jogo escrever
+   diretamente por uma via que o GSM não intercepta, os filtros não
+   estarão cobertos. Testes em consoles reais ainda são necessários.
+
+**Créditos:** PS2SDK `graph_mode.c` (filtro por dois read circuits),
+RiptOPL/RIPPS2 (overlay com GS), OPL GSM original.
