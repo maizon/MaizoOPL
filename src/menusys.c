@@ -24,6 +24,7 @@
 #include "include/ethsupport.h"
 #include "include/appsupport.h"
 #include "include/maizo_filemgr.h"
+#include "include/maizo_store.h"
 #include "include/cheatman.h"
 
 enum MENU_IDs {
@@ -62,6 +63,7 @@ enum MENU_IDs {
     MENU_RESET_APPEARANCE,
     MENU_SMB_STATUS,
     MENU_PAD_HELP,
+    MENU_HOMEBREW_STORE,
     MENU_PROMPT_STYLE
 };
 
@@ -584,6 +586,7 @@ static int settingsItemCategory(int id)
         case MENU_NET_UPDATE:
         case MENU_START_NBD:
         case MENU_SMB_STATUS:
+        case MENU_HOMEBREW_STORE:
             return 6;
         case MENU_DIAG_SYSTEM:
             return 8;
@@ -612,6 +615,7 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Restaurar aparência", MENU_RESET_APPEARANCE, -1);
         submenuAppendItem(&mainMenu, -1, "Assistente de configuração", MENU_QUICK_SETUP, -1);
         submenuAppendItem(&mainMenu, -1, "Estado da conexão SMB", MENU_SMB_STATUS, -1);
+        submenuAppendItem(&mainMenu, -1, "MAIZO Store - homebrews", MENU_HOMEBREW_STORE, -1);
         submenuAppendItem(&mainMenu, -1, "Informacoes tecnicas", MENU_DIAG_SYSTEM, -1);
         submenuAppendItem(&mainMenu, -1, "Resolução e ajuste de tela", MENU_VIDEO_SETTINGS, -1);
         submenuAppendItem(&mainMenu, -1, "Fontes de jogos e tela inicial", MENU_STORAGE_SETTINGS, -1);
@@ -1228,6 +1232,7 @@ static int maizoSettingsActionIcon(int id)
         case MENU_NET_CONFIG:
         case MENU_NET_UPDATE:
         case MENU_START_NBD:
+        case MENU_HOMEBREW_STORE:
             return MAIZO_ICON_NETWORK;
         case MENU_GFX_SETTINGS:
         case MENU_ANIMATIONS:
@@ -1765,6 +1770,9 @@ void menuHandleInputMenu()
         } else if (id == MENU_FILE_MANAGER) {
             if (menuCheckParentalLock() == 0)
                 maizoFileManagerOpen();
+        } else if (id == MENU_HOMEBREW_STORE) {
+            if (menuCheckParentalLock() == 0)
+                maizoStoreOpen();
         } else if (id == MENU_PS1_SETTINGS) {
             if (menuCheckParentalLock() == 0)
                 guiShowPS1Config();
@@ -1953,6 +1961,12 @@ static void dashboardShowContext(void)
 
 static void dashboardHandleInput(void)
 {
+    /* Direct shortcut in the Homebrew/Apps dashboard tab. */
+    if (dashboard.tab == MAIZO_APP && getKeyOn(KEY_L3)) {
+        if (menuCheckParentalLock() == 0)
+            maizoStoreOpen();
+        return;
+    }
     if (getKeyOn(KEY_R3)) {
         char query[32];
         snprintf(query, sizeof(query), "%s", dashboard.query);
