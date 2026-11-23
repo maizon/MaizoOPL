@@ -1,8 +1,7 @@
-/* Generated from 2026-11-23 verified GitHub releases; no remote code trust.
- * Review all additions and source licenses before updating this header. */
+/* Curated, build-time SHA-256 allowlist of verified GitHub PS2 ELF releases. */
 #ifndef MAIZO_STORE_CATALOG_H
 #define MAIZO_STORE_CATALOG_H
-#define STORE_ITEMS 59
+#define STORE_ITEMS 61
 static const store_app_t storeApps[STORE_ITEMS] = {
     {"wle-isr-ds34-mmce-xfrom", "wLaunchELF ISR DS34-MMCE-XFROM", "Ferramentas", "Gerenciador de arquivos: BOOT-DS34-MMCE-XFROM.ELF", "56bd1978b76c51d263fa096176e411b47405cebc399aadffd871bb4923650d8d", 409924u, "El_Isra / wLaunchELF Team", "AFL-2.0 (origem)"},
     {"wle-isr-ds34-mmce", "wLaunchELF ISR DS34-MMCE", "Ferramentas", "Gerenciador de arquivos: BOOT-DS34-MMCE.ELF", "b6d66a57b15b884836e396bfdf2168428f39f6add1d440f3af2acddf2ed3b06e", 387092u, "El_Isra / wLaunchELF Team", "AFL-2.0 (origem)"},
@@ -62,6 +61,8 @@ static const store_app_t storeApps[STORE_ITEMS] = {
     {"quake-ps2", "Quake PS2", "Jogos", "Engine open-source. REQUER arquivos PAK legais", "2cb9ef6b5d8e3d56a1e4ca5a5027d8a4f6cc8de12dc60bc12b5e5d900689e9b4", 1411968u, "glampert / id Software Quake GPL engine", "GPL-2.0"},
     {"quake2-ps2", "Quake II PS2", "Jogos", "Engine GPL. REQUER arquivos PAK legais", "5630d47dd1ec0cdec223302e83b62860e1f572f5440336f207f93640847fe32b", 1887232u, "glampert / id Software Quake II GPL engine", "GPL-2.0"},
     {"nhddl", "NHDDL", "Utilitarios", "Launcher Neutrino; REQUER Neutrino instalado", "64408e7089918d4d0c7ce6366ca2dc82357b446216b95215d54609284668451d", 367700u, "pcm720 / Neutrino developers", "AFL-3.0"},
-    {"neutrino", "Neutrino", "Utilitarios", "Game loader EE; REQUER componentes e configuracao", "b6a3e13e00ebc4257ad0c97a9106273f8c4cfafa42a63edc25d491cca596b626", 75252u, "ps2homebrew / Neutrino developers", "AFL-3.0"}
+    {"neutrino", "Neutrino", "Utilitarios", "Game loader EE; REQUER componentes e configuracao", "b6a3e13e00ebc4257ad0c97a9106273f8c4cfafa42a63edc25d491cca596b626", 75252u, "ps2homebrew / Neutrino developers", "AFL-3.0"},
+    {"wlaunchelf-ds4", "wLaunchELF DS34 (compat)", "Ferramentas", "Compatibilidade com as primeiras versoes da MAIZO Store", "4ed8eb48b735411356012946082d2d61d1f72a1aad613cb6d1f5e65953187df2", 366868u, "El_Isra / wLaunchELF Team", "AFL-2.0 (origem)"},
+    {"wlaunchelf-exfat", "wLaunchELF exFAT (compat)", "Ferramentas", "Compatibilidade com as primeiras versoes da MAIZO Store", "2254d5684904d42088421fc6ef6cf46299faa8c85e5764a3789de7108180a6d7", 356052u, "El_Isra / wLaunchELF Team", "AFL-2.0 (origem)"}
 };
 #endif
