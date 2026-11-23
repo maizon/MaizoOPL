@@ -67,6 +67,12 @@ typedef struct {
     uint8_t prim_kind;
     uint8_t active_ctx;
     uint8_t active_ctx_known;
+    /* PRMODECONT.AC selects PRIM (1) or PRMODE (0) for GS attributes. */
+    uint8_t prmode_cont_known;
+    uint8_t prmode_cont_ac;
+    uint8_t prim_ctx;
+    uint8_t prmode_ctx;
+    uint8_t prmode_ctx_known;
 } mz_gs_gif_state_t;
 
 static inline uint64_t mzGifRead64(const uint8_t *ptr)
@@ -171,6 +177,7 @@ enum {
     MZ_GS_PRIM = 0x00,
     MZ_GS_TEX1_1 = 0x14,
     MZ_GS_TEX1_2 = 0x15,
+    MZ_GS_PRMODECONT = 0x1a,
     MZ_GS_PRMODE = 0x1b,
     MZ_GS_SCANMSK = 0x22,
     MZ_GS_DIMX = 0x44,
@@ -190,13 +197,31 @@ static inline uint64_t mzGifAdValue(uint64_t src,
     case MZ_GS_PRIM:
         state->prim_known = 1;
         state->prim_kind = (uint8_t)(src & 7ULL);
-        state->active_ctx = (uint8_t)((src >> 9) & 1ULL);
-        state->active_ctx_known = 1;
+        state->prim_ctx = (uint8_t)((src >> 9) & 1ULL);
+        if (!state->prmode_cont_known || state->prmode_cont_ac) {
+            state->active_ctx = state->prim_ctx;
+            state->active_ctx_known = 1;
+        }
         return mzGifPrimitive(src, policy->aa1, stats);
     case MZ_GS_PRMODE:
-        state->active_ctx = (uint8_t)((src >> 9) & 1ULL);
-        state->active_ctx_known = 1;
+        state->prmode_ctx = (uint8_t)((src >> 9) & 1ULL);
+        state->prmode_ctx_known = 1;
+        if (!state->prmode_cont_known || !state->prmode_cont_ac) {
+            state->active_ctx = state->prmode_ctx;
+            state->active_ctx_known = 1;
+        }
         return mzGifPrmode(src, policy->aa1, state, stats);
+    case MZ_GS_PRMODECONT:
+        state->prmode_cont_known = 1;
+        state->prmode_cont_ac = (uint8_t)(src & 1ULL);
+        if (state->prmode_cont_ac) {
+            state->active_ctx = state->prim_ctx;
+            state->active_ctx_known = state->prim_known;
+        } else {
+            state->active_ctx = state->prmode_ctx;
+            state->active_ctx_known = state->prmode_ctx_known;
+        }
+        return src;
     case MZ_GS_TEX1_1:
     case MZ_GS_TEX1_2:
         return mzGifTex1(src, policy->bilinear, stats);
@@ -318,8 +343,11 @@ static inline int mzGifApplyFilters(void *packet,
                 uint64_t orig_prim = (tag >> 47) & 0x7ffULL;
                 current.prim_kind = (uint8_t)(orig_prim & 7ULL);
                 current.prim_known = 1;
-                current.active_ctx = (uint8_t)((orig_prim >> 9) & 1ULL);
-                current.active_ctx_known = 1;
+                current.prim_ctx = (uint8_t)((orig_prim >> 9) & 1ULL);
+                if (!current.prmode_cont_known || current.prmode_cont_ac) {
+                    current.active_ctx = current.prim_ctx;
+                    current.active_ctx_known = 1;
+                }
                 if (pass == 1) {
                     uint64_t new_prim = mzGifPrimitive(orig_prim,
                                                         policy->aa1, &tally);
