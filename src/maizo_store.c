@@ -27,29 +27,21 @@
 #include <arpa/inet.h>
 #include <strings.h>
 
-#define STORE_ITEMS 4
-#define STORE_RX 4096
-#define STORE_MAX_HEADER 1024
-#define STORE_MAX_APP (8 * 1024 * 1024)
-
+#define STORE_RX 16384
+#define STORE_MAX_HEADER 4096
+#define STORE_MAX_APP (12 * 1024 * 1024)
 typedef struct {
     const char *id, *title, *category, *summary, *hash;
     unsigned int bytes;
+    const char *credits, *license;
 } store_app_t;
-
-/* Verified against GitHub Releases metadata on 2026-11-23. Never use a
- * digest received in an unencrypted catalogue as the install authority. */
-static const store_app_t storeApps[STORE_ITEMS] = {
-    {"wlaunchelf", "wLaunchELF", "Ferramentas", "Gerenciador de arquivos", "beb688160ab29ba441f5b4f9a20fb151a4abb44ee4a285a7b1a702b6542c2c66", 497908},
-    {"wlaunchelf-ds4", "wLaunchELF DS34", "Ferramentas", "Suporte DualShock 3 e 4", "4ed8eb48b735411356012946082d2d61d1f72a1aad613cb6d1f5e65953187df2", 366868},
-    {"wlaunchelf-exfat", "wLaunchELF exFAT", "Ferramentas", "Gerenciador com exFAT", "2254d5684904d42088421fc6ef6cf46299faa8c85e5764a3789de7108180a6d7", 356052},
-    {"fceumm", "FCEUmm PS2", "Emuladores", "Emulador NES para PS2", "aeebec25228ed2fe2261f22e1ab692d4d518f2dbca84e81d980a4a1bc53f3a3e", 1384060}
-};
+#include "include/maizo_store_catalog.h"
 
 static char storeHost[64];
 static int storePort;
-static unsigned int storeOnline;
-static unsigned int storeInstalledMask;
+static unsigned char storeOnline[STORE_ITEMS];
+static unsigned char storeInstalledMask[STORE_ITEMS];
+static char storeCatalogText[STORE_RX];
 static char storeStatus[128] = "Configure um host HTTP/TCP para acessar a loja.";
 static unsigned int storeProgressBytes, storeProgressTotal;
 
@@ -109,7 +101,7 @@ static void storeSetServer(void)
     configSetStr(configGetByType(CONFIG_OPL), "maizo_store_host", storeHost);
     configSetInt(configGetByType(CONFIG_OPL), "maizo_store_port", storePort);
     saveConfig(CONFIG_OPL, 0);
-    storeOnline = 0;
+    memset(storeOnline, 0, sizeof(storeOnline));
 }
 
 /* HTTPS 1.2 from the PS2; external host is public GitHub raw/CDN.
@@ -217,10 +209,10 @@ static int storeHttpText(const char *uri, char output[STORE_RX])
  * release size and hash pinned locally. No remote path is ever trusted. */
 static void storeRefresh(void)
 {
-    char text[STORE_RX], *line;
-    unsigned int mask = 0;
+    char *line;
+    int available = 0;
     int ret;
-    storeOnline = 0;
+    memset(storeOnline, 0, sizeof(storeOnline));
     if (!storeHostValid(storeHost)) {
         snprintf(storeStatus, sizeof(storeStatus), "Configure servidor: TRIANGULO (host e porta).");
         return;
@@ -231,11 +223,17 @@ static void storeRefresh(void)
         snprintf(storeStatus, sizeof(storeStatus), "Ethernet indisponivel (erro %d).", ret);
         return;
     }
-    if (storeHttpText("/v1/catalog", text) < 0 || strncmp(text, "MAIZOSTORE1\n", 12)) {
+    int received = storeHttpText("/v1/catalog", storeCatalogText);
+    if ((received < 0 || strncmp(storeCatalogText, "MAIZOSTORE1\n", 12)) &&
+        !strcmp(storeHost, "raw.githubusercontent.com") && storePort == 443) {
+        snprintf(storeHost, sizeof(storeHost), "cdn.jsdelivr.net");
+        received = storeHttpText("/v1/catalog", storeCatalogText);
+    }
+    if (received < 0 || strncmp(storeCatalogText, "MAIZOSTORE1\n", 12)) {
         snprintf(storeStatus, sizeof(storeStatus), "HTTPS indisponivel ou catalogo invalido.");
         return;
     }
-    line = strchr(text, '\n');
+    line = strchr(storeCatalogText, '\n');
     if (!line)
         return;
     line++;
@@ -257,13 +255,13 @@ static void storeRefresh(void)
                 if (!strcmp(fields[0], storeApps[i].id) &&
                     strtoul(fields[5], NULL, 10) == storeApps[i].bytes &&
                     !strcmp(fields[6], storeApps[i].hash))
-                    mask |= 1u << i;
+                    storeOnline[i] = 1;
         }
         line = end + 1;
     }
-    storeOnline = mask;
-    snprintf(storeStatus, sizeof(storeStatus), "%d homebrews verificados - GitHub Releases",
-             !!(mask & 1) + !!(mask & 2) + !!(mask & 4) + !!(mask & 8));
+    for (int i = 0; i < STORE_ITEMS; i++)
+        available += !!storeOnline[i];
+    snprintf(storeStatus, sizeof(storeStatus), "%d de %d ELFs online / HTTPS validado", available, STORE_ITEMS);
 }
 
 static int storeInstalled(int index)
@@ -276,10 +274,10 @@ static int storeInstalled(int index)
 
 static void storeScanInstalled(void)
 {
-    storeInstalledMask = 0;
+    memset(storeInstalledMask, 0, sizeof(storeInstalledMask));
     for (int i = 0; i < STORE_ITEMS; i++)
         if (storeInstalled(i))
-            storeInstalledMask |= 1u << i;
+            storeInstalledMask[i] = 1;
 }
 
 static void storeDraw(int selected, int downloading)
@@ -303,20 +301,34 @@ static void storeDraw(int selected, int downloading)
         if (storeProgressTotal)
             rmDrawRect(53, 245, (u64)storeProgressBytes * 520 / storeProgressTotal, 10, MAIZO_ACCENT);
     } else {
-        for (int i = 0; i < STORE_ITEMS; i++) {
+        int visible = (height - 205) / 49;
+        if (visible < 2) visible = 2;
+        if (visible > 7) visible = 7;
+        int first = (selected / visible) * visible;
+        int last = first + visible;
+        if (last > STORE_ITEMS) last = STORE_ITEMS;
+        for (int i = first; i < last; i++) {
             const store_app_t *app = &storeApps[i];
             char status[48];
-            int y = 150 + i * 57;
+            int y = 151 + (i - first) * 49;
             if (i == selected)
                 rmDrawRect(36, y, 566, 53, MAIZO_CARD);
-            snprintf(status, sizeof(status), "%s", (storeInstalledMask & (1u << i)) ? "INSTALADO" :
-                     storeOnline & (1u << i) ? "DISPONIVEL" : "OFFLINE");
+            snprintf(status, sizeof(status), "%s", storeInstalledMask[i] ? "INSTALADO" :
+                     storeOnline[i] ? "DISPONIVEL" : "OFFLINE");
             fntRenderString(gTheme->fonts[0], 46, y + 4, ALIGN_NONE, 380, 24,
                             app->title, i == selected ? MAIZO_BRIGHT : MAIZO_TEXT);
             fntRenderString(gTheme->fonts[0], 46, y + 27, ALIGN_NONE, 410, 19,
                             app->summary, MAIZO_MUTED);
             fntRenderString(gTheme->fonts[0], 473, y + 12, ALIGN_NONE, 113, 20,
-                            status, (storeOnline & (1u << i)) ? MAIZO_SUCCESS : MAIZO_MUTED);
+                            status, storeOnline[i] ? MAIZO_SUCCESS : MAIZO_MUTED);
+        }
+        {
+            char credit[180];
+            const store_app_t *app = &storeApps[selected];
+            snprintf(credit, sizeof(credit), "%d/%d  Autor: %.75s  |  %.55s",
+                     selected + 1, STORE_ITEMS, app->credits, app->license);
+            fntRenderString(gTheme->fonts[0], 42, height - 70, ALIGN_NONE, 548, 19,
+                            credit, MAIZO_MUTED);
         }
     }
     fntRenderString(gTheme->fonts[0], 320, height - 37, ALIGN_CENTER, 618, 26,
@@ -338,7 +350,7 @@ static int storeDownload(int index)
     int firstBytes = 0;
     unsigned char signature[4];
     iox_stat_t st;
-    if (!(storeOnline & (1u << index)) || !gEnableWrite) {
+    if (!storeOnline[index] || !gEnableWrite) {
         guiMsgBox("Download indisponivel ou gravacao desativada.", 0, NULL);
         return 0;
     }
@@ -468,7 +480,7 @@ void maizoStoreOpen(void)
     int armed = 0;
     storeReadConfig();
     storeScanInstalled();
-    storeOnline = 0;
+    memset(storeOnline, 0, sizeof(storeOnline));
     if (storeHostValid(storeHost))
         storeRefresh();
     else
@@ -492,8 +504,8 @@ void maizoStoreOpen(void)
             ioBlockOps(0);
             storeRefresh();
             ioBlockOps(1);
-        } else if (getKeyOn(gSelectButton) && (storeOnline & (1u << selected))) {
-            if (guiMsgBox((storeInstalledMask & (1u << selected)) ?
+        } else if (getKeyOn(gSelectButton) && storeOnline[selected]) {
+            if (guiMsgBox(storeInstalledMask[selected] ?
                               "Atualizar este homebrew? O arquivo antigo sera preservado durante a troca." :
                               "Instalar este homebrew gratuito em mass0:/APPS?",
                           1, NULL))
