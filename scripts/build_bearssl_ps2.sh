@@ -7,7 +7,7 @@ LIB="$ROOT/libbearssl.a"
 [ ! -f "$LIB" ] || exit 0
 mkdir -p thirdparty
 if [ ! -f "$ROOT/inc/bearssl.h" ]; then
-    curl -fsSL --retry 3 https://bearssl.org/bearssl-0.6.tar.gz -o thirdparty/bearssl-0.6.tar.gz
+    python3 -c 'from urllib.request import urlopen; from pathlib import Path; Path("thirdparty/bearssl-0.6.tar.gz").write_bytes(urlopen("https://bearssl.org/bearssl-0.6.tar.gz", timeout=60).read())'
     echo '6705bba1714961b41a728dfc5debbe348d2966c117649392f8c8139efc83ff14  thirdparty/bearssl-0.6.tar.gz' | sha256sum -c -
     tar -xzf thirdparty/bearssl-0.6.tar.gz -C thirdparty
 fi
