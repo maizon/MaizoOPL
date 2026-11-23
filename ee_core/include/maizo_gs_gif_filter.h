@@ -161,15 +161,16 @@ static inline uint64_t mzGifPrmode(uint64_t src,
                                   mz_gs_gif_stats_t *stats)
 {
     uint64_t result = src;
+    (void)state;
+    /* PRMODE may be configured BEFORE the first PRIM, especially in
+     * engines that set a persistent draw environment and then switch
+     * PRMODECONT.AC=0. It has no primitive-kind bits. AA1=1 is defined
+     * on PRMODE independently of the current primitive, and the GS
+     * ignores it for points/sprites. Do NOT invent/change ABE. */
     if (mode == MZ_GS_FORCE_OFF)
         result &= ~(1ULL << 7);
-    else if (mode == MZ_GS_FORCE_ON) {
-        if (state->prim_known && state->prim_kind >= 1 &&
-            state->prim_kind <= 5)
-            result |= 1ULL << 7;
-        else
-            stats->unsupported_primitives++;
-    }
+    else if (mode == MZ_GS_FORCE_ON)
+        result |= 1ULL << 7;
     if (result != src)
         stats->primitive_changes++;
     return result;

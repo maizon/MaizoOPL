@@ -51,6 +51,20 @@ int main(void)
     assert(mzGifRead64(buf+16)==(3ULL|128ULL));
     one(buf,MZ_GS_PRMODE,0ULL,&p,&s,&st);
     assert(mzGifRead64(buf+16)==128ULL);
+    /* PRMODE is commonly uploaded before any primitive. The AA1 mode
+     * must already be present when the game later chooses PRMODECONT=0. */
+    init(&p,&s,&st);
+    p.aa1=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_PRMODE,0ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(1ULL<<7));
+    assert(st.primitive_changes==1 && !st.unsupported_primitives);
+    one(buf,MZ_GS_PRMODECONT,0,&p,&s,&st);
+    one(buf,MZ_GS_PRIM,3ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(3ULL|128ULL));
+    one(buf,MZ_GS_PRMODE,1ULL<<9,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==((1ULL<<9)|(1ULL<<7)));
+    assert(!(mzGifRead64(buf+16)&(1ULL<<6))); /* ABE preserved */
+
     mzGifWrite64(buf,tag(0,1,1,(unsigned int)(6ULL|(1ULL<<6)),0,1));
     assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
     assert(st.unsupported_primitives==1); /* sprite may not use AA1 */

@@ -175,3 +175,9 @@ adaptadores cooperativos. Contagem de zero não prova que um PATH não foi
 usado; e contagem positiva do teste host **não** prova efeito em jogos
 comerciais. Sem adaptador real registrado em um jogo comercial os filtros
 continuam indisponíveis, mesmo depois desta correção.
+
+Outra correção de ordem de estado GS: quando um jogo configura `PRMODE`
+antes do primeiro `PRIM` (e depois usa `PRMODECONT.AC=0`), forçar AA1
+não precisa conhecer antecipadamente o tipo de primitiva. O bit AA1
+em PRMODE é aplicado sem alterar ABE; o GS ignora AA1 para pontos/sprites.
+Foram adicionados testes dessa ordem de inicialização de renderizadores.
