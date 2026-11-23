@@ -40,6 +40,8 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iinclude \
             tests/maizo_store_sha256_test.c -o /tmp/maizo_store_sha_test
           /tmp/maizo_store_sha_test
+      - name: Verify verified-TLS MAIZO Store contracts
+        run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract
         run: python3 tests/supreme_contract_test.py
       - name: Test dashboard library and hotplug selection
