@@ -22,7 +22,7 @@
 
 #define PW 160
 #define PH 126
-#define MAX_LINES 18
+#define MAX_LINES 12
 #define CHARS 25
 #define MZ_D1_CHCR    ((vu32 *)0x10009000)
 #define MZ_D1_MADR    ((vu32 *)0x10009010)
@@ -75,12 +75,6 @@ static const u8 mzColors[6][3] = {
     {252, 182, 101}   /* warning */
 };
 
-static int mzStrLen(const char *s)
-{
-    int n=0;
-    while(s[n])n++;
-    return n;
-}
 static void mzLine(int y, int x, int color, const char *s)
 {
     mz_line_t *l;
