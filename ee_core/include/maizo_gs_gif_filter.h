@@ -62,6 +62,11 @@ typedef struct {
     uint8_t framebuffer_psm[2];
     uint8_t framebuffer_known[2];
     uint8_t dither_matrix_known;
+    /* Track the selected GS rendering context for 16-bit dithering. */
+    uint8_t prim_known;
+    uint8_t prim_kind;
+    uint8_t active_ctx;
+    uint8_t active_ctx_known;
 } mz_gs_gif_state_t;
 
 static inline uint64_t mzGifRead64(const uint8_t *ptr)
@@ -140,6 +145,27 @@ static inline uint64_t mzGifTex1(uint64_t src,
     return result;
 }
 
+/* PRMODE has no PRIM primitive kind in bits 0..2: do not treat it as
+   PRIM, otherwise AA1 silently fails on every PRMODE write. */
+static inline uint64_t mzGifPrmode(uint64_t src,
+                                  unsigned int mode,
+                                  const mz_gs_gif_state_t *state,
+                                  mz_gs_gif_stats_t *stats)
+{
+    uint64_t result = src;
+    if (mode == MZ_GS_FORCE_OFF)
+        result &= ~(1ULL << 7);
+    else if (mode == MZ_GS_FORCE_ON) {
+        if (state->prim_known && state->prim_kind >= 1 &&
+            state->prim_kind <= 5 && (src & (1ULL << 6)))
+            result |= 1ULL << 7;
+        else
+            stats->unsupported_primitives++;
+    }
+    if (result != src)
+        stats->primitive_changes++;
+    return result;
+}
 /* Fully packed GIF A+D register IDs. */
 enum {
     MZ_GS_PRIM = 0x00,
@@ -162,8 +188,15 @@ static inline uint64_t mzGifAdValue(uint64_t src,
     unsigned int ctx;
     switch (register_id) {
     case MZ_GS_PRIM:
-    case MZ_GS_PRMODE:
+        state->prim_known = 1;
+        state->prim_kind = (uint8_t)(src & 7ULL);
+        state->active_ctx = (uint8_t)((src >> 9) & 1ULL);
+        state->active_ctx_known = 1;
         return mzGifPrimitive(src, policy->aa1, stats);
+    case MZ_GS_PRMODE:
+        state->active_ctx = (uint8_t)((src >> 9) & 1ULL);
+        state->active_ctx_known = 1;
+        return mzGifPrmode(src, policy->aa1, state, stats);
     case MZ_GS_TEX1_1:
     case MZ_GS_TEX1_2:
         return mzGifTex1(src, policy->bilinear, stats);
@@ -184,13 +217,11 @@ static inline uint64_t mzGifAdValue(uint64_t src,
             return value;
         }
         if (policy->dither == MZ_GS_FORCE_ON) {
-            int depth_16 =
-                (state->framebuffer_known[0] &&
-                 (state->framebuffer_psm[0] == 2 ||
-                  state->framebuffer_psm[0] == 10)) ||
-                (state->framebuffer_known[1] &&
-                 (state->framebuffer_psm[1] == 2 ||
-                  state->framebuffer_psm[1] == 10));
+            unsigned int active = state->active_ctx;
+            int depth_16 = state->active_ctx_known &&
+                state->framebuffer_known[active] &&
+                (state->framebuffer_psm[active] == 2 ||
+                 state->framebuffer_psm[active] == 10);
             /* Dithering needs a known 16-bit framebuffer AND an actual
                DIMX matrix supplied by the game. */
             if (!depth_16 || !state->dither_matrix_known) {
@@ -237,10 +268,8 @@ static inline int mzGifApplyFilters(void *packet,
                                     mz_gs_gif_stats_t *stats)
 {
     uint8_t *buf = (uint8_t *)packet;
-    size_t pos = 0;
     int pass;
     mz_gs_gif_state_t snapshot;
-    mz_gs_gif_stats_t numbers;
 
     if (!packet || !policy || !state || !stats || !packet_size ||
         (packet_size & 15u) || packet_size > (1u << 20))
@@ -252,12 +281,12 @@ static inline int mzGifApplyFilters(void *packet,
         return -2;
 
     snapshot = *state;
-    memset(&numbers, 0, sizeof(numbers));
 
     for (pass = 0; pass < 2; pass++) {
         mz_gs_gif_state_t current = snapshot;
         mz_gs_gif_stats_t tally;
         size_t at = 0;
+        int saw_end = 0;
         memset(&tally, 0, sizeof(tally));
 
         while (at + 16 <= packet_size) {
@@ -269,6 +298,8 @@ static inline int mzGifApplyFilters(void *packet,
             size_t entries, payload;
             size_t i;
             int end = (int)((tag >> 15) & 1ULL);
+            if (kind == 3)  /* FLG=3 is reserved: never guess its size. */
+                return -1;
             if (nreg == 0)
                 nreg = 16;
             entries = loops * nreg;
@@ -282,15 +313,21 @@ static inline int mzGifApplyFilters(void *packet,
             if (payload > packet_size - at - 16u)
                 return -1;
 
-            if (pass == 1 && (tag & (1ULL << 46))) {
-                /* GIFtag's embedded PRIM is used only if PRE is set. */
+            if (kind == 0 && (tag & (1ULL << 46))) {
+                /* Embedded PRIM is meaningful for PACKED mode only. */
                 uint64_t orig_prim = (tag >> 47) & 0x7ffULL;
-                uint64_t new_prim = mzGifPrimitive(orig_prim,
-                                                    policy->aa1, &tally);
-                if (new_prim != orig_prim) {
-                    tag &= ~(0x7ffULL << 47);
-                    tag |= new_prim << 47;
-                    mzGifWrite64(buf + at, tag);
+                current.prim_kind = (uint8_t)(orig_prim & 7ULL);
+                current.prim_known = 1;
+                current.active_ctx = (uint8_t)((orig_prim >> 9) & 1ULL);
+                current.active_ctx_known = 1;
+                if (pass == 1) {
+                    uint64_t new_prim = mzGifPrimitive(orig_prim,
+                                                        policy->aa1, &tally);
+                    if (new_prim != orig_prim) {
+                        tag &= ~(0x7ffULL << 47);
+                        tag |= new_prim << 47;
+                        mzGifWrite64(buf + at, tag);
+                    }
                 }
             }
             at += 16u;
@@ -313,9 +350,9 @@ static inline int mzGifApplyFilters(void *packet,
                     } else if (reg == 0x00) {
                         value = mzGifRead64(buf + offset);
                         if (pass == 1) {
-                            uint64_t changed = mzGifPrimitive(value,
-                                                               policy->aa1,
-                                                               &tally);
+                            uint64_t changed = mzGifAdValue(value,
+                                               MZ_GS_PRIM, policy,
+                                               &current, &tally);
                             if (value != changed)
                                 mzGifWrite64(buf + offset, changed);
                         }
@@ -324,16 +361,31 @@ static inline int mzGifApplyFilters(void *packet,
             }
             tally.tags++;
             at += payload;
-            if (end)
-                break;
+            saw_end = end;
+            if (end && at < packet_size) {
+                /* One DMA payload may contain several complete GIF
+                 * command lists. Stop only on zero-filled DMA padding. */
+                size_t j;
+                int padding = 1;
+                for (j = at; j < packet_size; j++) {
+                    if (buf[j] != 0) {
+                        padding = 0;
+                        break;
+                    }
+                }
+                if (padding)
+                    break;
+            }
         }
+        /* A GIF command list is complete only when its final tag has EOP.
+         * Never attempt to rewrite streaming state with an open tag. */
+        if (!saw_end)
+            return -1;
         if (pass == 1) {
             *stats = tally;
             *state = current;
         }
-        pos = at;
     }
-    (void)pos;
     return 0;
 }
 

@@ -44,3 +44,10 @@ are controlled by the game, and does not expose fake toggles.
 
 PS2 GS User's Manual supplement (AA1), ps2tek (GIF/GS), PCSX2 GSRegs.h
 (register identifiers and texture modes), ps2dev/gsKit (dithering).
+
+
+## Atualização: pré-envio PATH3 e validação extra
+
+Leia [MAIZO_GS_DMA_PREFLIGHT.md](MAIZO_GS_DMA_PREFLIGHT.md). O código
+aceita **apenas** pacotes de um chamador cooperativo antes da DMA, não
+instala interceptação universal de jogos.

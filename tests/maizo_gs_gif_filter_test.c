@@ -68,6 +68,7 @@ int main(void)
     one(buf,MZ_GS_DTHE,0,&p,&s,&st);
     assert(mzGifRead64(buf+16)==0);
     one(buf,MZ_GS_DIMX,0x12,&p,&s,&st);
+    one(buf,MZ_GS_PRIM,tri,&p,&s,&st); /* Context 0 is now known. */
     one(buf,MZ_GS_DTHE,0,&p,&s,&st);
     assert(mzGifRead64(buf+16)==1);
     p.dither=MZ_GS_FORCE_OFF;
@@ -96,6 +97,37 @@ int main(void)
     p.aa1=3;
     assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-2);
     assert(!memcmp(before,buf,32));
+    init(&p,&s,&st);
+    /* Reserved GIF FLG=3 must be rejected transactionally. */
+    memset(buf,0,sizeof(buf));
+    mzGifWrite64(buf,tag(0,1,0,0,3,1));
+    memcpy(before,buf,16);
+    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==-1);
+    assert(!memcmp(buf,before,16));
+    /* A normal GIF DMA packet can contain multiple EOP-tagged lists. */
+    p.aa1=MZ_GS_FORCE_ON;
+    memset(buf,0,sizeof(buf));
+    for(int k=0;k<2;k++) {
+        mzGifWrite64(buf+k*32,tag(1,1,0,0,0,1));
+        mzGifWrite64(buf+k*32+8,0xe);
+        put_ad(buf+k*32+16,MZ_GS_PRIM,tri);
+    }
+    assert(mzGifApplyFilters(buf,64,&p,&s,&st)==0);
+    assert(mzGifRead64(buf+16)==(tri|128ULL));
+    assert(mzGifRead64(buf+48)==(tri|128ULL));
+    /* Context-specific dithering must not affect a 32-bit framebuffer
+       just because the other context happens to use 16-bit. */
+    init(&p,&s,&st);
+    p.dither=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_FRAME_1,2ULL<<24,&p,&s,&st);
+    one(buf,MZ_GS_FRAME_2,0ULL<<24,&p,&s,&st);
+    one(buf,MZ_GS_DIMX,0x12,&p,&s,&st);
+    one(buf,MZ_GS_PRIM,tri|(1ULL<<9),&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==0 && st.protected_dither==1);
+    one(buf,MZ_GS_PRIM,tri,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==1);
     init(&p,&s,&st);
     assert(mzGifApplyFilters(buf,17,&p,&s,&st)==-1);
     assert(mzGifApplyFilters(NULL,32,&p,&s,&st)==-1);
