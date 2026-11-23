@@ -200,4 +200,49 @@ done:
                   status == MZ_GS_DMA_OK ? &total : NULL);
     return status;
 }
+/*
+ * PATH2 bounded VIF1 DIRECT pre-submit (single standard 16-byte VIF code
+ * header): three VIF NOP commands + DIRECT.IMM=GIF QWC. This is NOT a
+ * parser for arbitrary VIF1 chains, UNPACK/MSCAL, DIRECTHL or VU programs.
+ * Caller must be a cooperating renderer and own/synchronize its buffer.
+ */
+static inline int mzGsDmaPatchVif1Direct(void *buffer, size_t len,
+                                        const mz_gs_gif_policy_t *policy,
+                                        const mz_gs_dma_guard_t *guard,
+                                        mz_gs_gif_state_t *state,
+                                        mz_gs_dma_metrics_t *metrics)
+{
+    uint8_t *bytes = (uint8_t *)buffer;
+    uint32_t codes[4];
+    mz_gs_gif_stats_t local;
+    size_t words;
+    int result;
+    if (!buffer || !policy || !guard || !state ||
+        len < 32u || len > (1u << 20) || (len & 15u)) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_BAD_PACKET, NULL);
+        return MZ_GS_DMA_BAD_PACKET;
+    }
+    if (guard->path != MZ_GS_PATH2_VIF1 || !guard->caller_owns_buffer ||
+        !guard->channel_idle || guard->source_is_scratchpad ||
+        guard->chain_tag_transfer || ((uintptr_t)buffer & 15u) ||
+        !mzGsDmaPolicyEnabled(policy)) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_SKIPPED, NULL);
+        return MZ_GS_DMA_SKIPPED;
+    }
+    memcpy(codes, bytes, sizeof(codes));
+    words = (len - 16u) / 16u;
+    if (codes[0] || codes[1] || codes[2] ||
+        (codes[3] >> 24) != 0x50u ||
+        (size_t)(codes[3] & 0xffffu) != words || words == 0) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_UNSUPPORTED, NULL);
+        return MZ_GS_DMA_UNSUPPORTED;
+    }
+    memset(&local, 0, sizeof(local));
+    result = mzGifApplyFilters(bytes + 16u, len - 16u,
+                               policy, state, &local);
+    mzGsDmaRecord(metrics, result,
+                  result == MZ_GS_DMA_OK ? &local : NULL);
+    return result;
+}
+
 #endif

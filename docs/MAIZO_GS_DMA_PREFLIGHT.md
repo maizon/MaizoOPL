@@ -67,3 +67,13 @@ todos os jogos.** É proposital: não anunciar funcionamento inexistente.
 
 Referências: `ps2tek` (GIF/GS/DMA); documentação PS2SDK e
 artigos de programação sobre PATH1/PATH2/PATH3.
+
+## Adaptação PATH2 VIF1 DIRECT
+
+A API `mzGsDmaPatchVif1Direct` aceita somente um buffer exclusivamente
+controlado pelo chamador contendo **3 VIF NOP + 1 DIRECT (0x50)** em um
+cabeçalho de 16 bytes, seguido de exatamente o número de QWs do payload
+GIF. Valida os códigos VIF e o tamanho antes de reescrever o GIF. Rejeita
+DIRECTHL, UNPACK, MSCAL, cadeias arbitrárias, DMA ativa e buffers sem dono.
+Isso dá suporte **limitado** a um subconjunto conhecido do PATH2, mas
+não intercepta todos os jogos nem o PATH1 via XGKICK.

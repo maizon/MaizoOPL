@@ -94,6 +94,35 @@ int main(void)
     assert(mzGsDmaPatchInlineChain(data,48,&policy,&guard,&state,&metrics)!=0);
     assert(memcmp(data,snapshot,48)==0);
 
-    puts("MAIZO GS DMA preflight: safe owned PATH3 normal/CNT/END, guard and atomicity PASS");
+    /* Controlled PATH2 VIF1 DIRECT (not arbitrary VIF microprograms).
+       Three VIF NOPs followed by DIRECT with 2 quadwords. */
+    memset(data,0,sizeof(data));
+    {
+        uint32_t code = (0x50u << 24) | 2u;
+        memcpy(data + 12, &code, sizeof(code));
+    }
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    guard.path=MZ_GS_PATH2_VIF1;
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==0);
+    assert(mzGifRead64(data+32)==(tri|128ULL));
+    /* Refuse VIF DIRECTHL, arbitrary VIF UNPACK, or wrong QWC. */
+    memcpy(snapshot,data,48);
+    data[15]=0x51; /* DIRECTHL = unsupported */
+    memcpy(snapshot,data,48);
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(data,snapshot,48));
+    data[15]=0x50;data[12]=3; /* 3 QWC requested, only 2 supplied */
+    memcpy(snapshot,data,48);
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(data,snapshot,48));
+    data[12]=2;
+    data[4]=0x01; /* a VIF command instead of NOP */
+    memcpy(snapshot,data,48);
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(data,snapshot,48));
+    guard.path=MZ_GS_PATH3_GIF_DMA;
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_SKIPPED);
+
+    puts("MAIZO GS DMA preflight: owned PATH2 DIRECT + PATH3 normal/CNT/END, guard and atomicity PASS");
     return 0;
 }
