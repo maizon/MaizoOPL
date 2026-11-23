@@ -269,7 +269,7 @@ static int storeInstalled(int index)
     char path[128];
     iox_stat_t st;
     snprintf(path, sizeof(path), "mass0:/APPS/%s/BOOT.ELF", storeApps[index].id);
-    return fileXioGetStat(path, &st) >= 0;
+    return fileXioGetStat(path, &st) >= 0 && st.size == storeApps[index].bytes;
 }
 
 static void storeScanInstalled(void)
@@ -333,7 +333,7 @@ static void storeDraw(int selected, int downloading)
     }
     fntRenderString(gTheme->fonts[0], 320, height - 37, ALIGN_CENTER, 618, 26,
                     downloading ? "VOLTAR: cancelar download" :
-                    "A: instalar/atualizar  |  TRIANGULO: servidor  |  QUADRADO: atualizar  |  B: voltar",
+                    "A instalar  L1/R1 paginas  TRIANGULO servidor  QUADRADO atualizar  B voltar",
                     MAIZO_MUTED);
     guiDrawControllerNotification();
     rmEndFrame();
@@ -495,6 +495,10 @@ void maizoStoreOpen(void)
             selected--;
         else if (getKey(KEY_DOWN) && selected < STORE_ITEMS - 1)
             selected++;
+        else if (getKeyOn(KEY_L1))
+            selected = selected >= 5 ? selected - 5 : 0;
+        else if (getKeyOn(KEY_R1))
+            selected = selected + 5 < STORE_ITEMS ? selected + 5 : STORE_ITEMS - 1;
         else if (getKeyOn(KEY_TRIANGLE)) {
             ioBlockOps(0);
             storeSetServer();
@@ -505,6 +509,9 @@ void maizoStoreOpen(void)
             storeRefresh();
             ioBlockOps(1);
         } else if (getKeyOn(gSelectButton) && storeOnline[selected]) {
+            if (strstr(storeApps[selected].summary, "REQUER") &&
+                !guiMsgBox("ATENCAO: este ELF precisa de arquivos extras nao incluidos. Continuar?", 1, NULL))
+                continue;
             if (guiMsgBox(storeInstalledMask[selected] ?
                               "Atualizar este homebrew? O arquivo antigo sera preservado durante a troca." :
                               "Instalar este homebrew gratuito em mass0:/APPS?",
