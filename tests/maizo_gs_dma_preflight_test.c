@@ -123,7 +123,7 @@ int main(void)
     assert(mzGifRead64(data+32)==(tri|128ULL));
     data[15]=0x50;data[12]=3; /* 3 QWC requested, only 2 supplied */
     memcpy(snapshot,data,48);
-    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_BAD_PACKET);
     assert(!memcmp(data,snapshot,48));
     data[12]=2;
     data[4]=0x01; /* a VIF command instead of NOP */
