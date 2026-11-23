@@ -94,6 +94,18 @@ int main(void)
     assert(mzGsDmaPatchInlineChain(data,48,&policy,&guard,&state,&metrics)!=0);
     assert(memcmp(data,snapshot,48)==0);
 
+    /* END followed by zero padding is valid; nonzero tail is not. */
+    memset(data,0,sizeof(data));
+    mzGifWrite64(data,2ULL|(7ULL<<28));
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    data[63]=1;
+    memcpy(snapshot,data,64);
+    assert(mzGsDmaPatchInlineChain(data,64,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(snapshot,data,64));
+    data[63]=0;
+    assert(mzGsDmaPatchInlineChain(data,64,&policy,&guard,&state,&metrics)==MZ_GS_DMA_OK);
+    assert(mzGifRead64(data+32)==(tri|128ULL));
+
     /* Controlled PATH2 VIF1 DIRECT (not arbitrary VIF microprograms).
        Three VIF NOPs followed by DIRECT with 2 quadwords. */
     memset(data,0,sizeof(data));
