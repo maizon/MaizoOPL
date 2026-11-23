@@ -68,3 +68,13 @@ USB/DS4 e áudio. Cada versão/região do ELF pode exigir nova verificação.
 `tests/maizo_gs_runtime_test.c`: registros opt-in, aplicação nos três
 caminhos quando fornecidos pelo adaptador, e desativação automática
 após três falhas. Não substituem testes em PS2 físico.
+
+## Limite de memória do EE core (ram84)
+
+A região protegida usada pelo EE core tem tamanho fixo e pode ser
+insuficiente quando se combinam o overlay e EESIO_DEBUG. A ponte de
+filtros ficou pequena, com transformadores compilados apenas nos
+adaptadores cooperativos, e a variante de diagnóstico `EESIO_DEBUG=1`
+usa IGR original em vez do overlay. A build release e as demais
+variantes com IGR mantêm o menu MAIZO; não se expande a região protegida
+para cima de memória usada por módulos e jogos.

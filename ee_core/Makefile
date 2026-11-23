@@ -46,9 +46,14 @@ endif
 
 # IGS and the overlay each need scarce protected EE-core RAM.
 # Keep IGS variants unmodified; use the overlay in the standard build.
+# EESIO debugging adds enough tracing code to overflow ram84 if the
+# experimental overlay is also linked. Fall back to stock IGR ONLY for
+# this diagnostic variant; release, normal debug and PADEMU retain menu.
 ifneq ($(IGS),1)
+ifneq ($(EESIO_DEBUG),1)
 EE_OBJS += maizo_igrmenu.o maizo_gs_runtime.o
 EE_CFLAGS += -DMAIZO_IGR_MENU
+endif
 endif
 
 ifeq ($(IGS),1)
