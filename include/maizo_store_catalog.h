@@ -1,9 +1,8 @@
-/* AUTO-GENERATED SNAPSHOT: MAIZO Store verified GitHub Releases, 2026-11-23.
- * Each pinned ELF size and SHA-256 was verified by GitHub Actions at publish.
- * NEVER populate storeApps from unauthenticated network metadata. */
+/* Generated from 2026-11-23 verified GitHub releases; no remote code trust.
+ * Review all additions and source licenses before updating this header. */
 #ifndef MAIZO_STORE_CATALOG_H
 #define MAIZO_STORE_CATALOG_H
-#define STORE_ITEMS 51
+#define STORE_ITEMS 59
 static const store_app_t storeApps[STORE_ITEMS] = {
     {"wle-isr-ds34-mmce-xfrom", "wLaunchELF ISR DS34-MMCE-XFROM", "Ferramentas", "Gerenciador de arquivos: BOOT-DS34-MMCE-XFROM.ELF", "56bd1978b76c51d263fa096176e411b47405cebc399aadffd871bb4923650d8d", 409924u, "El_Isra / wLaunchELF Team", "AFL-2.0 (origem)"},
     {"wle-isr-ds34-mmce", "wLaunchELF ISR DS34-MMCE", "Ferramentas", "Gerenciador de arquivos: BOOT-DS34-MMCE.ELF", "b6d66a57b15b884836e396bfdf2168428f39f6add1d440f3af2acddf2ed3b06e", 387092u, "El_Isra / wLaunchELF Team", "AFL-2.0 (origem)"},
@@ -55,6 +54,14 @@ static const store_app_t storeApps[STORE_ITEMS] = {
     {"nuld", "NULD", "Launchers", "Launcher premium PS2", "ad998116400096b52d2ef7781dd2fea115e57425fc89758ed9ce69916ce6b29f", 3717396u, "Daniel Nuld / contributors", "GPL-3.0"},
     {"launchstation", "Launchstation", "Launchers", "Dashboard de homebrews", "62314fa4269b9a4b3320730e02969b0d2e17f850352b026d3d5898d9c402979c", 1979776u, "NathanNeurotic / wLE contributors", "0BSD + upstream"},
     {"launchstation-ds", "Launchstation DS", "Launchers", "Dashboard com DS3/DS4", "3ddf75dba45742fcc4984f739e2a38dfb285ff5d754cbb4f97f49fc8d43a06ab", 1989696u, "NathanNeurotic / wLE contributors", "0BSD + upstream"},
-    {"popsloader", "POPSLoader", "Emuladores", "Launcher PS1; requer arquivos POPS", "8c330f2499817a79c5c112f283cd3b8043f45cc9f57e8362feeb1f042dd29687", 1465636u, "NathanNeurotic / POPS community", "GPL-3.0"}
+    {"popsloader", "POPSLoader", "Emuladores", "Launcher PS1; requer arquivos POPS", "8c330f2499817a79c5c112f283cd3b8043f45cc9f57e8362feeb1f042dd29687", 1465636u, "NathanNeurotic / POPS community", "GPL-3.0"},
+    {"hddchecker", "HDD Checker", "Diagnostico", "Reparador de sistema de arquivos HDD", "001033b8729c4be38e19fadcc3ed154caadc4e8ef4a84a490c66f57ce56c4655", 1342900u, "PS2 Homebrew / SP193", "GPL-3.0"},
+    {"apollo", "Apollo Save Tool", "Ferramentas", "Saves; pode REQUER arquivos de dados do pacote", "d7ae25e0a5eab85cab022c5c52cd6e853f21b50182f1a362809e6652dfa2a996", 1523560u, "Bucanero / Apollo contributors", "GPL-3.0"},
+    {"cheatdevice", "CheatDevice PS2", "Ferramentas", "Cheats; pode REQUER bancos de codigos externos", "7e5cfc47c42e22956ef4bb8806f04a1affdce801a0242a9e0ee71b722560498a", 512328u, "root670 / CheatDevice contributors", "GPL-3.0"},
+    {"ps2doom", "PS2 DOOM", "Jogos", "Port DOOM GPL. REQUER WAD legal nao incluido", "d3283e232ea03b681be25e5429dac1b20bd2263f87f0a2938d7d01f3c6e05b07", 401764u, "israpps / id Software open-source engine", "GPL-2.0"},
+    {"quake-ps2", "Quake PS2", "Jogos", "Engine open-source. REQUER arquivos PAK legais", "2cb9ef6b5d8e3d56a1e4ca5a5027d8a4f6cc8de12dc60bc12b5e5d900689e9b4", 1411968u, "glampert / id Software Quake GPL engine", "GPL-2.0"},
+    {"quake2-ps2", "Quake II PS2", "Jogos", "Engine GPL. REQUER arquivos PAK legais", "5630d47dd1ec0cdec223302e83b62860e1f572f5440336f207f93640847fe32b", 1887232u, "glampert / id Software Quake II GPL engine", "GPL-2.0"},
+    {"nhddl", "NHDDL", "Utilitarios", "Launcher Neutrino; REQUER Neutrino instalado", "64408e7089918d4d0c7ce6366ca2dc82357b446216b95215d54609284668451d", 367700u, "pcm720 / Neutrino developers", "AFL-3.0"},
+    {"neutrino", "Neutrino", "Utilitarios", "Game loader EE; REQUER componentes e configuracao", "b6a3e13e00ebc4257ad0c97a9106273f8c4cfafa42a63edc25d491cca596b626", 75252u, "ps2homebrew / Neutrino developers", "AFL-3.0"}
 };
 #endif
