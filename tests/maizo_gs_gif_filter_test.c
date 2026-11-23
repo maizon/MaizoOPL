@@ -41,6 +41,16 @@ int main(void)
     assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
     assert(((mzGifRead64(buf)>>47)&0x7ffULL)==(tri|128ULL));
     assert(st.primitive_changes==1);
+    /* Real opaque game geometry normally clears ABE. AA1 must still
+     * apply, without changing ABE/blending or primitive type. */
+    mzGifWrite64(buf,tag(0,1,1,3u,0,1));
+    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
+    assert(((mzGifRead64(buf)>>47)&0x7ffULL)==(3ULL|128ULL));
+    assert(!(((mzGifRead64(buf)>>47)&0x7ffULL)&(1ULL<<6)));
+    one(buf,MZ_GS_PRIM,3ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(3ULL|128ULL));
+    one(buf,MZ_GS_PRMODE,0ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==128ULL);
     mzGifWrite64(buf,tag(0,1,1,(unsigned int)(6ULL|(1ULL<<6)),0,1));
     assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
     assert(st.unsupported_primitives==1); /* sprite may not use AA1 */

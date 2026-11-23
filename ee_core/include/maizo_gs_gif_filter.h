@@ -90,9 +90,11 @@ static inline void mzGifWrite64(uint8_t *ptr, uint64_t value)
 static inline int mzGifPrimitiveSupported(uint64_t prim)
 {
     unsigned int kind = (unsigned int)(prim & 7ULL);
-    /* AA1 is applicable to lines and triangles, not sprites or points.
-       Do not alter alpha-blending to manufacture a coverage effect. */
-    return kind >= 1 && kind <= 5 && ((prim >> 6) & 1ULL);
+    /* AA1 is a per-primitive GS feature for lines and triangles.
+     * GS draws coverage-fringe pixels with its own blending regardless of
+     * PRIM.ABE; requiring ABE here wrongly skips most opaque geometry.
+     * DO NOT set ABE: changing the regular blend mode breaks games. */
+    return kind >= 1 && kind <= 5;
 }
 
 static inline uint64_t mzGifPrimitive(uint64_t src,
@@ -163,7 +165,7 @@ static inline uint64_t mzGifPrmode(uint64_t src,
         result &= ~(1ULL << 7);
     else if (mode == MZ_GS_FORCE_ON) {
         if (state->prim_known && state->prim_kind >= 1 &&
-            state->prim_kind <= 5 && (src & (1ULL << 6)))
+            state->prim_kind <= 5)
             result |= 1ULL << 7;
         else
             stats->unsupported_primitives++;

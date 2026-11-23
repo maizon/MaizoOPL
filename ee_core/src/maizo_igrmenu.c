@@ -172,8 +172,13 @@ static void mzPage(const maizo_igr_state_t *s)
         mzValue(4,"PATH3",mzGsProbe.path3_active,0);
         mzValue(5,"VIF1 DMA",mzGsProbe.vif1_dma_active,0);
         mzValue(6,"GIF DMA",mzGsProbe.gif_dma_active,0);
+        /* Visibility is evidence-based: count only actual GS writes
+         * changed by a verified pre-DMA adapter, NOT mere hook presence. */
+        mzValue(7,"GS ALTERADOS",
+                mzRuntimeMetrics.edits.primitive_changes +
+                mzRuntimeMetrics.edits.texture_changes +
+                mzRuntimeMetrics.edits.dither_changes,0);
         mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: REGISTRADO":"HOOK: INDISPONIVEL");
-        mzLine(115,8,5,"AMOSTRAS NAO = TOTAL");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG. MAIZO");
         mzLine(35,11,4,"VOLTAR");

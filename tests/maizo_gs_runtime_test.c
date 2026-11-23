@@ -52,6 +52,33 @@ int main(void)
     assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH2_VIF1,buf,48,&guard,0,0)==0);
     assert(mzGifRead64(buf+32)==(tri|128ULL));
 
+    /* Exercise the ACTUAL runtime PATH2 dispatcher with a mixed
+     * VIF1 stream: STCYCL + UNPACK + MSCAL + DIRECT. The legacy
+     * NOP+DIRECT-only backend cannot parse this legal layout. */
+    memset(buf,0,sizeof(buf));
+    {
+        uint32_t cmd;
+        cmd=(0x01u<<24)|0x0101u;
+        memcpy(buf,&cmd,4);
+        cmd=(0x6cu<<24)|(1u<<16)|0x03fcu;
+        memcpy(buf+4,&cmd,4);
+        /* 16 bytes of VU1 payload are intentionally opaque. */
+        memset(buf+8,0xa5,16);
+        cmd=(0x14u<<24)|0x0080u; /* MSCAL */
+        memcpy(buf+24,&cmd,4);
+        cmd=(0x50u<<24)|2u; /* DIRECT QWC2 */
+        memcpy(buf+28,&cmd,4);
+    }
+    mzGifWrite64(buf+32,1ULL|(1ULL<<15)|(1ULL<<60));
+    mzGifWrite64(buf+40,0xeULL);
+    mzGifWrite64(buf+48,3ULL); /* opaque triangle, ABE=0 */
+    mzGifWrite64(buf+56,MZ_GS_PRIM);
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH2_VIF1,buf,64,&guard,0,0)
+           == MZ_GS_DMA_OK);
+    assert(mzGifRead64(buf+48)==(3ULL|128ULL));
+    for(int i=8;i<24;i++)assert(buf[i]==0xa5);
+    assert(mzGsRuntimeAccepted()==3);
+
     guard.path=MZ_GS_PATH1_XGKICK;
     gif_primitive(buf,tri);
     assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH1_STAGING,buf,32,&guard,0,0)==0);

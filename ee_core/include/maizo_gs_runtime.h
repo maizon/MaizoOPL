@@ -8,7 +8,7 @@
  */
 #ifndef MAIZO_GS_RUNTIME_H
 #define MAIZO_GS_RUNTIME_H
-#include "maizo_gs_dma_preflight.h"
+#include "maizo_gs_vif1_mixed.h"
 
 enum {
     MZ_DRAW_AA1 = 1,
@@ -166,8 +166,10 @@ static inline int mzGsRuntimeSubmit(unsigned int submit_type, void *packet,
                                          &policy, guard, state, metrics);
         break;
     case MZ_SUBMIT_PATH2_VIF1:
-        result = mzGsDmaPatchVif1Stream(packet, bytes, &policy, guard,
-                                        state, metrics);
+        /* Mixed VIF1 is the operational PATH2 backend; the older
+         * NOP+DIRECT-only adapter remains available for strict callers. */
+        result = mzGsDmaPatchVif1Mixed(packet, bytes, &policy, guard,
+                                       state, metrics);
         break;
     case MZ_SUBMIT_PATH1_STAGING:
         result = mzGsDmaPatchVu1Staging(packet, bytes, &policy, guard,

@@ -152,3 +152,26 @@ não testado na renderização de todos os jogos.
 **Limitação de testes:** classificação de bits é validada por testes
 automatizados. A leitura em hardware físico, compatibilidade com jogos,
 custo por quadro e alcance das amostras ainda não foram medidos no PS2.
+
+## Correção do despacho PATH2 e do AA1 em geometria opaca
+
+No código anterior, `mzGsRuntimeSubmit(MZ_SUBMIT_PATH2_VIF1)` ainda
+chamava o parser antigo, que recusava instruções válidas UNPACK/MSCAL
+misturadas com DIRECT. O despacho agora usa `mzGsDmaPatchVif1Mixed`
+com o mesmo contrato de buffers próprios e DMA ociosa. O teste do
+*despacho real da API* reproduz STCYCL + UNPACK V4_32 + MSCAL +
+DIRECT e verifica a alteração da instrução GS sem tocar bytes VU1.
+
+AA1 no GS utiliza cobertura e composição de pixels no próprio hardware.
+O filtro não deve exigir `PRIM.ABE=1` para habilitar AA1 em linhas e
+triângulos: isso impedia a maioria das primitivas opacas e não corresponde
+à condição necessária do GS. Agora preserva ABE original e altera
+**apenas AA1** para tipos de primitivas suportados. O resultado pode
+variar com ordem de desenho, testes de profundidade e performance.
+
+O diagnóstico `GS AO VIVO` também mostra `GS ALTERADOS`, soma
+incremental de alterações efetivamente realizadas em comandos GR por
+adaptadores cooperativos. Contagem de zero não prova que um PATH não foi
+usado; e contagem positiva do teste host **não** prova efeito em jogos
+comerciais. Sem adaptador real registrado em um jogo comercial os filtros
+continuam indisponíveis, mesmo depois desta correção.
