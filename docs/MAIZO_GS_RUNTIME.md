@@ -122,3 +122,33 @@ amostra real de versões/regiões de jogos, anotando:
 (5) restauração do comportamento quando desligado.
 Até medir tais dados, nenhuma porcentagem global de funcionamento
 é defensável.
+
+## Diagnóstico real durante jogos: GS AO VIVO
+
+O MAIZO dispõe agora de uma **sonda de hardware somente leitura**
+exibida em In-Game > Imagem e Vídeo > Filtros gráficos > GS AO VIVO.
+
+Quando o menu In-Game e o GSM estão habilitados, a própria thread
+IGR que já acorda aproximadamente uma vez por quadro consulta
+`GIF_STAT`, `D1_CHCR` e `D2_CHCR`, sem adicionar interrupções,
+alterar registradores de controle, reconfigurar DMA ou ativar breakpoints.
+
+O menu apresenta **quantidade de amostras** que observaram:
+PATH1 (VU1 XGKICK), PATH2 (VIF1), PATH3 (GIF DMAC), DMA VIF1 ou
+DMA GIF ativas. É uma contagem de observações, não de quadros renderizados
+nem de transferências completas. Um jogo que envia comandos em rajadas
+curtas pode usar um PATH mesmo quando o contador desse PATH fica em zero.
+
+A sondagem tem custo pequeno e constante por amostra e é condicionada
+a `EnableMaizoIgrMenu` e `EnableGSMOp`; deve ser desativada no
+caminho normal que não usa o menu. Uma amostra válida não é prova de
+que AA1, Bilinear ou Dither afetam a imagem: os controles de desenho
+continuam `INDISP.` quando não existe adaptador pré-DMA verificado.
+
+Esse diagnóstico permite escolher jogos e caminhos que merecem
+prioridade em testes de hooks específicos, sem injetar código
+não testado na renderização de todos os jogos.
+
+**Limitação de testes:** classificação de bits é validada por testes
+automatizados. A leitura em hardware físico, compatibilidade com jogos,
+custo por quadro e alcance das amostras ainda não foram medidos no PS2.

@@ -82,6 +82,11 @@ jobs:
             ee_core/src/maizo_gs_runtime.c tests/maizo_gs_shadow_test.c \
             -o /tmp/maizo_gs_shadow
           /tmp/maizo_gs_shadow
+      - name: Validate in-game read-only GS PATH monitor
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_gs_probe_test.c -o /tmp/maizo_gs_probe
+          /tmp/maizo_gs_probe
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract

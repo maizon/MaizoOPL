@@ -50,6 +50,12 @@ int main(void) {
     assert(((s.draw_modes>>4)&3u)==1);
     maizoIgrStep(&s,MZ_KEY_DOWN);
     assert(s.selected==6);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.page==MZ_PAGE_GS_STATUS && s.selected==0);
+    maizoIgrStep(&s,MZ_KEY_BACK);
+    assert(s.page==MZ_PAGE_FILTERS && s.selected==6);
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    assert(s.selected==7);
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_VIDEO);
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
     puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;

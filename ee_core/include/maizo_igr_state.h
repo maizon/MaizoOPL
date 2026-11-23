@@ -1,7 +1,7 @@
 /* MAIZO In-Game PRO state model, fixed footprint, host-testable. */
 #ifndef MAIZO_IGR_STATE_H
 #define MAIZO_IGR_STATE_H
-enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS };
+enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS };
 enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
        MZ_KEY_OK=0x4000, MZ_KEY_BACK=0x2000, MZ_KEY_START=0x0008 };
@@ -23,7 +23,8 @@ static int maizoIgrPageCount(int page)
     case MZ_PAGE_PADS: return 2;
     case MZ_PAGE_GAME: return 3;
     case MZ_PAGE_SYSTEM: return 4;
-    case MZ_PAGE_FILTERS: return 7;
+    case MZ_PAGE_FILTERS: return 8;
+    case MZ_PAGE_GS_STATUS: return 1;
     default: return 1;
     }
 }
@@ -34,6 +35,7 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
     if(pressed&MZ_KEY_START)return MZ_ACTION_RESUME;
     if(pressed&MZ_KEY_BACK) {
         if(s->page==MZ_PAGE_MAIN)return MZ_ACTION_RESUME;
+        if(s->page==MZ_PAGE_GS_STATUS){s->page=MZ_PAGE_FILTERS;s->selected=6;return MZ_ACTION_NONE;}
         s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;return MZ_ACTION_NONE;
     }
     if(pressed&(MZ_KEY_UP|MZ_KEY_DOWN)) {
@@ -83,6 +85,9 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             }
             return MZ_ACTION_NONE;
         }else if(s->selected==6){
+            s->page=MZ_PAGE_GS_STATUS;s->selected=0;
+            return MZ_ACTION_NONE;
+        }else if(s->selected==7){
             s->page=MZ_PAGE_VIDEO;s->selected=6;
             return MZ_ACTION_NONE;
         }
@@ -92,6 +97,8 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             s->filter_mode=target;
             s->filter_changed=1;
         }
+    }else if(s->page==MZ_PAGE_GS_STATUS){
+        s->page=MZ_PAGE_FILTERS;s->selected=6;
     }else if(s->page==MZ_PAGE_PADS){
         if(s->selected==1){s->page=MZ_PAGE_MAIN;s->selected=2;}
     }else if(s->page==MZ_PAGE_GAME){

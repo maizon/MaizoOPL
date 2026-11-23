@@ -18,6 +18,7 @@
 #include "maizo_igr_state.h"
 #include "maizo_igr_filter.h"
 #include "maizo_gs_runtime.h"
+#include "maizo_gs_probe.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -160,8 +161,19 @@ static void mzPage(const maizo_igr_state_t *s)
                !(s->draw_caps&4)?"DITHER: INDISP.":
                (((s->draw_modes>>4)&3)==1?"DITHER: ON":
                 ((s->draw_modes>>4)&3)==2?"DITHER: OFF":"DITHER: JOGO"));
-        mzLine(85,11,4,"VOLTAR");
-        mzLine(105,8,5,"FILTRO REQUER GAME HOOK");
+        mzLine(85,11,4,"GS AO VIVO >");
+        mzLine(95,11,4,"VOLTAR");
+        mzLine(112,8,5,"DESENHO REQUER HOOK");
+    }else if(s->page==MZ_PAGE_GS_STATUS){
+        mzLine(25,11,4,"VOLTAR");
+        mzValue(1,"AMOSTRAS",mzGsProbe.samples,0);
+        mzValue(2,"PATH1",mzGsProbe.path1_active,0);
+        mzValue(3,"PATH2",mzGsProbe.path2_active,0);
+        mzValue(4,"PATH3",mzGsProbe.path3_active,0);
+        mzValue(5,"VIF1 DMA",mzGsProbe.vif1_dma_active,0);
+        mzValue(6,"GIF DMA",mzGsProbe.gif_dma_active,0);
+        mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: REGISTRADO":"HOOK: INDISPONIVEL");
+        mzLine(115,8,5,"AMOSTRAS NAO = TOTAL");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG. MAIZO");
         mzLine(35,11,4,"VOLTAR");
