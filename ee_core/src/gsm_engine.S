@@ -167,7 +167,8 @@ Hook_SetGsCrt:
     sh      $a1, Source_MODE($v0)
     sh      $a2, Source_FFMD($v0)
     # Changing video mode may make interlaced filtering invalid.
-    sw      $zero, MaizoGsFilterMode
+    la      $t3, MaizoGsFilterMode
+    sw      $zero, 0($t3)
 
 # -----------------------------------------------------------------------------------------
 
@@ -526,18 +527,22 @@ have_PMODE_write:
     or      $v0, $zero, $a1                         #   go use Source_PMODE
 
 store_v0_as_PMODE:
-    lw      $t0, MaizoGsFilterMode
+    la      $t3, MaizoGsFilterMode
+    lw      $t0, 0($t3)
     beqz    $t0, maizo_pmode_store
     nop
     andi    $t1, $a1, 3
-    lw      $t2, MaizoGsFilterSourceEN
+    la      $t3, MaizoGsFilterSourceEN
+    lw      $t2, 0($t3)
     bne     $t1, $t2, maizo_pmode_cancel
     nop
-    ld      $v0, MaizoGsFilterPMODE
+    la      $t3, MaizoGsFilterPMODE
+    ld      $v0, 0($t3)
     b       maizo_pmode_store
     nop
 maizo_pmode_cancel:
-    sw      $zero, MaizoGsFilterMode
+    la      $t3, MaizoGsFilterMode
+    sw      $zero, 0($t3)
 maizo_pmode_store:
     b       exit_GSHandler
     sd      $v0, 0($a3)
@@ -931,14 +936,17 @@ skip_flip:
 # The helper keeps the secondary read circuit pointing at the latest
 # framebuffer even when the game swaps buffers every frame.
 maizo_filter_framebuffer:
-    lw      $t0, MaizoGsFilterMode
+    la      $t3, MaizoGsFilterMode
+    lw      $t0, 0($t3)
     addiu   $t2, $zero, 2
     bne     $t0, $t2, maizo_fb_done
     nop
-    lw      $t1, MaizoGsFilterPrimary
+    la      $t3, MaizoGsFilterPrimary
+    lw      $t1, 0($t3)
     bne     $a0, $t1, maizo_fb_secondary
     nop
-    sd      $v0, MaizoGsFilterBaseFB
+    la      $t3, MaizoGsFilterBaseFB
+    sd      $v0, 0($t3)
     or      $t2, $zero, $v0
     addiu   $t0, $zero, 1
     dsll32  $t0, $t0, 11   # DISPFB.DBY +1
@@ -955,7 +963,8 @@ maizo_fb_mirror_2:
     nop
 maizo_fb_secondary:
     # Suppress unused circuit writes; avoid mixing different game frames.
-    ld      $v0, MaizoGsFilterBaseFB
+    la      $t3, MaizoGsFilterBaseFB
+    ld      $v0, 0($t3)
     addiu   $t0, $zero, 1
     dsll32  $t0, $t0, 11
     daddu   $v0, $v0, $t0
@@ -964,14 +973,17 @@ maizo_fb_done:
     nop
 
 maizo_filter_display:
-    lw      $t0, MaizoGsFilterMode
+    la      $t3, MaizoGsFilterMode
+    lw      $t0, 0($t3)
     addiu   $t2, $zero, 2
     bne     $t0, $t2, maizo_display_done
     nop
-    lw      $t1, MaizoGsFilterPrimary
+    la      $t3, MaizoGsFilterPrimary
+    lw      $t1, 0($t3)
     bne     $a0, $t1, maizo_display_secondary
     nop
-    sd      $v0, MaizoGsFilterBaseDisplay
+    la      $t3, MaizoGsFilterBaseDisplay
+    sd      $v0, 0($t3)
     or      $t2, $zero, $v0
     addiu   $t0, $zero, 1
     dsll32  $t0, $t0, 12  # DISPLAY.DH -1
@@ -987,7 +999,8 @@ maizo_display_mirror_2:
     jr      $ra
     nop
 maizo_display_secondary:
-    ld      $v0, MaizoGsFilterBaseDisplay
+    la      $t3, MaizoGsFilterBaseDisplay
+    ld      $v0, 0($t3)
     addiu   $t0, $zero, 1
     dsll32  $t0, $t0, 12
     dsubu   $v0, $v0, $t0

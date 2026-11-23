@@ -43,7 +43,7 @@ static int mzFilterCaps(mz_u64 pmode,mz_u64 smode2,
     int caps=0;
     if(!mzFilterModeValid(smode2) || ((pmode>>2)&7ULL)!=1ULL)
         return 0;
-    if(en==1 || en==2){
+    if(mzFilterOneCircuit(pmode)){
         mz_u64 fb=en==1?fb1:fb2;
         mz_u64 display=en==1?display1:display2;
         int y=(int)((fb>>43)&2047ULL);
