@@ -64,6 +64,7 @@ enum MENU_IDs {
     MENU_SMB_STATUS,
     MENU_PAD_HELP,
     MENU_HOMEBREW_STORE,
+    MENU_INGAME_PRO,
     MENU_PROMPT_STYLE
 };
 
@@ -562,6 +563,7 @@ static int settingsItemCategory(int id)
         case MENU_LIBRARY_REFRESH:
         case MENU_SOURCE_FILTER:
         case MENU_GAME_PREFERENCES:
+        case MENU_INGAME_PRO:
             return 2;
         case MENU_CONTROLLER_SETTINGS:
         case MENU_PADEMU:
@@ -608,6 +610,14 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Organizar biblioteca", MENU_LIBRARY_SORT, -1);
         submenuAppendItem(&mainMenu, -1, "Filtrar por origem", MENU_SOURCE_FILTER, -1);
         submenuAppendItem(&mainMenu, -1, "Preferências dos jogos", MENU_GAME_PREFERENCES, -1);
+        {
+            int igrEnabled = 0;
+            configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &igrEnabled);
+            submenuAppendItem(&mainMenu, -1,
+                              igrEnabled ? "MAIZO In-Game PRO [Ligado]" :
+                                           "MAIZO In-Game PRO [Desligado]",
+                              MENU_INGAME_PRO, -1);
+        }
         submenuAppendItem(&mainMenu, -1, "Atualizar biblioteca", MENU_LIBRARY_REFRESH, -1);
         submenuAppendItem(&mainMenu, -1, "Capas dos jogos", MENU_COVER_MODE, -1);
         submenuAppendItem(&mainMenu, -1, "Visualização da biblioteca", MENU_VIEW_LAYOUT, -1);
@@ -1767,6 +1777,19 @@ void menuHandleInputMenu()
         } else if (id == MENU_GAME_PREFERENCES) {
             if (menuCheckParentalLock() == 0)
                 guiShowGamePreferences();
+        } else if (id == MENU_INGAME_PRO) {
+            if (menuCheckParentalLock() == 0) {
+                int enabled = 0;
+                config_set_t *cfg = configGetByType(CONFIG_OPL);
+                configGetInt(cfg, "maizo_igr_menu", &enabled);
+                if (!enabled &&
+                    !guiMsgBox("Funcao experimental. Requer GSM ativo no jogo. "
+                               "Use com cautela. Ativar?", 1, NULL))
+                    return;
+                configSetInt(cfg, "maizo_igr_menu", !enabled);
+                saveConfig(CONFIG_OPL, 0);
+                menuInitMainMenu();
+            }
         } else if (id == MENU_FILE_MANAGER) {
             if (menuCheckParentalLock() == 0)
                 maizoFileManagerOpen();
