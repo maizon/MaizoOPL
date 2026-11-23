@@ -49,3 +49,11 @@ the handler refuses to draw and falls back to the original IGR reset.
   toggling, and screenshot from the menu itself. No false success reports.
 - This work cannot claim universal or 90% compatibility without test
   results from actual PS2 hardware.
+
+### IGS variant memory safety
+
+The 77 KB protected EE-core region cannot fit the additional overlay and
+IGS screenshot code together on all variants. Builds with `IGS=1` retain
+IGS and disable the overlay hook entirely; standard `IGS=0` builds
+include MAIZO In-Game PRO. This follows the principle of never enlarging
+the low-memory region or placing permanent overlay code in game RAM.

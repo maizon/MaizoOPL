@@ -18,7 +18,7 @@ IGSCORE_EE_OBJS = igs_api.o
 CHEATCORE_EE_OBJS = cheat_engine.o cheat_api.o
 
 EE_OBJS = main.o syshook.o iopmgr.o modmgr.o util.o patches.o patches_asm.o \
-	  padhook.o maizo_igrmenu.o cd_igr_rpc.o tlb.o asm.o crt0.o $(GSMCORE_EE_OBJS) $(CHEATCORE_EE_OBJS)
+	  padhook.o cd_igr_rpc.o tlb.o asm.o crt0.o $(GSMCORE_EE_OBJS) $(CHEATCORE_EE_OBJS)
 MAPFILE = ee_core.map
 
 EE_INCS := -I$(PS2SDK)/ee/include -I$(PS2SDK)/common/include -I$(PS2SDK)/ports/include -Iinclude -I.
@@ -42,6 +42,13 @@ EE_CFLAGS += -D__LOAD_DEBUG_MODULES
     else ifeq ($(TTY_APPROACH),PPC_UART)
     EE_CFLAGS += -DTTY_PPC
     endif
+endif
+
+# IGS and the overlay each need scarce protected EE-core RAM.
+# Keep IGS variants unmodified; use the overlay in the standard build.
+ifneq ($(IGS),1)
+EE_OBJS += maizo_igrmenu.o
+EE_CFLAGS += -DMAIZO_IGR_MENU
 endif
 
 ifeq ($(IGS),1)

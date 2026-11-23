@@ -29,7 +29,9 @@
 #include "syshook.h"
 #include "tlb.h"
 #include "gsm_api.h"
+#ifdef MAIZO_IGR_MENU
 #include "maizo_igrmenu.h"
+#endif
 #ifdef IGS
 #include "igs_api.h"
 #endif
@@ -49,6 +51,7 @@ static powerbuttondata_t Power_Button;
 
 /* IGR Thread ID and interrupt handler */
 static int IGR_Thread_ID = -1;
+#ifdef MAIZO_IGR_MENU
 /*
  * Optional compact overlay. Only pauses threads actually suspended here,
  * and keeps the SIF DMA alive so IOP padman can update the controller buffer.
@@ -111,6 +114,7 @@ static void maizoIgrResumeThreads(void)
             ResumeThread(i);
 }
 
+#endif /* MAIZO_IGR_MENU */
 static int IGR_Intc_ID = -1;
 
 /* IGR thread stack & stack size */
@@ -230,7 +234,9 @@ static void IGR_Thread(void *arg)
      *
      * Poll the same controller buffer from an ordinary EE thread instead.
      */
+#ifdef MAIZO_IGR_MENU
 maizo_igr_poll_again:
+#endif
     for (;;) {
         if (Pad_Data.pad_buf != NULL) {
             // Read through the uncached segment to obtain live pad data.
@@ -272,14 +278,20 @@ maizo_igr_poll_again:
                     Pad_Data.vb_count = 0;
                 }
 
+#ifdef MAIZO_IGR_MENU
                 /* A closed menu must not reopen until the combo is released. */
                 if (pad_pos_combo1 != IGR_COMBO_R1_L1_R2_L2 ||
                     pad_pos_combo2 != IGR_COMBO_START_SELECT)
                     MaizoIgrWaitRelease = 0;
+#endif
                 // R1 + L1 + R2 + L2
                 if (pad_pos_combo1 == IGR_COMBO_R1_L1_R2_L2) {
                     // Start + Select: reset to configured exit path.
+#ifdef MAIZO_IGR_MENU
                     if (pad_pos_combo2 == IGR_COMBO_START_SELECT && !MaizoIgrWaitRelease) {
+#else
+                    if (pad_pos_combo2 == IGR_COMBO_START_SELECT) {
+#endif
                         Pad_Data.combo_type = pad_pos_combo2;
                     }
                     // R3 + L3: power off.
@@ -350,6 +362,7 @@ maizo_igr_poll_again:
 
     DPRINTF("IGR combination detected by polling thread.\n");
 
+#ifdef MAIZO_IGR_MENU
     if (Pad_Data.combo_type == IGR_COMBO_START_SELECT &&
         config->EnableMaizoIgrMenu && config->EnableGSMOp &&
         !Power_Button.press) {
@@ -371,6 +384,7 @@ maizo_igr_poll_again:
         /* EXIT or unsafe GS state: fall back to the original reset path.
          * Suspended game threads stay suspended because reset follows. */
     }
+#endif /* MAIZO_IGR_MENU */
 
     /*
      * Raise this thread to the priority previously assigned by the
