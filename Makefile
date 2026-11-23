@@ -779,8 +779,11 @@ $(EE_ASM_DIR)deci2_img.c: modules/debug/deci2.img | $(EE_ASM_DIR)
 $(BEARSSL_LIB): scripts/build_bearssl_ps2.sh
 	sh scripts/build_bearssl_ps2.sh
 
+include/maizo_store_roots.h: thirdparty/maizo_store_roots.pem scripts/gen_maizo_store_roots.py
+	python3 scripts/gen_maizo_store_roots.py
+
 $(EE_BIN): $(BEARSSL_LIB)
-$(EE_OBJS_DIR)maizo_store_tls.o: $(BEARSSL_LIB)
+$(EE_OBJS_DIR)maizo_store_tls.o: $(BEARSSL_LIB) include/maizo_store_roots.h
 $(EE_OBJS_DIR)%.o: $(EE_SRC_DIR)%.c | $(EE_OBJS_DIR)
 	$(EE_CC) $(EE_CFLAGS) $(EE_INCS) -c $< -o $@
 
