@@ -156,7 +156,7 @@ int main(void)
     }
     gif_ad(data+16,MZ_GS_PRIM,tri);
     gif_ad(data+64,MZ_GS_PRIM,tri);
-    mzGifWrite64(data+64,1ULL|(1ULL<<15)|(3ULL<<58));
+    mzGifWrite64(data+64,3ULL|(1ULL<<15)|(2ULL<<58)); /* truncated IMAGE payload */
     memcpy(snapshot,data,96);
     assert(mzGsDmaPatchVif1Stream(data,96,&policy,&guard,&state,&metrics)==MZ_GS_DMA_BAD_PACKET);
     assert(!memcmp(data,snapshot,96));

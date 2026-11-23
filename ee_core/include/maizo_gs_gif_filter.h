@@ -323,8 +323,8 @@ static inline int mzGifApplyFilters(void *packet,
             size_t entries, payload;
             size_t i;
             int end = (int)((tag >> 15) & 1ULL);
-            if (kind == 3)  /* FLG=3 is reserved: never guess its size. */
-                return -1;
+            /* FLG=3 is IMAGE2, not a reserved mode. Like IMAGE it
+             * transports opaque GS pixel data without register writes. */
             if (nreg == 0)
                 nreg = 16;
             entries = loops * nreg;

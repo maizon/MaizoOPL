@@ -34,7 +34,9 @@ processados. Nenhum hook universal é instalado em jogos comerciais.
 
 ### Correções do parser GIF
 
-- Rejeita o modo FLG=3 reservado.
+- Reconhece FLG=3 como IMAGE2, preserva os bytes da imagem sem tentar
+  interpretá-los como comandos de desenho. Pacotes IMAGE2 incompletos
+  são rejeitados antes de qualquer alteração.
 - Suporta várias listas completas EOP concatenadas em um mesmo buffer,
   ao invés de alterar só a primeira silenciosamente.
 - O AA1 em PRMODE não usa bits PRIM inexistentes em PRMODE: acompanha
@@ -106,3 +108,32 @@ parada/não iniciada, cache sincronizada e teste em PS2 real. Na ausência
 dessas condições, o menu deve informar `indisponível para este jogo`
 em vez de exibir um toggle que não modifica os comandos renderizados.
 A meta de 90% exige medições por jogo e **não** é atestada por estes testes.
+
+
+## Escopo de robustez adicional — adaptadores cooperativos
+
+- Cadeias PATH3 com REF/REFE agora podem usar uma lista explícita de
+  regiões previamente verificadas, cada uma com endereço DMA e buffer EE
+  mutável correspondente. O adaptador **não** segue endereços do jogo;
+  valida alinhamento, tamanho, exclusividade e sobreposições antes da edição.
+- Um mesmo endereço DMA não pode ser associado a duas regiões distintas,
+  e regiões sobrepostas à cadeia ou entre si são recusadas.
+- PATH1 possui o adaptador `mzGsDmaPatchVu1Staging` exclusivamente para um
+  pacote de comando GIF pertencente ao renderizador **antes de copiá-lo
+  para a VU1**. Ele não lê VU1 e não intercepta `XGKICK`.
+- O parser reconhece `IMAGE2` (FLG=3) como transferência opaca de imagem,
+  segundo ps2tek e PCSX2. Nenhuma modificação nos dados dos pixels.
+- Regressões: `tests/maizo_gs_trusted_refs_test.c`,
+  `tests/maizo_gs_gif_filter_test.c` e
+  `tests/maizo_gs_dma_preflight_test.c`.
+
+### Sem porcentagens fictícias
+
+**Não há 80% nem 90% de compatibilidade com jogos comprovada.**
+A interceptação transparente de PATH1, PATH2 e PATH3 de executáveis
+comerciais continua ausente. Emuladores como PCSX2 podem implementar
+filtros por software/GPU hospedeira, não equivalentes a recursos
+de hardware disponíveis no GS físico. AA1 não é MSAA/FXAA global,
+bilinear no GS não aumenta resolução interna e dithering não cria
+profundidade de cor adicional. Não expor os três como ON/OFF universal
+até a ligação real aos fluxos gráficos dos jogos ser validada.

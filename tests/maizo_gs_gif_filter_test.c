@@ -98,12 +98,19 @@ int main(void)
     assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-2);
     assert(!memcmp(before,buf,32));
     init(&p,&s,&st);
-    /* Reserved GIF FLG=3 must be rejected transactionally. */
+    /* IMAGE2 (FLG=3) is an opaque 16-byte/loop image transfer,
+     * identical in length to IMAGE (FLG=2). Never edit pixel bytes. */
     memset(buf,0,sizeof(buf));
-    mzGifWrite64(buf,tag(0,1,0,0,3,1));
-    memcpy(before,buf,16);
-    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==-1);
-    assert(!memcmp(buf,before,16));
+    mzGifWrite64(buf,tag(2,1,0,0,3,1));
+    memset(buf+16,0x5a,32);
+    memcpy(before,buf,48);
+    assert(mzGifApplyFilters(buf,48,&p,&s,&st)==0);
+    assert(!memcmp(buf,before,48));
+    /* Invalid IMAGE2 length must be rejected without mutation. */
+    mzGifWrite64(buf,tag(3,1,0,0,3,1));
+    memcpy(before,buf,48);
+    assert(mzGifApplyFilters(buf,48,&p,&s,&st)==-1);
+    assert(!memcmp(buf,before,48));
     /* A normal GIF DMA packet can contain multiple EOP-tagged lists. */
     p.aa1=MZ_GS_FORCE_ON;
     memset(buf,0,sizeof(buf));

@@ -338,6 +338,42 @@ typedef struct {
     size_t buffer_bytes;    /* At least the REF QWC * 16 bytes */
 } mz_gs_dma_owned_ref_t;
 
+/* Explicitly reject any aliasing between the chain and referenced buffers,
+ * or between any two region descriptors. A double reference to ONE trusted
+ * region remains legal, but contradictory region mappings never do.
+ * This detects unsafe ownership before the first byte is modified. */
+static inline int mzGsDmaTrustedRegionsValid(
+    const void *chain, size_t chain_bytes,
+    const mz_gs_dma_owned_ref_t *regions, size_t region_count)
+{
+    uintptr_t cs = (uintptr_t)chain, ce = cs + chain_bytes;
+    size_t i, j;
+    if (!chain || ce < cs || region_count > 32u ||
+        (region_count && !regions))
+        return 0;
+
+    for (i = 0; i < region_count; ++i) {
+        const mz_gs_dma_owned_ref_t *a = &regions[i];
+        uintptr_t as = (uintptr_t)a->owned_buffer;
+        uintptr_t ae = as + a->buffer_bytes;
+        if (!a->owned_buffer || !a->buffer_bytes ||
+            a->buffer_bytes > (1u << 20) ||
+            (a->buffer_bytes & 15u) || (as & 15u) ||
+            (a->dma_address & 0x8000000fu) || ae < as ||
+            (as < ce && ae > cs))
+            return 0;
+        for (j = 0; j < i; ++j) {
+            const mz_gs_dma_owned_ref_t *b = &regions[j];
+            uintptr_t bs = (uintptr_t)b->owned_buffer;
+            uintptr_t be = bs + b->buffer_bytes;
+            if (a->dma_address == b->dma_address ||
+                (as < be && ae > bs))
+                return 0;
+        }
+    }
+    return 1;
+}
+
 static inline int mzGsDmaPatchTrustedRefs(
     void *chain, size_t chain_bytes,
     const mz_gs_dma_owned_ref_t *regions, size_t region_count,
@@ -356,9 +392,10 @@ static inline int mzGsDmaPatchTrustedRefs(
         return result;
     }
     /* Even one REF with an unknown address fails closed. */
-    if (!state || (region_count && !regions) || region_count > 32u) {
-        mzGsDmaRecord(metrics, MZ_GS_DMA_BAD_PACKET, NULL);
-        return MZ_GS_DMA_BAD_PACKET;
+    if (!state || !mzGsDmaTrustedRegionsValid(chain, chain_bytes,
+                                               regions, region_count)) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_UNSUPPORTED, NULL);
+        return MZ_GS_DMA_UNSUPPORTED;
     }
     initial = *state;
     memset(&total, 0, sizeof(total));
@@ -401,8 +438,8 @@ static inline int mzGsDmaPatchTrustedRefs(
                     end = start + payload;
                     cs = (uintptr_t)chain;
                     ce = cs + chain_bytes;
-                    /* Disallow partial aliasing with the chain's tags:
-                     * editing REF data must not change parsing in pass 2. */
+                    /* Checked before pass 0; retain a redundant guard if a
+                     * future caller changes this contract. */
                     if (end < start || ce < cs ||
                         (start < ce && end > cs))
                         continue;
