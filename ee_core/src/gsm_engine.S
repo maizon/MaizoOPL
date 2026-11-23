@@ -63,6 +63,22 @@ GSMDestGSRegs:      .space 88
 
 .globl GSMFlags
 GSMFlags: .space 19
+# In-game GS scanout filter; zero/off throughout normal play.
+.p2align 3
+.globl MaizoGsFilterMode
+MaizoGsFilterMode: .word 0
+.globl MaizoGsFilterPrimary
+MaizoGsFilterPrimary: .word 0
+.globl MaizoGsFilterSourceEN
+MaizoGsFilterSourceEN: .word 0
+.p2align 3
+.globl MaizoGsFilterPMODE
+MaizoGsFilterPMODE: .dword 0
+.globl MaizoGsFilterBaseFB
+MaizoGsFilterBaseFB: .dword 0
+.globl MaizoGsFilterBaseDisplay
+MaizoGsFilterBaseDisplay: .dword 0
+
 
 .p2align 4                                          # align 16 bytes (IMPORTANT!!!)
 
@@ -150,6 +166,9 @@ Hook_SetGsCrt:
     sh      $a0, Source_INT($v0)
     sh      $a1, Source_MODE($v0)
     sh      $a2, Source_FFMD($v0)
+    # Changing video mode may make interlaced filtering invalid.
+    la      $t3, MaizoGsFilterMode
+    sw      $zero, 0($t3)
 
 # -----------------------------------------------------------------------------------------
 
@@ -508,8 +527,25 @@ have_PMODE_write:
     or      $v0, $zero, $a1                         #   go use Source_PMODE
 
 store_v0_as_PMODE:
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    la      $t3, MaizoGsFilterMode
+    lw      $t0, 0($t3)
+    beqz    $t0, maizo_pmode_store
+    nop
+    andi    $t1, $a1, 3
+    la      $t3, MaizoGsFilterSourceEN
+    lw      $t2, 0($t3)
+    bne     $t1, $t2, maizo_pmode_cancel
+    nop
+    la      $t3, MaizoGsFilterPMODE
+    ld      $v0, 0($t3)
+    b       maizo_pmode_store
+    nop
+maizo_pmode_cancel:
+    la      $t3, MaizoGsFilterMode
+    sw      $zero, 0($t3)
+maizo_pmode_store:
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # SMODE2
@@ -551,25 +587,27 @@ store_v0_as_SMODE2:
 # DISPFB1
 #
 have_DISPFB1_write:
-    sd      $a1, Source_DISPFB1($s0)                # Source_DISPFB1 = a1
-
-jal have_DISPFB_write
-    ld      $v0, Target_DISPFB1($s1)                # v0 = Target_DISPFB1
-
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    sd      $a1, Source_DISPFB1($s0)
+    jal     have_DISPFB_write
+    ld      $v0, Target_DISPFB1($s1)
+    addiu   $a0, $zero, 1
+    jal     maizo_filter_framebuffer
+    nop
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # DISPFB2
 #
 have_DISPFB2_write:
-    sd      $a1, Source_DISPFB2($s0)                # Source_DISPFB2 = a1
-
-jal have_DISPFB_write
-    ld      $v0, Target_DISPFB2($s1)                # v0 = Target_DISPFB2
-
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    sd      $a1, Source_DISPFB2($s0)
+    jal     have_DISPFB_write
+    ld      $v0, Target_DISPFB2($s1)
+    addiu   $a0, $zero, 2
+    jal     maizo_filter_framebuffer
+    nop
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # DISPLAY1
@@ -587,8 +625,11 @@ have_DISPLAY1_write:                                # Here a1=source_data, a2->.
     ld      $v0, Target_DISPLAY1($s1)               #   use forced mode without adaption
 
 store_v0_as_DISPLAY1:
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    addiu   $a0, $zero, 1
+    jal     maizo_filter_display
+    nop
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # DISPLAY2
@@ -606,8 +647,11 @@ have_DISPLAY2_write:                                # Here a1=source_data, a2->.
     ld      $v0, Target_DISPLAY2($s1)               #   use forced mode without adaption
 
 store_v0_as_DISPLAY2:
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    addiu   $a0, $zero, 2
+    jal     maizo_filter_display
+    nop
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # DISPLAYx
@@ -887,6 +931,82 @@ skip_flip:
     sll     $t1, $t1, 13                            # Move bit into position.
     b       load_new_value
     or      $v0, $t0, $t1                           # Replace FIELD field.
+
+# Hardware GS deflicker uses BOTH read circuits of the same frame.
+# The helper keeps the secondary read circuit pointing at the latest
+# framebuffer even when the game swaps buffers every frame.
+maizo_filter_framebuffer:
+    la      $t3, MaizoGsFilterMode
+    lw      $t0, 0($t3)
+    addiu   $t2, $zero, 2
+    bne     $t0, $t2, maizo_fb_done
+    nop
+    la      $t3, MaizoGsFilterPrimary
+    lw      $t1, 0($t3)
+    bne     $a0, $t1, maizo_fb_secondary
+    nop
+    la      $t3, MaizoGsFilterBaseFB
+    sd      $v0, 0($t3)
+    or      $t2, $zero, $v0
+    addiu   $t0, $zero, 1
+    dsll32  $t0, $t0, 11   # DISPFB.DBY +1
+    daddu   $t2, $t2, $t0
+    addiu   $t0, $zero, 1
+    beq     $t1, $t0, maizo_fb_mirror_2
+    nop
+    sd      $t2, GS_DISPFB1($s4)
+    jr      $ra
+    nop
+maizo_fb_mirror_2:
+    sd      $t2, GS_DISPFB2($s4)
+    jr      $ra
+    nop
+maizo_fb_secondary:
+    # Suppress unused circuit writes; avoid mixing different game frames.
+    la      $t3, MaizoGsFilterBaseFB
+    ld      $v0, 0($t3)
+    addiu   $t0, $zero, 1
+    dsll32  $t0, $t0, 11
+    daddu   $v0, $v0, $t0
+maizo_fb_done:
+    jr      $ra
+    nop
+
+maizo_filter_display:
+    la      $t3, MaizoGsFilterMode
+    lw      $t0, 0($t3)
+    addiu   $t2, $zero, 2
+    bne     $t0, $t2, maizo_display_done
+    nop
+    la      $t3, MaizoGsFilterPrimary
+    lw      $t1, 0($t3)
+    bne     $a0, $t1, maizo_display_secondary
+    nop
+    la      $t3, MaizoGsFilterBaseDisplay
+    sd      $v0, 0($t3)
+    or      $t2, $zero, $v0
+    addiu   $t0, $zero, 1
+    dsll32  $t0, $t0, 12  # DISPLAY.DH -1
+    dsubu   $t2, $t2, $t0
+    addiu   $t0, $zero, 1
+    beq     $t1, $t0, maizo_display_mirror_2
+    nop
+    sd      $t2, GS_DISPLAY1($s4)
+    jr      $ra
+    nop
+maizo_display_mirror_2:
+    sd      $t2, GS_DISPLAY2($s4)
+    jr      $ra
+    nop
+maizo_display_secondary:
+    la      $t3, MaizoGsFilterBaseDisplay
+    ld      $v0, 0($t3)
+    addiu   $t0, $zero, 1
+    dsll32  $t0, $t0, 12
+    dsubu   $v0, $v0, $t0
+maizo_display_done:
+    jr      $ra
+    nop
 
 exit_GSHandler:
     la      $k0, MIPS_Regs  # Restore MIPS_Regs via $k0

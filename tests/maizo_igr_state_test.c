@@ -16,5 +16,20 @@ int main(void) {
     assert(s.page==MZ_PAGE_SYSTEM&&s.selected==1);
     assert(maizoIgrStep(&s,MZ_KEY_OK)==MZ_ACTION_NONE);
     assert(maizoIgrStep(&s,MZ_KEY_OK)==MZ_ACTION_EXIT);
-    puts("MAIZO IGR navigation safety OK");return 0;
+    maizoIgrStateInit(&s,0);
+    maizoIgrStep(&s,MZ_KEY_DOWN);maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.page==MZ_PAGE_VIDEO);
+    for(int i=0;i<6;i++)maizoIgrStep(&s,MZ_KEY_DOWN);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.page==MZ_PAGE_FILTERS);
+    /* No fake on/off if hardware output is incompatible. */
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==0);
+    s.filter_caps=2;
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.filter_mode==2 && s.filter_changed);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==0);
+    maizoIgrStep(&s,MZ_KEY_DOWN);s.filter_caps=1;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==1);
+    maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
+    puts("MAIZO IGR navigation + filters ON/OFF safety OK");return 0;
 }

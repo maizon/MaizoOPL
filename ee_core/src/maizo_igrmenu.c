@@ -16,12 +16,13 @@
 #include "coreconfig.h"
 #include "maizo_igrmenu.h"
 #include "maizo_igr_state.h"
+#include "maizo_igr_filter.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
 #define PW 160
 #define PH 126
-#define MAX_LINES 18
+#define MAX_LINES 12
 #define CHARS 25
 #define MZ_D1_CHCR    ((vu32 *)0x10009000)
 #define MZ_D1_MADR    ((vu32 *)0x10009010)
@@ -45,6 +46,12 @@ extern u64 GSMSourceGSRegs[11];
 extern u64 GSMDestGSRegs[11];
 extern u8 GSMFlags[19];
 extern u16 GSMSourceSetGsCrt[3];
+extern volatile u32 MaizoGsFilterMode;
+extern volatile u32 MaizoGsFilterPrimary;
+extern volatile u32 MaizoGsFilterSourceEN;
+extern volatile u64 MaizoGsFilterPMODE;
+extern volatile u64 MaizoGsFilterBaseFB;
+extern volatile u64 MaizoGsFilterBaseDisplay;
 
 typedef struct {
     short x, y, len;
@@ -68,12 +75,6 @@ static const u8 mzColors[6][3] = {
     {252, 182, 101}   /* warning */
 };
 
-static int mzStrLen(const char *s)
-{
-    int n=0;
-    while(s[n])n++;
-    return n;
-}
 static void mzLine(int y, int x, int color, const char *s)
 {
     mz_line_t *l;
@@ -133,9 +134,23 @@ static void mzPage(const maizo_igr_state_t *s)
         mzValue(3,"POSICAO Y",s->y*2,0);
         mzLine(65,11,4,"PRESET 4:3 / EXPANDIDO");
         mzLine(75,11,4,s->field_fix?"FIELD FIX    ON":"FIELD FIX    OFF");
-        mzLine(85,11,4,"RESTAURAR IMAGEM");
-        mzLine(95,11,4,"VOLTAR");
-        mzLine(106,8,5,"GSM. LIMITES DO GS");
+        mzLine(85,11,4,"FILTROS GRAFICOS >");
+        mzLine(95,11,4,"RESTAURAR IMAGEM");
+        mzLine(105,11,4,"VOLTAR");
+    }else if(s->page==MZ_PAGE_FILTERS){
+        mzLine(25,11,s->filter_caps&2?4:5,
+               s->filter_caps&2?(s->filter_mode==2?"DEFLICKER     ON":"DEFLICKER    OFF"):
+                                "DEFLICKER INDISP.");
+        mzLine(35,11,s->filter_caps&1?4:5,
+               s->filter_caps&1?(s->filter_mode==1?"SHARP         ON":"SHARP        OFF"):
+                                "SHARP     INDISP.");
+        mzLine(45,11,s->filter_caps&2?4:5,
+               s->filter_caps&2?(s->filter_mode==2?"SMOOTH        ON":"SMOOTH       OFF"):
+                                "SMOOTH    INDISP.");
+        mzLine(55,11,5,"AA1: CONTROLE DO JOGO");
+        mzLine(65,11,5,"TEXTURA: DO JOGO");
+        mzLine(75,11,4,"VOLTAR");
+        mzLine(105,8,5,"GS 2 CIRCUITOS / 480I");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG. MAIZO");
         mzLine(35,11,4,"VOLTAR");
@@ -294,6 +309,98 @@ static void mzApply(const maizo_igr_state_t *s)
     *(vu64 *)0x120000a0=display2;
     asm volatile("sync.l");
 }
+
+/* This function is called ONLY in the paused IGR thread after GSM's GS
+ * breakpoint has been suspended. Every active state change is applied to the
+ * real GS registers, and persistent framebuffer swaps remain intercepted by
+ * gsm_engine.S. No CPU image blur or fabricated AA passes.
+ *
+ * Scope: interlaced FRAME scanout only, with a single original read circuit.
+ * AA1, bilinear texture filtering, dithering and scanlines require intercepting
+ * full GS drawing packets and therefore are NOT enabled here.
+ */
+static u64 mzOutputSource(int index, int fix)
+{
+    u64 target=GSMDestGSRegs[index],source=GSMSourceGSRegs[index];
+    return fix && target ? target : source;
+}
+static int mzFilterCapabilities(void)
+{
+    u64 pmode=mzOutputSource(0,GSMFlags[9]);
+    u64 smode=mzOutputSource(2,GSMFlags[10]);
+    u64 fb1=mzOutputSource(7,GSMFlags[15]);
+    u64 fb2=mzOutputSource(9,GSMFlags[15]);
+    u64 d1=mzOutputSource(8,GSMFlags[16]);
+    u64 d2=mzOutputSource(10,GSMFlags[16]);
+    if(!pmode || !smode)return 0;
+    return mzFilterCaps(pmode,smode,fb1,fb2,d1,d2);
+}
+static int mzFilterApply(int mode)
+{
+    u64 pmode=mzOutputSource(0,GSMFlags[9]);
+    u64 smode=mzOutputSource(2,GSMFlags[10]);
+    u64 fb1=mzOutputSource(7,GSMFlags[15]);
+    u64 fb2=mzOutputSource(9,GSMFlags[15]);
+    u64 d1=mzOutputSource(8,GSMFlags[16]);
+    u64 d2=mzOutputSource(10,GSMFlags[16]);
+    int primary, caps;
+    u64 fb,display,filteredPmode;
+    if(!pmode || !smode)return 0;
+    caps=mzFilterCaps(pmode,smode,fb1,fb2,d1,d2);
+    if(mode && !(caps&mode))return 0;
+
+    /* Turn off the assembler hook FIRST while returning to the game's
+     * settings. Never leave two read circuits on different game frames. */
+    MaizoGsFilterMode=0;
+    asm volatile("sync.l");
+    if(mode==MZ_FILTER_NATIVE){
+        *(vu64 *)0x12000070=fb1;
+        *(vu64 *)0x12000090=fb2;
+        *(vu64 *)0x12000080=d1;
+        *(vu64 *)0x120000a0=d2;
+        *(vu64 *)0x12000000=pmode;
+        asm volatile("sync.l");
+        return 1;
+    }
+    if(mode==MZ_FILTER_SMOOTH){
+        primary=(pmode&3)==1?1:2;
+    }else{
+        /* The game already uses the two-read-circuit anti-flicker path.
+         * Choose the unshifted read circuit, keeping the same image. */
+        primary=((fb1>>43)&2047)<((fb2>>43)&2047)?1:2;
+    }
+    fb=primary==1?fb1:fb2;
+    display=primary==1?d1:d2;
+    filteredPmode=mzFilterPmode(pmode,mode,primary);
+    MaizoGsFilterSourceEN=(u32)GSMSourceGSRegs[0]&3;
+    MaizoGsFilterPrimary=primary;
+    MaizoGsFilterBaseFB=fb;
+    MaizoGsFilterBaseDisplay=display;
+    MaizoGsFilterPMODE=filteredPmode;
+
+    if(mode==MZ_FILTER_SMOOTH){
+        if(primary==1){
+            *(vu64 *)0x12000070=fb;
+            *(vu64 *)0x12000090=mzFilterOffsetOneLine(fb);
+        }else{
+            *(vu64 *)0x12000070=mzFilterOffsetOneLine(fb);
+            *(vu64 *)0x12000090=fb;
+        }
+        if(primary==1){
+            *(vu64 *)0x12000080=display;
+            *(vu64 *)0x120000a0=mzFilterShortDisplay(display);
+        }else{
+            *(vu64 *)0x12000080=mzFilterShortDisplay(display);
+            *(vu64 *)0x120000a0=display;
+        }
+    }
+    *(vu64 *)0x12000000=filteredPmode;
+    asm volatile("sync.l");
+    MaizoGsFilterMode=mode; /* Enable persistence AFTER both circuits match. */
+    asm volatile("sync.l");
+    return 1;
+}
+
 static u32 mzBpcOff(void)
 {
     u32 old;
@@ -328,6 +435,9 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
         mzStateReady=1;
     }
     if(!mzFrame())return MAIZO_IGR_UNAVAILABLE;
+    mzState.filter_caps=mzFilterCapabilities();
+    if(mzState.filter_mode!=(int)MaizoGsFilterMode)
+        mzState.filter_mode=0; /* Another SetGsCrt cancelled the filter. */
     ctrl=*MZ_D_CTRL;
     mfifo=(ctrl>>2)&3;
     if(!mzWait(MZ_D1_CHCR,CHCR_STR,0,mfifo==2) ||
@@ -361,6 +471,13 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
         if(mzState.changed){
             mzApply(&mzState);
             mzState.changed=0;
+        }
+        if(mzState.filter_changed){
+            int desired=mzState.filter_mode;
+            mzState.filter_changed=0;
+            if(!mzFilterApply(desired))
+                mzState.filter_mode=(int)MaizoGsFilterMode;
+            mzState.filter_caps=mzFilterCapabilities();
         }
         if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
         if(action==MZ_ACTION_EXIT){result=MAIZO_IGR_EXIT;break;}

@@ -45,6 +45,11 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_state_test.c -o /tmp/maizo_igr_state_test
           /tmp/maizo_igr_state_test
+      - name: Verify real GS deflicker and sharp/smooth gates
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_igr_filter_test.c -o /tmp/maizo_igr_filter_test
+          /tmp/maizo_igr_filter_test
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract
