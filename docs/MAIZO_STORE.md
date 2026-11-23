@@ -1,55 +1,55 @@
-# MAIZO Store — GitHub homebrews no OPL (Ethernet)
+# MAIZO Store — hospedagem gratuita, sem servidor próprio
 
-## Integração
+**Destino principal já publicado em GitHub como arquivos estáticos.**
+O repositório público `maizon/MaizoOPLstore` é gratuito: GitHub Actions
+baixa ELFs de Releases, confere SHA-256, publica em `site/v1/apps/*.elf`
+e mantém `site/v1/catalog`. Não há Raspberry Pi, PC ligado, VPS, Railway,
+credenciais, assinatura ou serviço próprio de backend.
 
-A loja foi adicionada ao menu **Configurações → Rede → MAIZO Store - homebrews**.
-Na aba Aplicativos da interface Supreme, **L3** também abre a loja.
+URL pública do catálogo:
+https://raw.githubusercontent.com/maizon/MaizoOPLstore/main/site/v1/catalog
 
-A lista contém quatro arquivos PS2 ELF de releases verificados no GitHub em
-23/11/2026: wLaunchELF, wLaunchELF ISR DS34, wLaunchELF ISR exFAT e FCEUmm.
-A lista fica disponível offline. O download só habilita quando o servidor
-responde e seu catálogo coincide com o SHA-256 e tamanho compilados no cliente.
+Espelho jsDelivr:
+https://cdn.jsdelivr.net/gh/maizon/MaizoOPLstore@main/site/v1/catalog
 
-## O que precisa para downloads online
+## PS2 com Ethernet e HTTPS
 
-O repositório https://github.com/maizon/MaizoOPLstore contém o servidor
-`server.py` de catálogo e espelho verificado. Ele **PRECISA SER IMPLANTADO**
-numa hospedagem com acesso público via **TCP/HTTP**; a fonte de código GitHub
-não é por si só um servidor HTTP acessível em porta TCP pelo PS2.
+O MAIZO SUPREME agora tem código para cliente **HTTPS/TLS 1.2 via BearSSL**,
+que é compilado para PS2 na build; a primeira abertura usa automaticamente
+`raw.githubusercontent.com` na porta 443, sem configuração de host.
+Caso necessário, TRIÂNGULO permite outro host/porta.
+A rota do GitHub é construída automaticamente.
 
-Exemplo de instalação da parte servidor:
-```sh
-PORT=8080 python3 server.py
-```
-Use um host de Internet com proxy TCP externo mapeando a porta 8080 do app.
-No PS2, entre na loja, aperte TRIÂNGULO e informe host DNS e porta pública.
-O PS2 usa sua Ethernet RJ-45, sem smartphone, PC doméstico ou SMB obrigatório.
+A cadeia de certificados do servidor NÃO é validada por este cliente,
+pois não depende de relógio/CA do console. Isto significa que **a sessão
+TLS isoladamente NÃO autentica o servidor**. Em compensação cada ELF só
+é instalado quando seu comprimento exato e SHA-256 coincidem com valores
+**fixados no código do aplicativo**. Não enviar credenciais/dados pessoais
+pela conexão; catálogo e nomes são apenas informativos.
 
-## Instalação
+A biblioteca BearSSL 0.6 é baixada durante a compilação de
+https://bearssl.org/bearssl-0.6.tar.gz e aceita somente o SHA-256
+6705bba1714961b41a728dfc5debbe348d2966c117649392f8c8139efc83ff14.
+Depende de curl e conexão HTTPS no ambiente de compilação.
 
-Os downloads ficam em `mass0:/APPS/<id>/BOOT.ELF`.
-Após conferir tamanho e SHA-256, o programa substitui o ELF por renomeação
-com backup `BOOT.BAK`. A pasta recebe `title.cfg` com `title` e `boot`
-para reconhecimento pela biblioteca APPS original. Ao terminar, atualize a
-biblioteca. Memória USB deve ser gravável e reconhecida no OPL.
+## Uso
 
-A verificação criptográfica é **local**, em PS2, mesmo usando HTTP simples.
-Um atacante poderia alterar nomes/status na rede ou interromper a conexão;
-não consegue injetar ELF diferente sem que o cliente rejeite o SHA-256.
-O cliente não aceita downloads arbitrários nem confia em hashes do servidor.
-Por ser HTTP, metadados e downloads não são confidenciais. Para proteger
-também o catálogo use um canal TLS compatível ou assinatura de catálogo
-numa versão futura.
+Abra Configurações → Rede → MAIZO Store ou aperte L3 na aba Aplicativos.
+A loja exibe as aplicações gratuitas disponíveis; selecione uma e confirme.
+O ELF verificado vai para `mass0:/APPS/<id>/BOOT.ELF`, com `title.cfg`,
+reconhecido pela biblioteca APPS após atualização. Downloads parciais
+`DOWNLOAD.PART` são apagados; atualizações salvam `BOOT.BAK` durante
+a substituição. Há modo offline para visualizar itens conhecidos.
 
-## Segurança e limitações
+## Limitações
 
-- Não foi testado em PS2 físico. Compilação CI e teste do hash são necessários.
-- GitHub `latest` pode mudar: se o ELF divergir do hash fixado, o serviço
-  rejeita até atualizar o catálogo e recompilar o cliente com novo digest.
-- Instalação automática apenas de **ELF único**; ZIP/7z complexos precisam de
-  extração e validação específica, não incluídas nesta versão.
-- Sem retomada de download nesta versão: falha ou cancelamento exclui o .PART.
-- Um backup pendente é preservado para recuperação manual.
-- Não é uma loja de jogos comerciais; respeite licenças e distribuição.
-- Não modifica PadEmu em jogos nem os drivers existentes.
-- Em hardware FAT, a instalação depende da implementação de `fileXioRename`.
+- A conexão HTTPS do PS2 requer teste em console físico; CI apenas verifica
+  compilação e as rotinas SHA-256.
+- O HTTP da rede não aceita transferências chunked nem redirecionamentos:
+  apenas 200 + Content-Length com tamanho conhecido.
+- Se o GitHub mudar seu endereço, protocolo TLS ou formas de resposta, uma
+  nova build do cliente pode ser necessária.
+- Sem download genérico de executáveis, ISOs ou ROMs. Somente os ELFs
+  pré-aprovados e com SHA-256 compilado na aplicação.
+- Os drivers de jogo/PadEmu não são alterados.
+- GitHub Pages não é necessário, não há pagamentos nem conta Railway.

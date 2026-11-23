@@ -6,6 +6,7 @@
  */
 #include "include/opl.h"
 #include "include/maizo_store.h"
+#include "include/maizo_store_tls.h"
 #include "include/maizo_store_sha256.h"
 #include "include/appsupport.h"
 #include "include/ethsupport.h"
@@ -24,6 +25,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <strings.h>
 
 #define STORE_ITEMS 4
 #define STORE_RX 4096
@@ -69,13 +71,13 @@ static void storeReadConfig(void)
 {
     const char *host = NULL;
     config_set_t *cfg = configGetByType(CONFIG_OPL);
-    storeHost[0] = 0;
-    storePort = 8080;
+    snprintf(storeHost, sizeof(storeHost), "raw.githubusercontent.com");
+    storePort = 443;
     if (configGetStr(cfg, "maizo_store_host", &host) && storeHostValid(host))
         snprintf(storeHost, sizeof(storeHost), "%s", host);
     configGetInt(cfg, "maizo_store_port", &storePort);
     if (storePort < 1 || storePort > 65535)
-        storePort = 8080;
+        storePort = 443;
 }
 
 static void storeSetServer(void)
@@ -110,109 +112,103 @@ static void storeSetServer(void)
     storeOnline = 0;
 }
 
-/* This method needs no SMB session and no external phone/PC. */
-static int storeConnect(void)
+/* HTTPS 1.2 from the PS2; external host is public GitHub raw/CDN.
+ * The final ELF must match the SHA-256 shipped inside this binary. */
+static maizo_store_tls_t *storeHttpOpen(const char *uri, int *contentLength)
 {
-    struct hostent *entry;
-    struct sockaddr_in addr;
-    struct timeval tv;
-    int s;
+    char req[384], headers[STORE_MAX_HEADER + 1], path[208];
+    int used = 0, count;
+    int foundSize = 0;
+    maizo_store_tls_t *s;
     if (!storeHostValid(storeHost))
-        return -1;
-    entry = gethostbyname(storeHost);
-    if (!entry || !entry->h_addr_list || !entry->h_addr_list[0])
-        return -1;
-    s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0)
-        return -1;
-    tv.tv_sec = 12;
-    tv.tv_usec = 0;
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(storePort);
-    memcpy(&addr.sin_addr, entry->h_addr_list[0], sizeof(addr.sin_addr));
-    if (connect(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-        closesocket(s);
-        return -1;
-    }
-    return s;
-}
+        return NULL;
 
-static int storeSendAll(int s, const char *buf, int len)
-{
-    while (len > 0) {
-        int count = send(s, buf, len, 0);
-        if (count <= 0)
-            return 0;
-        buf += count;
-        len -= count;
-    }
-    return 1;
-}
+    if (!strcmp(storeHost, "raw.githubusercontent.com"))
+        snprintf(path, sizeof(path), "/maizon/MaizoOPLstore/main/site%s", uri);
+    else if (!strcmp(storeHost, "cdn.jsdelivr.net"))
+        snprintf(path, sizeof(path), "/gh/maizon/MaizoOPLstore@main/site%s", uri);
+    else
+        snprintf(path, sizeof(path), "%s", uri);
 
-/* Return a socket positioned at the first body byte, or -1. Refuse
- * redirects, chunked encoding, oversized headers and truncated lengths. */
-static int storeHttpOpen(const char *uri, int *contentLength)
-{
-    char req[256], headers[STORE_MAX_HEADER + 1];
-    int s = storeConnect(), used = 0, count;
-    if (s < 0)
-        return -1;
+    s = maizoStoreTlsConnect(storeHost, (unsigned short)storePort);
+    if (!s)
+        return NULL;
     count = snprintf(req, sizeof(req),
-                     "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: MAIZO-PS2/1\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
-                     uri, storeHost);
-    if (count <= 0 || count >= (int)sizeof(req) || !storeSendAll(s, req, count))
+                     "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: MAIZO-PS2/2\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
+                     path, storeHost);
+    if (count <= 0 || count >= (int)sizeof(req) ||
+        maizoStoreTlsWrite(s, req, count) != count)
         goto fail;
     while (used < STORE_MAX_HEADER) {
-        char c;
-        if (recv(s, &c, 1, 0) != 1)
+        char byte;
+        if (maizoStoreTlsRead(s, &byte, 1) != 1)
             goto fail;
-        headers[used++] = c;
+        headers[used++] = byte;
         headers[used] = '\0';
         if (used >= 4 && !memcmp(headers + used - 4, "\r\n\r\n", 4))
             break;
     }
     if (used >= STORE_MAX_HEADER ||
-        strncmp(headers, "HTTP/1.1 200 ", 13) != 0)
+        (strncmp(headers, "HTTP/1.1 200 ", 13) &&
+         strncmp(headers, "HTTP/1.0 200 ", 13)))
         goto fail;
+
+    /* Parse exact HTTP headers; don't assume capitalization from CDNs. */
     {
-        char *size = strstr(headers, "\r\nContent-Length: ");
-        char *end;
-        long n;
-        if (!size || strstr(headers, "\r\nTransfer-Encoding: "))
+        char *line = strstr(headers, "\r\n");
+        if (!line)
             goto fail;
-        n = strtol(size + 18, &end, 10);
-        if (end == size + 18 || strncmp(end, "\r\n", 2) ||
-            n < 1 || n > STORE_MAX_APP)
-            goto fail;
-        *contentLength = n;
+        line += 2;
+        while (*line != '\r' && *line != '\0') {
+            char *end = strstr(line, "\r\n");
+            if (!end)
+                goto fail;
+            if (!strncasecmp(line, "Transfer-Encoding:", 18))
+                goto fail; /* No chunked transfer support. */
+            if (!strncasecmp(line, "Content-Length:", 15)) {
+                char *p = line + 15;
+                char *after;
+                long n;
+                if (foundSize)
+                    goto fail;
+                while (*p == ' ' || *p == '\t')
+                    p++;
+                n = strtol(p, &after, 10);
+                if (p == after || after != end || n < 1 || n > STORE_MAX_APP)
+                    goto fail;
+                *contentLength = n;
+                foundSize = 1;
+            }
+            line = end + 2;
+        }
     }
+    if (!foundSize)
+        goto fail;
     return s;
 fail:
-    closesocket(s);
-    return -1;
+    maizoStoreTlsClose(s);
+    return NULL;
 }
 
 static int storeHttpText(const char *uri, char output[STORE_RX])
 {
-    int length, offset = 0, s = storeHttpOpen(uri, &length);
-    if (s < 0)
+    int length, offset = 0;
+    maizo_store_tls_t *s = storeHttpOpen(uri, &length);
+    if (!s)
         return -1;
     if (length >= STORE_RX) {
-        closesocket(s);
+        maizoStoreTlsClose(s);
         return -1;
     }
     while (offset < length) {
-        int got = recv(s, output + offset, length - offset, 0);
+        int got = maizoStoreTlsRead(s, output + offset, length - offset);
         if (got <= 0) {
-            closesocket(s);
+            maizoStoreTlsClose(s);
             return -1;
         }
         offset += got;
     }
-    closesocket(s);
+    maizoStoreTlsClose(s);
     output[length] = '\0';
     return length;
 }
@@ -236,7 +232,7 @@ static void storeRefresh(void)
         return;
     }
     if (storeHttpText("/v1/catalog", text) < 0 || strncmp(text, "MAIZOSTORE1\n", 12)) {
-        snprintf(storeStatus, sizeof(storeStatus), "Servidor desconectado ou HTTP nao suportado.");
+        snprintf(storeStatus, sizeof(storeStatus), "HTTPS indisponivel ou catalogo invalido.");
         return;
     }
     line = strchr(text, '\n');
@@ -337,7 +333,8 @@ static int storeDownload(int index)
     maizo_sha256_t sha;
     unsigned char buf[4096];
     char directory[128], path[148], tmp[148], backup[148], configPath[148], uri[96], hex[65];
-    int expected = 0, s, fd = -1, total = 0, ok = 0, wasInstalled, movedOld = 0;
+    int expected = 0, fd = -1, total = 0, ok = 0, wasInstalled, movedOld = 0;
+    maizo_store_tls_t *s;
     int firstBytes = 0;
     unsigned char signature[4];
     iox_stat_t st;
@@ -348,9 +345,9 @@ static int storeDownload(int index)
     snprintf(uri, sizeof(uri), "/v1/apps/%s.elf", app->id);
     guiRenderTextScreen("MAIZO Store: preparando download verificado...");
     s = storeHttpOpen(uri, &expected);
-    if (s < 0 || expected != app->bytes) {
-        if (s >= 0)
-            closesocket(s);
+    if (!s || expected != app->bytes) {
+        if (s)
+            maizoStoreTlsClose(s);
         guiMsgBox("Arquivo remoto indisponivel ou tamanho inesperado.", 0, NULL);
         return 0;
     }
@@ -365,7 +362,7 @@ static int storeDownload(int index)
     fileXioRemove(tmp);
     fd = fileXioOpen(tmp, O_WRONLY | O_CREAT | O_EXCL, 0666);
     if (fd < 0) {
-        closesocket(s);
+        maizoStoreTlsClose(s);
         guiMsgBox("USB mass0 indisponivel ou sem espaco/gravadacao.", 0, NULL);
         return 0;
     }
@@ -377,7 +374,7 @@ static int storeDownload(int index)
         int got, off = 0;
         if (left > (int)sizeof(buf))
             left = sizeof(buf);
-        got = recv(s, buf, left, 0);
+        got = maizoStoreTlsRead(s, buf, left);
         if (got <= 0)
             break;
         /* TCP is a stream: the ELF signature may span multiple packets. */
@@ -402,7 +399,7 @@ static int storeDownload(int index)
         }
     }
     fileXioClose(fd);
-    closesocket(s);
+    maizoStoreTlsClose(s);
     maizo_sha256_final(&sha, hex);
     if (firstBytes != 4 || memcmp(signature, "\177ELF", 4) ||
         total != expected || strcmp(hex, app->hash)) {
