@@ -1,17 +1,20 @@
-/* CATALOGUE SNAPSHOT: reviewed, verified SHA-256 from GitHub Releases.
- * Untrusted runtime metadata never changes the allowlisted executables. */
+/* REVIEWED BUILD SNAPSHOT of verified PS2 .ELF assets from public GitHub Releases.
+ * Hash and size are compiled in, never fetched as install authority. */
 #ifndef MAIZO_STORE_CATALOG_H
 #define MAIZO_STORE_CATALOG_H
-#define STORE_ITEMS 61
+#define STORE_ITEMS 64
 static const store_app_t storeApps[STORE_ITEMS] = {
     {"wlaunchelf", "wLaunchELF original", "Ferramentas", "Gerenciador de arquivos", "beb688160ab29ba441f5b4f9a20fb151a4abb44ee4a285a7b1a702b6542c2c66", 497908u, "Equipe wLaunchELF", "AFL-2.0"},
     {"apollo", "Apollo Save Tool", "Ferramentas", "Saves; pode REQUER arquivos de dados do pacote", "d7ae25e0a5eab85cab022c5c52cd6e853f21b50182f1a362809e6652dfa2a996", 1523560u, "Bucanero / Apollo contributors", "GPL-3.0"},
     {"fceumm", "FCEUmm PS2", "Emuladores", "Emulador NES", "aeebec25228ed2fe2261f22e1ab692d4d518f2dbca84e81d980a4a1bc53f3a3e", 1384060u, "FCEUmm contributors", "GPL-2.0"},
     {"cheatdevice", "CheatDevice PS2", "Ferramentas", "Cheats; pode REQUER bancos de codigos externos", "7e5cfc47c42e22956ef4bb8806f04a1affdce801a0242a9e0ee71b722560498a", 512328u, "root670 / CheatDevice contributors", "GPL-3.0"},
+    {"cheatdevice-exfat", "CheatDevice exFAT", "Ferramentas", "Cheats. Pode REQUER banco de codigos externo", "258df8b205de415a095cdb90ea70234903b9bf486b484267ff8a091d5d29c914", 449204u, "israpps / root670 CheatDevice", "GPL-3.0"},
+    {"sms", "SMS Media Player", "Multimidia", "Player de video e audio PS2", "d8bbbb2ffadc712bbb8074b8009a854c2b83d59d3cae1f9770a38c7d56e435a6", 784861u, "Eugene Plotnikov / PS2Homebrew", "AFL-2.0"},
     {"ps2doom", "PS2 DOOM", "Jogos", "Port DOOM GPL. REQUER WAD legal nao incluido", "d3283e232ea03b681be25e5429dac1b20bd2263f87f0a2938d7d01f3c6e05b07", 401764u, "israpps / id Software open-source engine", "GPL-2.0"},
     {"quake-ps2", "Quake PS2", "Jogos", "Engine open-source. REQUER arquivos PAK legais", "2cb9ef6b5d8e3d56a1e4ca5a5027d8a4f6cc8de12dc60bc12b5e5d900689e9b4", 1411968u, "glampert / id Software Quake GPL engine", "GPL-2.0"},
     {"quake2-ps2", "Quake II PS2", "Jogos", "Engine GPL. REQUER arquivos PAK legais", "5630d47dd1ec0cdec223302e83b62860e1f572f5440336f207f93640847fe32b", 1887232u, "glampert / id Software Quake II GPL engine", "GPL-2.0"},
     {"hddchecker", "HDD Checker", "Diagnostico", "Reparador de sistema de arquivos HDD", "001033b8729c4be38e19fadcc3ed154caadc4e8ef4a84a490c66f57ce56c4655", 1342900u, "PS2 Homebrew / SP193", "GPL-3.0"},
+    {"hdl-installer", "HDL Game Installer", "Utilitarios", "Instalador HDL para HDD", "fb77cab3a97389e8ce074cd0adb30e601b59863f86ed5779d3b05ac5346b7bef", 1931864u, "SP193 / PS2 Homebrew", "AFL-2.0"},
     {"neutrino", "Neutrino", "Utilitarios", "Game loader EE; REQUER componentes e configuracao", "b6a3e13e00ebc4257ad0c97a9106273f8c4cfafa42a63edc25d491cca596b626", 75252u, "ps2homebrew / Neutrino developers", "AFL-3.0"},
     {"nhddl", "NHDDL", "Utilitarios", "Launcher Neutrino; REQUER Neutrino instalado", "64408e7089918d4d0c7ce6366ca2dc82357b446216b95215d54609284668451d", 367700u, "pcm720 / Neutrino developers", "AFL-3.0"},
     {"popsloader", "POPSLoader", "Emuladores", "Launcher PS1; requer arquivos POPS", "8c330f2499817a79c5c112f283cd3b8043f45cc9f57e8362feeb1f042dd29687", 1465636u, "NathanNeurotic / POPS community", "GPL-3.0"},
