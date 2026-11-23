@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 /* The console has no trusted system CA/time authority. Capture the leaf
  * key to enable TLS 1.2 handshake, but do NOT mark it trusted. The OPL
@@ -181,6 +182,6 @@ void maizoStoreTlsClose(maizo_store_tls_t *c)
     if (!c)
         return;
     if (c->fd >= 0)
-        closesocket(c->fd);
+        close(c->fd);
     free(c);
 }
