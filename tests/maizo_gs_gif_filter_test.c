@@ -1,0 +1,105 @@
+/* Portable tests of PS2 GIF packet field editing. */
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include "maizo_gs_gif_filter.h"
+static uint64_t tag(unsigned int loops,int end,int pre,unsigned int prim,
+                    unsigned int kind,unsigned int regs)
+{
+    return (uint64_t)loops|((uint64_t)end<<15)|
+           ((uint64_t)pre<<46)|((uint64_t)prim<<47)|
+           ((uint64_t)kind<<58)|((uint64_t)regs<<60);
+}
+static void put_ad(uint8_t *p,unsigned int reg,uint64_t value)
+{
+    mzGifWrite64(p,value);
+    mzGifWrite64(p+8,reg);
+}
+static void init(mz_gs_gif_policy_t *p,mz_gs_gif_state_t *s,mz_gs_gif_stats_t *st)
+{
+    memset(p,0,sizeof(*p));memset(s,0,sizeof(*s));memset(st,0,sizeof(*st));
+}
+static void one(uint8_t *buf,unsigned int reg,uint64_t v,
+                mz_gs_gif_policy_t *p,mz_gs_gif_state_t *s,mz_gs_gif_stats_t *stats)
+{
+    memset(buf,0,32);
+    mzGifWrite64(buf,tag(1,1,0,0,0,1));
+    mzGifWrite64(buf+8,0xe);
+    put_ad(buf+16,reg,v);
+    assert(mzGifApplyFilters(buf,32,p,s,stats)==0);
+}
+int main(void)
+{
+    uint8_t buf[64],before[64];
+    mz_gs_gif_policy_t p;
+    mz_gs_gif_state_t s;
+    mz_gs_gif_stats_t st;
+    uint64_t tri=3ULL|(1ULL<<6);
+    init(&p,&s,&st);p.aa1=MZ_GS_FORCE_ON;
+    memset(buf,0,sizeof(buf));
+    mzGifWrite64(buf,tag(0,1,1,(unsigned int)tri,0,1));
+    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
+    assert(((mzGifRead64(buf)>>47)&0x7ffULL)==(tri|128ULL));
+    assert(st.primitive_changes==1);
+    mzGifWrite64(buf,tag(0,1,1,(unsigned int)(6ULL|(1ULL<<6)),0,1));
+    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
+    assert(st.unsupported_primitives==1); /* sprite may not use AA1 */
+    one(buf,MZ_GS_PRIM,tri,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(tri|128ULL));
+    one(buf,MZ_GS_PRMODE,tri,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(tri|128ULL));
+    p.aa1=MZ_GS_FORCE_OFF;
+    one(buf,MZ_GS_PRIM,tri|128ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==tri);
+
+    init(&p,&s,&st);p.bilinear=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_TEX1_1,2ULL<<6,&p,&s,&st);
+    assert(((mzGifRead64(buf+16)>>6)&7ULL)==4ULL);
+    assert(mzGifRead64(buf+16)&(1ULL<<5));
+    p.bilinear=MZ_GS_FORCE_OFF;
+    one(buf,MZ_GS_TEX1_2,mzGifRead64(buf+16),&p,&s,&st);
+    assert(((mzGifRead64(buf+16)>>6)&7ULL)==2ULL);
+    assert(!(mzGifRead64(buf+16)&(1ULL<<5)));
+
+    init(&p,&s,&st);p.dither=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==0&&st.protected_dither==1);
+    one(buf,MZ_GS_FRAME_1,2ULL<<24,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==0);
+    one(buf,MZ_GS_DIMX,0x12,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==1);
+    p.dither=MZ_GS_FORCE_OFF;
+    one(buf,MZ_GS_DTHE,1,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==0);
+
+    init(&p,&s,&st);p.scanmask=MZ_GS_SCAN_EVEN_ONLY;
+    one(buf,MZ_GS_SCANMSK,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==2);
+    init(&p,&s,&st);p.aa1=MZ_GS_FORCE_ON;
+    memset(buf,0,sizeof(buf));
+    mzGifWrite64(buf,tag(1,1,0,0,1,1));
+    mzGifWrite64(buf+16,tri);
+    assert(mzGifApplyFilters(buf,32,&p,&s,&st)==0);
+    assert(mzGifRead64(buf+16)==(tri|128ULL));
+    memset(buf,0,sizeof(buf));mzGifWrite64(buf,tag(1,1,0,0,2,1));
+    mzGifWrite64(buf+16,tri);memcpy(before,buf,32);
+    assert(mzGifApplyFilters(buf,32,&p,&s,&st)==0);
+    assert(!memcmp(before,buf,32));
+    memset(buf,0,sizeof(buf));
+    mzGifWrite64(buf,tag(0,0,1,(unsigned int)tri,0,1));
+    mzGifWrite64(buf+16,tag(2,1,0,0,0,1));
+    memcpy(before,buf,32);
+    assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-1);
+    assert(!memcmp(before,buf,32)); /* no partially patched packets */
+    p.aa1=3;
+    assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-2);
+    assert(!memcmp(before,buf,32));
+    init(&p,&s,&st);
+    assert(mzGifApplyFilters(buf,17,&p,&s,&st)==-1);
+    assert(mzGifApplyFilters(NULL,32,&p,&s,&st)==-1);
+    assert(mzGifApplyFilters(buf,1u<<21,&p,&s,&st)==-1);
+    puts("MAIZO GIF filter packet tests: PASS");
+    return 0;
+}
