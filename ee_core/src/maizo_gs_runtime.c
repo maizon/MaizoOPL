@@ -66,56 +66,33 @@ int mzGsRuntimeSetMode(unsigned int feature, unsigned int mode)
 unsigned int mzGsRuntimeFailures(void) { return mzFailures; }
 unsigned int mzGsRuntimeAccepted(void) { return mzAccepted; }
 
-int mzGsRuntimeSubmit(unsigned int submit_type, void *packet, size_t bytes,
-                      const mz_gs_dma_guard_t *guard,
-                      const mz_gs_dma_owned_ref_t *refs, size_t ref_count)
+/*
+ * Kept in EE-core: only compact policy + stats, NOT the per-packet
+ * transformer. This avoids overflowing the ram84 protected reservation.
+ */
+void mzGsRuntimeGetPolicy(mz_gs_gif_policy_t *policy)
 {
-    mz_gs_gif_policy_t policy;
-    int result = MZ_GS_DMA_SKIPPED;
-    if (!mzCapabilities || !guard) return MZ_GS_DMA_SKIPPED;
+    if (!policy) return;
+    policy->aa1 = (mzCapabilities & MZ_DRAW_AA1) ?
+                  (uint8_t)mzGsRuntimeMode(MZ_DRAW_AA1) : MZ_GS_KEEP;
+    policy->bilinear = (mzCapabilities & MZ_DRAW_BILINEAR) ?
+                       (uint8_t)mzGsRuntimeMode(MZ_DRAW_BILINEAR) : MZ_GS_KEEP;
+    policy->dither = (mzCapabilities & MZ_DRAW_DITHER) ?
+                     (uint8_t)mzGsRuntimeMode(MZ_DRAW_DITHER) : MZ_GS_KEEP;
+    policy->scanmask = MZ_GS_SCAN_UNCHANGED;
+}
 
-    policy.aa1 = (mzCapabilities & MZ_DRAW_AA1) ?
-                 (uint8_t)mzGsRuntimeMode(MZ_DRAW_AA1) : MZ_GS_KEEP;
-    policy.bilinear = (mzCapabilities & MZ_DRAW_BILINEAR) ?
-                      (uint8_t)mzGsRuntimeMode(MZ_DRAW_BILINEAR) : MZ_GS_KEEP;
-    policy.dither = (mzCapabilities & MZ_DRAW_DITHER) ?
-                    (uint8_t)mzGsRuntimeMode(MZ_DRAW_DITHER) : MZ_GS_KEEP;
-    policy.scanmask = 0; /* Never enable destructive pseudo-scanlines. */
-    if (!mzGsDmaPolicyEnabled(&policy)) return MZ_GS_DMA_SKIPPED;
+mz_gs_gif_state_t *mzGsRuntimeGetState(void) { return &mzState; }
+mz_gs_dma_metrics_t *mzGsRuntimeGetMetrics(void) { return &mzMetrics; }
 
-    switch (submit_type) {
-    case MZ_SUBMIT_PATH3_NORMAL:
-        result = mzGsDmaPatchNormal(packet, bytes, &policy, guard,
-                                    &mzState, &mzMetrics);
-        break;
-    case MZ_SUBMIT_PATH3_INLINE:
-        result = mzGsDmaPatchInlineChain(packet, bytes, &policy, guard,
-                                         &mzState, &mzMetrics);
-        break;
-    case MZ_SUBMIT_PATH3_TRUSTED:
-        result = mzGsDmaPatchTrustedRefs(packet, bytes, refs, ref_count,
-                                         &policy, guard, &mzState, &mzMetrics);
-        break;
-    case MZ_SUBMIT_PATH2_VIF1:
-        result = mzGsDmaPatchVif1Stream(packet, bytes, &policy, guard,
-                                        &mzState, &mzMetrics);
-        break;
-    case MZ_SUBMIT_PATH1_STAGING:
-        result = mzGsDmaPatchVu1Staging(packet, bytes, &policy, guard,
-                                         &mzState, &mzMetrics);
-        break;
-    default:
-        return MZ_GS_DMA_UNSUPPORTED;
-    }
+void mzGsRuntimeRecord(int result)
+{
     if (result == MZ_GS_DMA_OK) {
         mzAccepted++;
         mzConsecutiveFailures = 0;
     } else if (result < 0) {
         mzFailures++;
-        /* A repeatedly incompatible command stream is safer left alone.
-         * No side effects on unrelated games: only this opt-in state is reset. */
         if (++mzConsecutiveFailures >= 3u)
             mzGsRuntimeReset();
     }
-    return result;
 }
