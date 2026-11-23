@@ -320,4 +320,175 @@ static inline int mzGsDmaPatchVif1Direct(void *buffer, size_t len,
                                   state, metrics);
 }
 
+/*
+ * Trust-list adapter for common PATH3 CNT/REF/REFE/END DMA chains.
+ *
+ * A REF tag only describes a DMA address. Never dereference it directly!
+ * Every referenced payload must be supplied by the cooperating caller as an
+ * exclusively-owned writable buffer and resolved by EXACT DMA address.
+ * Neither arbitrary game DMAs nor live GS traffic are intercepted here.
+ *
+ * Each tagged payload must contain a complete GIF list ending in EOP;
+ * GIF lists spanning multiple DMAtags and REF(S) stall chains are rejected.
+ * Caller must FlushCache(0) for ALL changed memory before launching DMA.
+ */
+typedef struct {
+    uint32_t dma_address;   /* Address encoded in the DMA REF/REFE tag */
+    void *owned_buffer;     /* Proven caller-owned EE buffer, not a VU pointer */
+    size_t buffer_bytes;    /* At least the REF QWC * 16 bytes */
+} mz_gs_dma_owned_ref_t;
+
+static inline int mzGsDmaPatchTrustedRefs(
+    void *chain, size_t chain_bytes,
+    const mz_gs_dma_owned_ref_t *regions, size_t region_count,
+    const mz_gs_gif_policy_t *policy, const mz_gs_dma_guard_t *guard,
+    mz_gs_gif_state_t *state, mz_gs_dma_metrics_t *metrics)
+{
+    static const mz_gs_gif_policy_t keep = {0, 0, 0, 0};
+    uint8_t *bytes = (uint8_t *)chain;
+    mz_gs_gif_state_t initial, local_state;
+    mz_gs_gif_stats_t total;
+    int pass, result, has_payload = 0;
+
+    result = mzGsDmaGuardOK(chain, chain_bytes, policy, guard);
+    if (result != MZ_GS_DMA_OK) {
+        mzGsDmaRecord(metrics, result, NULL);
+        return result;
+    }
+    /* Even one REF with an unknown address fails closed. */
+    if (!state || (region_count && !regions) || region_count > 32u) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_BAD_PACKET, NULL);
+        return MZ_GS_DMA_BAD_PACKET;
+    }
+    initial = *state;
+    memset(&total, 0, sizeof(total));
+    for (pass = 0; pass < 2; ++pass) {
+        size_t at = 0;
+        int ended = 0;
+        local_state = initial;
+        while (at + 16u <= chain_bytes) {
+            uint64_t tag = mzGifRead64(bytes + at);
+            unsigned int qwc = (unsigned int)(tag & 0xffffULL);
+            unsigned int id = (unsigned int)((tag >> 28) & 7ULL);
+            uint32_t addr = (uint32_t)(tag >> 32) & 0x7fffffffu;
+            size_t payload = (size_t)qwc * 16u;
+            uint8_t *payload_ptr = NULL;
+            mz_gs_gif_stats_t edits;
+            size_t r;
+
+            /* Reject SPR (scratchpad), IRQ, tag transfer, nested jumps,
+             * CALL/RET, NEXT, REFS stall and unknown IDs. */
+            if ((tag & (1ULL << 63)) || (tag & (1ULL << 31)) ||
+                (id != 0u && id != 1u && id != 3u && id != 7u)) {
+                result = MZ_GS_DMA_UNSUPPORTED;
+                goto done;
+            }
+            at += 16u;
+            if (id == 0u || id == 3u) {
+                /* REFE/REF: the DMA address is never an EE pointer here. */
+                if (!qwc || (addr & 15u)) {
+                    result = MZ_GS_DMA_UNSUPPORTED;
+                    goto done;
+                }
+                for (r = 0; r < region_count; ++r) {
+                    uintptr_t start, end, cs, ce;
+                    const mz_gs_dma_owned_ref_t *ref = &regions[r];
+                    if (ref->dma_address != addr || !ref->owned_buffer ||
+                        ref->buffer_bytes < payload ||
+                        ((uintptr_t)ref->owned_buffer & 15u))
+                        continue;
+                    start = (uintptr_t)ref->owned_buffer;
+                    end = start + payload;
+                    cs = (uintptr_t)chain;
+                    ce = cs + chain_bytes;
+                    /* Disallow partial aliasing with the chain's tags:
+                     * editing REF data must not change parsing in pass 2. */
+                    if (end < start || ce < cs ||
+                        (start < ce && end > cs))
+                        continue;
+                    payload_ptr = (uint8_t *)ref->owned_buffer;
+                    break;
+                }
+                if (!payload_ptr) {
+                    result = MZ_GS_DMA_UNSUPPORTED;
+                    goto done;
+                }
+            } else {
+                /* CNT / END carry their GIF payload inline after the tag. */
+                if (payload > chain_bytes - at) {
+                    result = MZ_GS_DMA_BAD_PACKET;
+                    goto done;
+                }
+                payload_ptr = bytes + at;
+                at += payload;
+            }
+            if (payload) {
+                memset(&edits, 0, sizeof(edits));
+                result = mzGifApplyFilters(payload_ptr, payload,
+                                           pass == 0 ? &keep : policy,
+                                           &local_state, &edits);
+                if (result != 0) {
+                    result = MZ_GS_DMA_BAD_PACKET;
+                    goto done;
+                }
+                if (pass == 1)
+                    mzGsDmaMergeStats(&total, &edits);
+                has_payload = 1;
+            }
+            if (id == 0u || id == 7u) {
+                ended = 1;
+                break;
+            }
+        }
+        if (!ended || !has_payload) {
+            result = MZ_GS_DMA_BAD_PACKET;
+            goto done;
+        }
+        /* Only zero storage padding may follow the terminating tag. */
+        while (at < chain_bytes) {
+            if (bytes[at++] != 0) {
+                result = MZ_GS_DMA_UNSUPPORTED;
+                goto done;
+            }
+        }
+    }
+    *state = local_state;
+    result = MZ_GS_DMA_OK;
+done:
+    mzGsDmaRecord(metrics, result,
+                  result == MZ_GS_DMA_OK ? &total : NULL);
+    return result;
+}
+
+/* PATH1 is VU1 XGKICK, not EE DMA: only a game/renderer that controls the
+ * EE staging packet can opt in to rewriting it BEFORE copying it to VU1
+ * data memory. This does not read or patch VU RAM or hook XGKICK. */
+static inline int mzGsDmaPatchVu1Staging(
+    void *packet, size_t bytes, const mz_gs_gif_policy_t *policy,
+    const mz_gs_dma_guard_t *guard, mz_gs_gif_state_t *state,
+    mz_gs_dma_metrics_t *metrics)
+{
+    mz_gs_gif_stats_t edits;
+    int result;
+    if (!guard || guard->path != MZ_GS_PATH1_XGKICK) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_SKIPPED, NULL);
+        return MZ_GS_DMA_SKIPPED;
+    }
+    if (!packet || !policy || !state || !bytes ||
+        bytes > (1u << 20) || (bytes & 15u)) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_BAD_PACKET, NULL);
+        return MZ_GS_DMA_BAD_PACKET;
+    }
+    if (!guard->caller_owns_buffer || !guard->channel_idle ||
+        guard->source_is_scratchpad || guard->chain_tag_transfer ||
+        ((uintptr_t)packet & 15u) || !mzGsDmaPolicyEnabled(policy)) {
+        mzGsDmaRecord(metrics, MZ_GS_DMA_SKIPPED, NULL);
+        return MZ_GS_DMA_SKIPPED;
+    }
+    memset(&edits, 0, sizeof(edits));
+    result = mzGifApplyFilters(packet, bytes, policy, state, &edits);
+    mzGsDmaRecord(metrics, result, result == 0 ? &edits : NULL);
+    return result;
+}
+
 #endif
