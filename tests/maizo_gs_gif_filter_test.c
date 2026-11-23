@@ -128,6 +128,25 @@ int main(void)
     one(buf,MZ_GS_PRIM,tri,&p,&s,&st);
     one(buf,MZ_GS_DTHE,0,&p,&s,&st);
     assert(mzGifRead64(buf+16)==1);
+    /* PRMODECONT determines which drawing context is active. A PRMODE
+     * write must not override PRIM when AC=1, or vice versa. */
+    init(&p,&s,&st);
+    p.dither=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_FRAME_1,2ULL<<24,&p,&s,&st);
+    one(buf,MZ_GS_FRAME_2,0,&p,&s,&st);
+    one(buf,MZ_GS_DIMX,0x12,&p,&s,&st);
+    one(buf,MZ_GS_PRIM,tri,&p,&s,&st);  /* 16-bit context 0 */
+    one(buf,MZ_GS_PRMODE,tri|(1ULL<<9),&p,&s,&st); /* 32-bit context 1 */
+    one(buf,MZ_GS_PRMODECONT,1,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==1);
+    one(buf,MZ_GS_PRMODECONT,0,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==0);
+    one(buf,MZ_GS_PRMODECONT,1,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==1);
+
     init(&p,&s,&st);
     assert(mzGifApplyFilters(buf,17,&p,&s,&st)==-1);
     assert(mzGifApplyFilters(NULL,32,&p,&s,&st)==-1);
