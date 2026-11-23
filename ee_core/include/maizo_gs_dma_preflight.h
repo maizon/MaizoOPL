@@ -201,48 +201,115 @@ done:
     return status;
 }
 /*
- * PATH2 bounded VIF1 DIRECT pre-submit (single standard 16-byte VIF code
- * header): three VIF NOP commands + DIRECT.IMM=GIF QWC. This is NOT a
- * parser for arbitrary VIF1 chains, UNPACK/MSCAL, DIRECTHL or VU programs.
- * Caller must be a cooperating renderer and own/synchronize its buffer.
+ * PATH2 cooperative VIF1 stream. The source is an owned, pre-DMA buffer.
+ *
+ * Accepts ONLY VIF NOP (0) and DIRECT (0x50) / DIRECTHL (0x51) commands.
+ * A stream may contain several independent, complete GIF transfers,
+ * preceded/separated/followed by VIF NOP words. Everything is validated
+ * in pass 0 before pass 1 changes a byte. Other VIF opcodes, interrupt
+ * handling, arbitrary DMA chains, VU microprograms and in-flight transfers
+ * are deliberately out of scope; this is NOT a universal game hook.
+ *
+ * The VIF command word immediately precedes its declared QWC*16 bytes
+ * of GIF data. All reads and writes use memcpy-safe GIF parsing.
  */
-static inline int mzGsDmaPatchVif1Direct(void *buffer, size_t len,
-                                        const mz_gs_gif_policy_t *policy,
-                                        const mz_gs_dma_guard_t *guard,
-                                        mz_gs_gif_state_t *state,
-                                        mz_gs_dma_metrics_t *metrics)
+static inline int mzGsDmaPatchVif1Stream(void *buffer, size_t len,
+                                         const mz_gs_gif_policy_t *policy,
+                                         const mz_gs_dma_guard_t *guard,
+                                         mz_gs_gif_state_t *state,
+                                         mz_gs_dma_metrics_t *metrics)
 {
+    static const mz_gs_gif_policy_t keep = {0, 0, 0, 0};
     uint8_t *bytes = (uint8_t *)buffer;
-    uint32_t codes[4];
-    mz_gs_gif_stats_t local;
-    size_t words;
-    int result;
+    mz_gs_gif_state_t snapshot, current;
+    mz_gs_gif_stats_t total;
+    int result = MZ_GS_DMA_OK;
+    int pass;
+
     if (!buffer || !policy || !guard || !state ||
-        len < 32u || len > (1u << 20) || (len & 15u)) {
+        !len || len > (1u << 20) || (len & 15u)) {
         mzGsDmaRecord(metrics, MZ_GS_DMA_BAD_PACKET, NULL);
         return MZ_GS_DMA_BAD_PACKET;
     }
-    if (guard->path != MZ_GS_PATH2_VIF1 || !guard->caller_owns_buffer ||
-        !guard->channel_idle || guard->source_is_scratchpad ||
-        guard->chain_tag_transfer || ((uintptr_t)buffer & 15u) ||
-        !mzGsDmaPolicyEnabled(policy)) {
+    if (guard->path != MZ_GS_PATH2_VIF1 ||
+        !guard->caller_owns_buffer || !guard->channel_idle ||
+        guard->source_is_scratchpad || guard->chain_tag_transfer ||
+        ((uintptr_t)buffer & 15u) || !mzGsDmaPolicyEnabled(policy)) {
         mzGsDmaRecord(metrics, MZ_GS_DMA_SKIPPED, NULL);
         return MZ_GS_DMA_SKIPPED;
     }
-    memcpy(codes, bytes, sizeof(codes));
-    words = (len - 16u) / 16u;
-    if (codes[0] || codes[1] || codes[2] ||
-        (codes[3] >> 24) != 0x50u ||
-        (size_t)(codes[3] & 0xffffu) != words || words == 0) {
-        mzGsDmaRecord(metrics, MZ_GS_DMA_UNSUPPORTED, NULL);
-        return MZ_GS_DMA_UNSUPPORTED;
+    snapshot = *state;
+    memset(&total, 0, sizeof(total));
+
+    for (pass = 0; pass < 2; ++pass) {
+        size_t at = 0;
+        unsigned int found = 0;
+        current = snapshot;
+        while (at < len) {
+            uint32_t code;
+            unsigned int opcode, qwc;
+            size_t payload;
+            mz_gs_gif_stats_t local;
+
+            /* Commands always occupy one 32-bit word. */
+            if (len - at < sizeof(code)) {
+                result = MZ_GS_DMA_BAD_PACKET;
+                goto done;
+            }
+            memcpy(&code, bytes + at, sizeof(code));
+            if (!code) {
+                at += sizeof(code);  /* VIF NOP padding */
+                continue;
+            }
+            opcode = (unsigned int)(code >> 24);
+            qwc = (unsigned int)(code & 0xffffu);
+            /* Interrupt bit, NUM and all unknown opcodes are rejected:
+             * never silently skip VIF commands or reinterpret data. */
+            if ((opcode != 0x50u && opcode != 0x51u) ||
+                (code & 0x00ff0000u) || !qwc) {
+                result = MZ_GS_DMA_UNSUPPORTED;
+                goto done;
+            }
+            if ((size_t)qwc > (len - at - 4u) / 16u) {
+                result = MZ_GS_DMA_BAD_PACKET;
+                goto done;
+            }
+            payload = (size_t)qwc * 16u;
+            memset(&local, 0, sizeof(local));
+            result = mzGifApplyFilters(bytes + at + 4u, payload,
+                           pass == 0 ? &keep : policy, &current, &local);
+            if (result != MZ_GS_DMA_OK) {
+                result = MZ_GS_DMA_BAD_PACKET;
+                goto done;
+            }
+            if (pass == 1)
+                mzGsDmaMergeStats(&total, &local);
+            at += 4u + payload;
+            found++;
+        }
+        if (!found) {
+            result = MZ_GS_DMA_UNSUPPORTED;
+            goto done;
+        }
     }
-    memset(&local, 0, sizeof(local));
-    result = mzGifApplyFilters(bytes + 16u, len - 16u,
-                               policy, state, &local);
+    *state = current;
+    result = MZ_GS_DMA_OK;
+done:
     mzGsDmaRecord(metrics, result,
-                  result == MZ_GS_DMA_OK ? &local : NULL);
+                  result == MZ_GS_DMA_OK ? &total : NULL);
     return result;
+}
+
+/* Backward-compatible API name; supports DIRECTHL and bounded multi-DIRECT
+ * streams as well as the original three-NOP + DIRECT layout. */
+static inline int mzGsDmaPatchVif1Direct(void *buffer, size_t len,
+                                         const mz_gs_gif_policy_t *policy,
+                                         const mz_gs_dma_guard_t *guard,
+                                         mz_gs_gif_state_t *state,
+                                         mz_gs_dma_metrics_t *metrics)
+{
+    return mzGsDmaPatchVif1Stream(buffer, len, policy, guard,
+                                  state, metrics);
 }
 
 #endif
