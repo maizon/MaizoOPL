@@ -17,7 +17,7 @@ int main(void)
     uint8_t data[256] __attribute__((aligned(16)));
     uint8_t snapshot[256];
     mz_gs_gif_policy_t policy = {0};
-    mz_gs_gif_state_t state = {{0}};
+    mz_gs_gif_state_t state = {0};
     mz_gs_dma_metrics_t metrics = {0};
     mz_gs_dma_guard_t guard = {MZ_GS_PATH3_GIF_DMA,1,1,0,0};
     const uint64_t tri=3ULL|(1ULL<<6);
