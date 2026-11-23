@@ -192,6 +192,14 @@ static inline int mzGsDmaPatchInlineChain(void *chain, size_t chain_bytes,
             status = MZ_GS_DMA_BAD_PACKET;
             goto done;
         }
+        /* Do not silently accept a second chain or arbitrary bytes after
+         * END. Unused caller-owned storage may contain zero padding only. */
+        while (at < chain_bytes) {
+            if (bytes[at++] != 0) {
+                status = MZ_GS_DMA_UNSUPPORTED;
+                goto done;
+            }
+        }
     }
     *state = probe;
     status = MZ_GS_DMA_OK;
