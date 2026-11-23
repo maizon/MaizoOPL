@@ -2,10 +2,13 @@
 #define MAIZO_STORE_TLS_H
 #include <stddef.h>
 
-/* HTTPS/TLS 1.2 transport for read-only MAIZO Store binary assets.
- * The certificate chain is deliberately NOT trusted for authenticating
- * files; integrity comes from the pinned SHA-256 in maizo_store.c.
- * Do not use this transport for passwords, cookies or other secrets. */
+/* Dedicated PS2 Ethernet TLS client.
+ * BearSSL verifies the server certificate, DNS hostname and validity
+ * against reviewed Mozilla CA roots, using RTC or NTP time.
+ * Fail-closed: no bypass on invalid certs or missing trusted time.
+ * Downloads additionally require matching SHA-256 compiled into OPL.
+ * The PS2 has limited hardware entropy; do not transmit private credentials.
+ */
 typedef struct maizo_store_tls maizo_store_tls_t;
 maizo_store_tls_t *maizoStoreTlsConnect(const char *host, unsigned short port);
 int maizoStoreTlsRead(maizo_store_tls_t *c, void *data, int size);

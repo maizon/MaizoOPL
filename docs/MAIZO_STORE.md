@@ -1,55 +1,74 @@
-# MAIZO Store — hospedagem gratuita, sem servidor próprio
+# MAIZO Store v2 — homebrews GitHub gratuitamente pela Ethernet do PS2
 
-**Destino principal já publicado em GitHub como arquivos estáticos.**
-O repositório público `maizon/MaizoOPLstore` é gratuito: GitHub Actions
-baixa ELFs de Releases, confere SHA-256, publica em `site/v1/apps/*.elf`
-e mantém `site/v1/catalog`. Não há Raspberry Pi, PC ligado, VPS, Railway,
-credenciais, assinatura ou serviço próprio de backend.
+## Hospedagem sem pagar
 
-URL pública do catálogo:
+O repositório público `maizon/MaizoOPLstore` hospeda **arquivos estáticos**.
+O GitHub Actions baixa os ELFs dos projetos originais via HTTPS, verifica
+tamanho e SHA-256 dos Releases, e gera `site/v1/catalog`,
+`site/v1/apps/*.elf` e `site/credits.json`.
+Sem Railway, VPS, PC ligado, celular, Raspberry Pi, domínio pago ou
+servidor particular. Alternativa de CDN pública: jsDelivr.
+
+Catálogo:
 https://raw.githubusercontent.com/maizon/MaizoOPLstore/main/site/v1/catalog
 
-Espelho jsDelivr:
-https://cdn.jsdelivr.net/gh/maizon/MaizoOPLstore@main/site/v1/catalog
+Créditos, autores e licenças:
+https://raw.githubusercontent.com/maizon/MaizoOPLstore/main/site/credits.json
 
-## PS2 com Ethernet e HTTPS
+Loja navegável no browser:
+https://cdn.jsdelivr.net/gh/maizon/MaizoOPLstore@main/site/index.html
 
-O MAIZO SUPREME agora tem código para cliente **HTTPS/TLS 1.2 via BearSSL**,
-que é compilado para PS2 na build; a primeira abertura usa automaticamente
-`raw.githubusercontent.com` na porta 443, sem configuração de host.
-Caso necessário, TRIÂNGULO permite outro host/porta.
-A rota do GitHub é construída automaticamente.
+## Segurança da comunicação
 
-A cadeia de certificados do servidor NÃO é validada por este cliente,
-pois não depende de relógio/CA do console. Isto significa que **a sessão
-TLS isoladamente NÃO autentica o servidor**. Em compensação cada ELF só
-é instalado quando seu comprimento exato e SHA-256 coincidem com valores
-**fixados no código do aplicativo**. Não enviar credenciais/dados pessoais
-pela conexão; catálogo e nomes são apenas informativos.
+Cliente PS2 desenvolvido com BearSSL TLS 1.2, SNI, validação de cadeia X.509,
+DNSName do servidor e validade do certificado. As âncoras de confiança vêm de
+um subconjunto **revisado** da lista Mozilla (certifi) em
+`thirdparty/maizo_store_roots.pem`; script `gen_maizo_store_roots.py`
+gera a estrutura BearSSL em C. Se o relógio do PS2 estiver incorreto, o cliente
+tenta NTP usando Ethernet. Sem hora utilizável e/ou certificado válido,
+o download é rejeitado. O app testa primeiro raw.githubusercontent.com:443,
+depois cdn.jsdelivr.net:443.
 
-A biblioteca BearSSL 0.6 é baixada durante a compilação de
-https://bearssl.org/bearssl-0.6.tar.gz e aceita somente o SHA-256
-6705bba1714961b41a728dfc5debbe348d2966c117649392f8c8139efc83ff14.
-Depende de curl e conexão HTTPS no ambiente de compilação.
+**Defesa adicional:** a lista local `maizo_store_catalog.h` contém o
+SHA-256 + tamanho **pré-aprovados no próprio ELF do OPL**. Um catálogo
+interceptado, modificado ou uma atualização inesperada de upstream
+não pode trocar silenciosamente o executável instalado. Exige uma nova
+build para aprovar novos hashes. Os ELF são testados como MIPS/EE e
+gravados em arquivo parcial, só substituído após a verificação.
 
-## Uso
+**Limites:** PS2 sem fonte de aleatoriedade criptográfica forte. A mistura de
+temporizadores para a entropia do TLS não equivale a /dev/urandom de sistemas
+modernos; não usar a conexão para passwords/credenciais. O tempo vindo de NTP
+pode ser adulterado na rede. O teste real em PS2 é indispensável.
+Não alegar segurança ou compatibilidade absoluta.
 
-Abra Configurações → Rede → MAIZO Store ou aperte L3 na aba Aplicativos.
-A loja exibe as aplicações gratuitas disponíveis; selecione uma e confirme.
-O ELF verificado vai para `mass0:/APPS/<id>/BOOT.ELF`, com `title.cfg`,
-reconhecido pela biblioteca APPS após atualização. Downloads parciais
-`DOWNLOAD.PART` são apagados; atualizações salvam `BOOT.BAK` durante
-a substituição. Há modo offline para visualizar itens conhecidos.
+## Interface
 
-## Limitações
+Na interface Supreme, Configurações → Rede → MAIZO Store. Atalho L3 na aba
+Aplicativos. Use D-pad para selecionar, A para instalar, B para voltar;
+quadrado atualiza a lista, triângulo edita host e porta.
+O catálogo permite navegar por múltiplas páginas e mostra o responsável
+por cada homebrew. Aplicativos instalados usam:
+`mass0:/APPS/<id>/BOOT.ELF`, com `title.cfg`, reconhecidos pelo
+scanner APPS do OPL. O arquivo original é protegido como `BOOT.BAK`
+durante atualização.
 
-- A conexão HTTPS do PS2 requer teste em console físico; CI apenas verifica
-  compilação e as rotinas SHA-256.
-- O HTTP da rede não aceita transferências chunked nem redirecionamentos:
-  apenas 200 + Content-Length com tamanho conhecido.
-- Se o GitHub mudar seu endereço, protocolo TLS ou formas de resposta, uma
-  nova build do cliente pode ser necessária.
-- Sem download genérico de executáveis, ISOs ou ROMs. Somente os ELFs
-  pré-aprovados e com SHA-256 compilado na aplicação.
-- Os drivers de jogo/PadEmu não são alterados.
-- GitHub Pages não é necessário, não há pagamentos nem conta Railway.
+## Créditos e redistribuição
+
+Todo aplicativo aponta para repositório, tag e arquivo oficial no
+`catalog_sources.json`, com créditos de autores e informações de licença.
+Projetos sem autorização de redistribuição claramente confirmada ficam
+**apenas como referência/links oficiais na loja web**, não como downloads
+espelhados. Crédits e avisos estão em `site/credits.json` e na UI web.
+
+**Cuidado:** algumas ports/engines exigem arquivos extras licenciados ou dados
+originais de jogos (Quake, Doom, POPSLoader). Esses dados NÃO são fornecidos;
+o ELF separado pode não funcionar sem eles.
+
+## Limites técnicos
+
+A compilação/testes automatizados não confirmam sucesso no hardware.
+A implementação recebe HTTP/1.1 com Content-Length, não suporta chunked
+nem HTTP redirects arbitrários. Se a hospedagem mudar o comportamento HTTP
+ou cadeia de certificados, a loja mostrará erro em vez de instalar
+executáveis não validados. Não há promessa de 99% sem validação física.
