@@ -1,0 +1,13 @@
+        .vu
+        .align 4
+        .global mzKickStart
+        .global mzKickEnd
+mzKickStart:
+        NOP                 iaddiu VI01,VI00,0
+        NOP                 NOP
+        NOP                 xgkick VI01
+        NOP[E]              NOP
+        NOP                 NOP
+        NOP                 NOP
+        .align 4
+mzKickEnd:

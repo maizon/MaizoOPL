@@ -1,0 +1,30 @@
+name: MAIZO GS hardware fixture
+on:
+  push:
+    branches: [feat/recovery-b-ingame-pro-safe]
+    paths: ['labs/maizo-gs/**', 'ee_core/include/maizo_gs*', '.github/workflows/maizo-gs-hardware-lab.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/ps2homebrew/ps2homebrew:main
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build EE and actual VU1 microprogram
+        run: make -C labs/maizo-gs all
+      - name: Build homebrew test disc
+        run: |
+          if ! command -v mkisofs >/dev/null; then
+            apt-get update
+            apt-get install -y genisoimage
+          fi
+          make -C labs/maizo-gs iso
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MAIZO-GS-HARDWARE-LAB
+          path: |
+            labs/maizo-gs/maizo-gs-lab.elf
+            labs/maizo-gs/MAIZO-GS-LAB.iso
+          if-no-files-found: error
