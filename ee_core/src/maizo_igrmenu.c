@@ -838,7 +838,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         if(!armed){
             /* Ignore the opening chord until its buttons are released.
              * Direction/confirm edges then start from a fresh sample. */
-            if(now&0x0f09u){prev=now;continue;}
+            if((now&0x0f09u)==0x0f09u){prev=now;continue;}
             armed=1;
             prev=now;
             continue;

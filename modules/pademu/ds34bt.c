@@ -1474,6 +1474,15 @@ void ds34bt_set_rumble(u8 lrum, u8 rrum, int port)
     SignalSema(bt_dev.hid_sema);
 }
 
+int ds34bt_igr_snapshot(int port,u16 *keys)
+{
+    int ok;
+    if(PollSema(bt_dev.hid_sema)<0)return 0;
+    ok=ds34pad[port].enabled&&(ds34pad[port].status&DS34BT_STATE_RUNNING);
+    if(ok)*keys=(u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8);
+    SignalSema(bt_dev.hid_sema);
+    return ok;
+}
 int ds34bt_get_data(u8 *dst, int size, int port)
 {
     int ret;

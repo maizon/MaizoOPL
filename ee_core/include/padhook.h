@@ -21,6 +21,9 @@
 
 int Install_PadOpen_Hook(u32 mem_start, u32 mem_end, int mode);
 void Install_IGR(void);
+#ifdef MAIZO_IGR_MENU
+extern volatile u32 MaizoPadMailbox[16];
+#endif
 void Remove_Padhook(void);
 void Reset_Padhook(void);
 void IGR_Exit(s32 exit_code);

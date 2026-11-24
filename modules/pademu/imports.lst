@@ -51,3 +51,8 @@ I_mips_memset
 I_mips_memcpy
 smsutils_IMPORTS_end
 #endif
+
+sifman_IMPORTS_start
+I_sceSifSetDma
+I_sceSifDmaStat
+sifman_IMPORTS_end

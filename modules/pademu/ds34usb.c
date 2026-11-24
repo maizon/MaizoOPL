@@ -791,6 +791,16 @@ static void hid_copy_snapshot(void *dst, int size, int port)
     mips_memcpy(dst, &report, size);
 }
 
+/* Non-destructive copy, no URB or game latch consumption. */
+int ds34usb_igr_snapshot(int port,u16 *keys)
+{
+    int old,ok;
+    CpuSuspendIntr(&old);
+    ok=ds34pad[port].enabled&&(ds34pad[port].status&DS34USB_STATE_RUNNING);
+    if(ok)*keys=(u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8);
+    CpuResumeIntr(old);
+    return ok;
+}
 int ds34usb_get_data(u8 *dst, int size, int port)
 {
     int ret = 0;

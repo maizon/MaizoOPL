@@ -16,6 +16,9 @@
 #include "util.h"
 #include "syshook.h"
 #include "coreconfig.h"
+#ifdef MAIZO_IGR_MENU
+#include "padhook.h"
+#endif
 
 extern int _iop_reboot_count;
 static int imgdrv_offset_ioprpimg = 0;
@@ -197,11 +200,25 @@ int New_Reset_Iop(const char *arg, int arglen)
 
 #ifdef PADEMU
     if (iop_reboot_count >= 2 && config->EnablePadEmuOp) {
+#ifdef MAIZO_IGR_MENU
+        char args_for_pademu[67];
+#else
         char args_for_pademu[63];
+#endif
         memcpy(args_for_pademu, &config->PadEmuSettings, 4);
         memcpy(args_for_pademu + 4, &config->PadMacroSettings, 4);
         memcpy(args_for_pademu + 8, config->MaizoBtPair, 23);
         memcpy(args_for_pademu + 31, config->MaizoInputProfiles, 32);
+#ifdef MAIZO_IGR_MENU
+        u32 address=0;
+        if(config->EnableMaizoIgrMenu){
+            volatile u32 *mb=(volatile u32 *)UNCACHED_SEG(MaizoPadMailbox);
+            mb[0]=mb[1]=mb[2]=mb[3]=0;
+            address=(u32)MaizoPadMailbox&0x1fffffffu;
+            args_for_pademu[2]|=0x80;
+        }
+        memcpy(args_for_pademu+63,&address,4);
+#endif
         LoadOPLModule(OPL_MODULE_ID_PADEMU, 0, sizeof(args_for_pademu), args_for_pademu);
     }
 #endif

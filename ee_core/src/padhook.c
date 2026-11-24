@@ -32,6 +32,7 @@
 #ifdef MAIZO_IGR_MENU
 #include "maizo_igrmenu.h"
 #include "maizo_gs_probe.h"
+#include "maizo_igr_input.h"
 #endif
 #ifdef IGS
 #include "igs_api.h"
@@ -61,17 +62,20 @@ static int IGR_Thread_ID = -1;
 static u32 MaizoIgrSuspended[8];
 static u32 MaizoIgrIntcMask, MaizoIgrDmacMask;
 static int MaizoIgrWaitRelease;
+/* Dedicated cache line: IOP never targets a game-owned buffer. */
+volatile u32 MaizoPadMailbox[16] __attribute__((aligned(64)));
+static u8 *mzPadSlots[8];
+static u32 mzPadFrames[9],mzPadEpoch;
+static u8 mzPadAge[9];
 
 /* Padman updates this area asynchronously via SIF DMA, not EE code.
  * UNCACHED alone does not stop LTO from caching ordinary C loads. */
-static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons, u32 *frame)
+static int mzPadSample(const u8 *addr,u16 *buttons,u32 *frame)
 {
-    const volatile u8 *b;
+    const volatile u8 *b=(const volatile u8 *)UNCACHED_SEG(addr);
     u32 best=0;
-    unsigned count=1,i,valid=0;
-    if(!Pad_Data.pad_buf)return 0;
-    b=(const volatile u8 *)UNCACHED_SEG(Pad_Data.pad_buf);
-    if(Pad_Data.libpad==IGR_LIBPAD)count=2;
+    unsigned count=Pad_Data.libpad==IGR_LIBPAD?2:1,i,valid=0;
+    if(!addr)return 0;
     for(i=0;i<count;i++){
         u32 f=*(const volatile u32 *)(b+Pad_Data.pos_frame);
         u8 state=b[Pad_Data.pos_state];
@@ -84,6 +88,35 @@ static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons, u32 *frame)
         b+=Pad_Data.libversion>=0x0160?128:64;
     }
     *frame=best;
+    return valid;
+}
+static int mzPadFresh(unsigned i,u32 f)
+{
+    if(f!=mzPadFrames[i]){mzPadFrames[i]=f;mzPadAge[i]=0;mzPadEpoch++;}
+    else if(mzPadAge[i]<255)mzPadAge[i]++;
+    return mzPadAge[i]<60;
+}
+static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons,u32 *frame)
+{
+    const volatile u32 *mb=(const volatile u32 *)UNCACHED_SEG(MaizoPadMailbox);
+    uint32_t p[4];
+    unsigned k,valid=0,keys=0;
+    /* Prefer independent live PadEmu input, then all opened game slots.
+     * A stale/disconnected slot cannot monopolize navigation. */
+    for(k=0;k<4;k++)p[k]=mb[k];
+    if(p[0]==mb[0]&&mzPadPacketOK(p)&&mzPadFresh(8,p[0])){
+        for(k=0;k<4;k++)if(p[3]&(1u<<k)){
+            unsigned v=(p[1+k/2]>>((k&1u)*16u))&65535u;
+            keys=mzPadPick(keys,v);valid=1;
+        }
+    }
+    for(k=0;k<8;k++){
+        u16 v;u32 f;
+        if(mzPadSample(mzPadSlots[k],&v,&f)&&mzPadFresh(k,f)){
+            keys=mzPadPick(keys,v);valid=1;
+        }
+    }
+    *buttons=(u16)keys;*frame=mzPadEpoch;
     return valid;
 }
 static void maizoIgrHold(void)
@@ -303,7 +336,11 @@ maizo_igr_poll_again:
                             *(vu32 *)0x1000a000); /* D2_CHCR */
         }
 #endif
+#ifdef MAIZO_IGR_MENU
+        if (1) {
+#else
         if (Pad_Data.pad_buf != NULL) {
+#endif
             // Read through the uncached segment to obtain live pad data.
 #ifdef MAIZO_IGR_MENU
             /* Use the same coherent bank for opening, release and
@@ -312,7 +349,7 @@ maizo_igr_poll_again:
             u16 keys;
             u32 frame;
             if(maizoIgrButtons(&keys,&frame)){
-                pad_pos_state=Pad_Data.libpad==IGR_LIBPAD?IGR_PAD_STABLE_V1:IGR_PAD_STABLE_V2;
+                pad_pos_state=Pad_Data.libpad==IGR_LIBPAD2?IGR_PAD_STABLE_V2:IGR_PAD_STABLE_V1;
                 pad_pos_frame=(u8)frame;
                 pad_pos_combo1=(u8)~(keys>>8);
                 pad_pos_combo2=(u8)~keys;
@@ -339,10 +376,14 @@ maizo_igr_poll_again:
 #endif
 
             // Check for the stable state used by the detected libpad.
+#ifdef MAIZO_IGR_MENU
+            if (pad_pos_state) {
+#else
             if (((Pad_Data.libpad == IGR_LIBPAD) &&
                  (pad_pos_state == IGR_PAD_STABLE_V1)) ||
                 ((Pad_Data.libpad == IGR_LIBPAD2) &&
                  (pad_pos_state == IGR_PAD_STABLE_V2))) {
+#endif
 
                 /*
                  * Check periodically whether the captured pad buffer is
@@ -462,7 +503,7 @@ maizo_igr_poll_again:
              * reaches an idle point; pausing first can freeze a
              * half-consumed VIF packet forever. Up to 64 alarms. */
             int retries,attempt;
-            for(attempt=0;attempt<8;attempt++){
+            for(attempt=0;attempt<32;attempt++){
                 /* Validate the display/mode first, NOT simultaneous
                  * DMA idleness while the game is producing commands. */
                 if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE)){
@@ -471,11 +512,11 @@ maizo_igr_poll_again:
                     /* Stop new EE submissions, then give already queued
                      * hardware work a bounded opportunity to drain.
                      * If it needs an EE worker/IRQ, release and retry. */
-                    for(retries=suspended?0:4;retries<4;retries++){
+                    for(retries=suspended?0:8;retries<8;retries++){
                         if(maizoIGR_Preflight(MaizoIgrDmacMask))break;
                         maizoIgrYield();
                     }
-                    if(retries<4&&maizoIgrPadReady()&&
+                    if(retries<8&&maizoIgrPadReady()&&
                        maizoIGR_Preflight(MaizoIgrDmacMask)){
                         choice=maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield,MaizoIgrDmacMask);
                         maizoIgrUnhold();
@@ -870,6 +911,9 @@ static void Set_libpad_Params(void *addr)
 void Install_IGR(void)
 {
     ee_thread_t thread_param = {0};
+#ifdef MAIZO_IGR_MENU
+    if(IGR_Thread_ID>=0)return;
+#endif
 
     // Reset power-button state.
     Power_Button.press = 0;
@@ -877,6 +921,14 @@ void Install_IGR(void)
 
     // The pad-open hook will supply the live pad-buffer address.
     Pad_Data.pad_buf = NULL;
+#ifdef MAIZO_IGR_MENU
+    if(IGR_Thread_ID<0){
+        unsigned j;
+        for(j=0;j<8;j++)mzPadSlots[j]=0;
+        for(j=0;j<9;j++){mzPadFrames[j]=0;mzPadAge[j]=255;}
+        mzPadEpoch=0;
+    }
+#endif
 
     // Reset runtime IGR state.
     Pad_Data.vb_count = 0;
@@ -945,11 +997,20 @@ static int Hook_scePadPortOpen(int port, int slot, void *addr)
     ret = scePadPortOpen(port, slot, addr);
 
     // Install IGR with libpad1 parameters
+#ifdef MAIZO_IGR_MENU
+    if (ret>0 && (unsigned)port<2 && (unsigned)slot<4 && addr) {
+        if(IGR_Thread_ID<0)Install_IGR();
+        Set_libpad_Params(addr);
+        mzPadSlots[port*4+slot]=addr;
+        mzPadAge[port*4+slot]=255;
+    }
+#else
     if (port == 0 && slot == 0) {
         DPRINTF("IGR: Hook_scePadPortOpen - installing IGR...\n");
         Install_IGR();
         Set_libpad_Params(addr);
     }
+#endif
 
     return ret;
 }
@@ -967,10 +1028,19 @@ static int Hook_scePad2CreateSocket(pad2socketparam_t *SocketParam, void *addr)
     ret = scePad2CreateSocket(SocketParam, addr);
 
     // Install IGR with libpad2 parameters
+#ifdef MAIZO_IGR_MENU
+    if(addr && (!SocketParam || ((unsigned)SocketParam->port<2 && (unsigned)SocketParam->slot<4))){
+        unsigned k=SocketParam?SocketParam->port*4+SocketParam->slot:0;
+        if(IGR_Thread_ID<0)Install_IGR();
+        Set_libpad_Params(addr);
+        mzPadSlots[k]=addr;mzPadAge[k]=255;
+    }
+#else
     if ((SocketParam == NULL) || (SocketParam->port == 0 && SocketParam->slot == 0)) {
         Install_IGR();
         Set_libpad_Params(addr);
     }
+#endif
 
     return ret;
 }

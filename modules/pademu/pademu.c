@@ -9,6 +9,7 @@
 #include "pademu.h"
 #include "padmacro.h"
 #include "maizo_sio2_guard.h"
+#include "../../ee_core/include/maizo_igr_input.h"
 
 #ifdef BT
 
@@ -73,6 +74,15 @@ pad_status_t pad[MAX_PORTS];
 static u8 pad_inited = 0;
 static u8 pad_enable = 0;
 static u8 pad_options = 0;
+static u32 mzInputAddress;
+static int mzInputThread=-1;
+#ifdef BT
+extern int ds34bt_igr_snapshot(int port,u16 *keys);
+#define PAD_IGR_SNAPSHOT ds34bt_igr_snapshot
+#else
+extern int ds34usb_igr_snapshot(int port,u16 *keys);
+#define PAD_IGR_SNAPSHOT ds34usb_igr_snapshot
+#endif
 
 static u8 mtap_enabled = 0;
 static u8 mtap_inited = 0;
@@ -97,6 +107,33 @@ void pademu_mtap(sio2_transfer_data_t *td);
 
 extern struct irx_export_table _exp_pademu;
 
+static void mzInputWorker(void *arg)
+{
+    static uint32_t packet[4] __attribute__((aligned(16)));
+    unsigned seq=0;
+    int dma=0;
+    (void)arg;
+    while(1){
+        if(pad_inited && (!dma || sceSifDmaStat(dma)<0)){
+            unsigned valid=0,k;
+            packet[1]=packet[2]=0;
+            for(k=0;k<4;k++){
+                u16 keys;
+                if(PAD_IGR_SNAPSHOT(k,&keys)){
+                    valid|=1u<<k;
+                    packet[1+k/2]|=(uint32_t)keys<<((k&1u)*16u);
+                }
+            }
+            packet[0]=++seq;if(!seq)packet[0]=++seq;
+            packet[3]=mzPadCheck(packet[0],packet[1],packet[2],valid);
+            SifDmaTransfer_t transfer;
+            transfer.src=packet;transfer.dest=(void *)mzInputAddress;
+            transfer.size=16;transfer.attr=0;
+            dma=sceSifSetDma(&transfer,1);
+        }
+        DelayThread(16000);
+    }
+}
 int _start(int argc, char *argv[])
 {
     u8 pad_vibration = 0x03;
@@ -109,6 +146,10 @@ int _start(int argc, char *argv[])
         mtap_enabled = (u8)argv[1][2] & 1;
         mtap_port = ((u8)argv[1][2] >> 1) & 1;
         pad_options = ((u8)argv[1][2] >> 2) & 1;
+        if((u8)argv[1][2]&0x80){
+            mips_memcpy(&mzInputAddress,argv[1]+63,4);
+            if(mzInputAddress<0x84000u||mzInputAddress>0x9b800u-64u||(mzInputAddress&63u))mzInputAddress=0;
+        }
         u32 macro_settings = 0xAB;
         mips_memcpy(&macro_settings, argv[1] + 4, 4);
         padMacroInit(macro_settings);
@@ -138,12 +179,19 @@ int _start(int argc, char *argv[])
         ds34usb_set_profiles((const u8 *)argv[1] + 31);
 #endif
     pademu_setup(pad_enable, pad_vibration);
+    if(mzInputAddress){
+        iop_thread_t th;
+        th.attr=TH_C;th.thread=mzInputWorker;th.priority=43;th.stacksize=0x800;th.option=0;
+        mzInputThread=CreateThread(&th);
+        if(mzInputThread>0&&StartThread(mzInputThread,NULL)<0){DeleteThread(mzInputThread);mzInputThread=-1;}
+    }
 
     return MODULE_RESIDENT_END;
 }
 
 void _exit(int mode)
 {
+    if(mzInputThread>0){TerminateThread(mzInputThread);DeleteThread(mzInputThread);mzInputThread=-1;}
     PAD_RESET();
 }
 
