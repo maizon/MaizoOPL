@@ -138,14 +138,14 @@ static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,in
     if(p[0]==mb[0]&&mzPadPacketOK(p)&&mzPadFresh(8,p[0])){
         for(k=0;k<4;k++)if(p[3]&(1u<<k)){
             unsigned v=(p[1+k/2]>>((k&1u)*16u))&65535u;
-            keys=menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
+            keys=menu==2?(keys|v):menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
             valid=1;
         }
     }
     for(k=0;k<8;k++){
         u16 v;u32 f;
         if(mzPadSample(mzPadSlots[k],&v,&f,menu)&&mzPadFresh(k,f)){
-            keys=menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
+            keys=menu==2?(keys|v):menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
             valid=1;
         }
     }
@@ -672,6 +672,21 @@ maizo_igr_poll_again:
                             if(maizoIgrPadReady() &&
                                maizoIGR_Preflight(MaizoIgrDmacMask)){
                                 choice=maizoIGR_MenuRun(maizoIgrMenuButtons,maizoIgrYield,MaizoIgrDmacMask);
+#ifdef MAIZO_IGR_RESTORE
+                                /* Rollback may outlast the original key release.
+                                 * Require two new neutral samples from the merged
+                                 * raw inputs, but never hold a dead pad forever. */
+                                if(choice==MAIZO_IGR_RESUME || choice==MAIZO_IGR_UNAVAILABLE){
+                                    u32 last=~0u;unsigned neutral=0;
+                                    for(unsigned t=0;t<60u&&neutral<2u;t++){
+                                        u16 keys;u32 frame;
+                                        if(mzIgrReadButtons(&keys,&frame,2)&&frame!=last){
+                                            last=frame;neutral=keys?0:neutral+1u;
+                                        }
+                                        if(neutral<2u)maizoIgrYield();
+                                    }
+                                }
+#endif
                                 /* Finish recorder teardown before a restored
                                  * graphics IRQ can enter the old vector. */
                                 if(!config->EnableGSMOp)MaizoGsMonitorEnd(0);

@@ -4,6 +4,7 @@
  * even if the EE stops sending commands. */
 #include "irx_imports.h"
 #include "maizo_restore.h"
+#include "maizo_restore_codec.h"
 #include "cdvdman_opl.h"
 #include <spu2regs.h>
 IRX_ID("maizo_restore",1,0);
@@ -11,8 +12,15 @@ static volatile mzr_req req;
 static mzr_ack ack;
 static u32 eeAck,eeLine,bufSize,written;
 static int sealed;
-static u8 *buf;
+/* On-demand compact pages; dynamic storage is never a DMA target. */
+#define MZR_SLAB 4096u
+#define MZR_SLABS ((MZR_MAX+MZR_SLAB-1u)/MZR_SLAB)
+static u8 *slab[MZR_SLABS];
+static u32 stored,lineBytes,rows;
+static struct {u32 offset,hash;u16 size;u8 compressed;} row[MZR_ROWS];
 static u8 upload[MZR_LINE] __attribute__((aligned(16)));
+static u8 packed[MZR_LINE] __attribute__((aligned(16)));
+static u8 download[MZR_LINE] __attribute__((aligned(16)));
 static u16 vol[2][2];
 static unsigned muteMask;
 static int hush,dmaBusy;
@@ -46,8 +54,9 @@ static void silence(void)
 }
 static void release(void)
 {
-    if(buf && !dmaBusy)FreeSysMemory(buf);
-    if(!dmaBusy){buf=0;bufSize=written=0;sealed=0;ack.buf=0;}
+    if(dmaBusy)return;
+    for(unsigned i=0;i<MZR_SLABS;i++)if(slab[i]){FreeSysMemory(slab[i]);slab[i]=0;}
+    bufSize=written=stored=lineBytes=rows=0;sealed=0;ack.buf=0;
 }
 static int send(void *src,u32 dst,u32 len)
 {
@@ -67,6 +76,33 @@ static int send(void *src,u32 dst,u32 len)
     }
     return 0; /* retain DMA backing storage until hardware completes */
 }
+static int storeBytes(const u8 *src,u32 n)
+{
+    if(n>MZR_MAX-stored)return 0;
+    u32 at=stored;
+    while(n){
+        unsigned index=at/MZR_SLAB,off=at%MZR_SLAB,take=MZR_SLAB-off;
+        if(index>=MZR_SLABS)return 0;
+        if(take>n)take=n;
+        if(!slab[index])slab[index]=AllocSysMemory(ALLOC_FIRST,MZR_SLAB,0);
+        if(!slab[index])return 0;
+        for(unsigned j=0;j<take;j++)slab[index][off+j]=src[j];
+        src+=take;at+=take;n-=take;
+    }
+    stored=at;return 1;
+}
+static int loadBytes(u32 at,u8 *dst,u32 n)
+{
+    if(at>stored||n>stored-at)return 0;
+    while(n){
+        unsigned index=at/MZR_SLAB,off=at%MZR_SLAB,take=MZR_SLAB-off;
+        if(index>=MZR_SLABS||!slab[index])return 0;
+        if(take>n)take=n;
+        for(unsigned j=0;j<take;j++)dst[j]=slab[index][off+j];
+        dst+=take;at+=take;n-=take;
+    }
+    return 1;
+}
 static int execute(const mzr_req *r)
 {
     switch(r->op){
@@ -74,27 +110,41 @@ static int execute(const mzr_req *r)
         if(sealed || dmaBusy)return -1;
         release();
         if(!r->len || r->len>MZR_MAX || (r->len&15u))return -1;
-        buf=AllocSysMemory(ALLOC_FIRST,r->len,0);
-        if(!buf)return -1;
         bufSize=r->len;return 0;
-    case MZR_WRITE:
-        /* DMA only targets permanent upload storage, never a buffer
-         * which may be freed by the inactivity lease. */
-        if(!buf || sealed || !mzrRange(r->off,r->len,bufSize) ||
+    case MZR_WRITE: {
+        if(!bufSize || sealed || !mzrRange(r->off,r->len,bufSize) ||
            !mzrAppendOK(r->off,r->len,written,bufSize) ||
-           mzrHash(upload,r->len)!=r->pad[0])return -1;
-        for(u32 j=0;j<r->len;j++)buf[r->off+j]=upload[j];
-        if(mzrHash(buf+r->off,r->len)!=r->pad[0])return -1;
-        written+=r->len;return r->len;
-    case MZR_READ:
-        if(!buf || !sealed || r->ee!=eeLine || !mzrRange(r->off,r->len,bufSize))return -1;
-        return send(buf+r->off,eeLine,r->len)?(int)r->len:-1;
+           mzrHash(upload,r->len)!=r->pad[0] || rows>=MZR_ROWS)return -1;
+        if(!lineBytes)lineBytes=r->len;
+        if(lineBytes!=r->len || bufSize%lineBytes)return -1;
+        unsigned encoded=mzrEncode(upload,r->len,packed,sizeof(packed));
+        if(encoded && (!mzrDecode(packed,encoded,download,r->len) ||
+                       mzrHash(download,r->len)!=r->pad[0]))return -1;
+        unsigned n=encoded?encoded:r->len;
+        row[rows].offset=stored;row[rows].hash=r->pad[0];
+        row[rows].size=n;row[rows].compressed=!!encoded;
+        if(!storeBytes(encoded?packed:upload,n))return -1;
+        rows++;written+=r->len;return r->len;
+    }
+    case MZR_READ: {
+        if(!bufSize || !sealed || r->ee!=eeLine || !mzrRange(r->off,r->len,bufSize) ||
+           !lineBytes || r->len!=lineBytes || r->off%lineBytes)return -1;
+        unsigned index=r->off/lineBytes;
+        if(index>=rows || !row[index].size || row[index].size>r->len)return -1;
+        if(row[index].compressed){
+            if(!loadBytes(row[index].offset,packed,row[index].size) ||
+               !mzrDecode(packed,row[index].size,download,r->len))return -1;
+        }else if(row[index].size!=r->len ||
+                 !loadBytes(row[index].offset,download,r->len))return -1;
+        if(mzrHash(download,r->len)!=row[index].hash)return -1;
+        return send(download,eeLine,r->len)?(int)r->len:-1;
+    }
     case MZR_END: wake();release();return 0;
     case MZR_HUSH:
-        if(!buf || sealed || !mzrSealable(written,bufSize))return -1;
+        if(!bufSize || sealed || !mzrSealable(written,bufSize))return -1;
         sealed=1;silence();return 0;
     case MZR_WAKE: wake();release();return 0;
-    case MZR_KEEP: return buf?0:-1;
+    case MZR_KEEP: return bufSize?0:-1;
     case MZR_PING: return 0x4d5a5253;
     case MZR_PROBE: {
         int param=0;
@@ -127,13 +177,13 @@ static void worker(void *arg)
                 ack.result=execute(&r);ack.seq=seen;
                 if(!send(&ack,eeAck,sizeof(ack))){pendingAck=1;wake();}
             }
-        }else if((buf || hush) && ++idle>=20000u){
+        }else if((bufSize || hush) && ++idle>=20000u){
             /* A sealed backup is the only copy of overwritten pixels.
              * Never free it behind the EE's back. Audio still wakes on
              * timeout. Explicit WAKE/END or IOP reset releases storage. */
             wake();if(!sealed)release();idle=0;
         }
-        DelayThread((buf || hush || dmaBusy)?500:20000);
+        DelayThread((bufSize || hush || dmaBusy)?500:20000);
     }
 }
 static u32 hex(const char *s)

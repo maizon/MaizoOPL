@@ -717,3 +717,20 @@ must pass before releasing backup, including cooperative full VRAM.
 No changes to LIVE, no FreezeAnalyzer. Hidden GS/SPU2 state, active
 MFIFO checkpoint, universal 4 MiB storage, universal input isolation and
 hardware failure recovery remain open. Hardware tests still required.
+
+### Compact IOP snapshot and completed GIF observer
+Panel backup now uses lossless word RLE with raw fallback, packed into
+on-demand 4 KiB IOP slabs. No worst-case contiguous allocation. Each
+encoded row is decoded and checked before commit, then checked again on
+read. EE also verifies the original hash. DMA uses permanent aligned
+upload/download staging, not the slabs. Incompressible data may need the
+same payload plus slab rounding and metadata. Allocation failure still
+prevents drawing. Cooperative renderer clients can observe ordered,
+completed GIF A+D writes from decoded PATH1/2/3 streams; invalid or
+incomplete streams invalidate the shadow. This is not a universal
+commercial hook, does not decode executing VU programs, and does not
+capture hidden state. After rollback, wait for two fresh neutral merged
+raw pad samples with a finite bound; no modification of title pad buffers.
+This reduces input carryover, not total isolation. No LIVE or FreezeAnalyzer.
+Active MFIFO, universal thread classification, full GS/VIF/VU/SPU state,
+universal 4 MiB storage and hardware recovery remain unresolved.

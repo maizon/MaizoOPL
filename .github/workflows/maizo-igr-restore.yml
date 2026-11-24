@@ -22,6 +22,10 @@ jobs:
           /tmp/mzr-guard
           cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_sync_test.c -o /tmp/mzr-sync
           /tmp/mzr-sync
+          cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_codec_test.c -o /tmp/mzr-codec
+          /tmp/mzr-codec
+          cc -std=c99 -Wall -Wextra -Werror tests/maizo_gs_completed_gif_test.c -o /tmp/mzr-gif
+          /tmp/mzr-gif
           cc -std=gnu99 -Wall -Wextra -Iee_core/include tests/maizo_gs_client_test.c -o /tmp/mzr-checkpoint
           /tmp/mzr-checkpoint
           python3 tests/maizo_igr_boot_isolation_test.py

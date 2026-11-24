@@ -109,7 +109,7 @@ print("Transaction: staged cheats, reversible thread hold, GS drain and empty MF
 transport=read("ee_core/src/maizo_restore.c")
 service=read("modules/iopcore/maizo_restore/maizo_restore.c")
 assert "dma(line,upload,n)" in transport and "dma(line,buf+off,n)" not in transport
-assert "case MZR_WRITE:" in service and "buf[r->off+j]=upload[j]" in service
+assert "case MZR_WRITE:" in service and "storeBytes(encoded?packed:upload,n)" in service
 assert "mzOvlHeaderOK(&overlay)" in read("src/system.c") and "overlay.run>=fileEnd" in read("src/system.c")
 assert "ModuleStorageEnd=(void *)MZ_OVL_END" in system
 assert "maizo_overlay_stub.o" in read("ee_core/Makefile")
@@ -160,3 +160,8 @@ assert "pendingAck && seq==seen" in service and "++ackRetries>2u" in service
 assert "mzrSameThread(&x,&mzHeldIdentity[i])" in pad
 assert run.index("if(!mzOverlayDrain()){retain=1;") < run.index("mzRestoreEnd(retain)")
 print("Restore: actual CDVD/NCMD idle probe, bounded ACK retry, thread identity and final drain retention PASS")
+
+assert "send(download,eeLine,r->len)" in service
+assert "mzrHash(download,r->len)!=row[index].hash" in service
+assert "neutral<2u" in pad and "mzIgrReadButtons(&keys,&frame,2)" in pad
+print("Compressed snapshot staging and bounded raw input release PASS")

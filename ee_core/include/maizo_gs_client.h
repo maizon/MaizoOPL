@@ -7,6 +7,7 @@
 #include "maizo_gs_shadow.h"
 #include "maizo_gs_scanlines.h"
 #include "maizo_ee_layout.h"
+#include "maizo_gs_completed_gif.h"
 
 static inline int mzGsClientBindRange(void *base,size_t bytes)
 {
@@ -58,6 +59,17 @@ static inline int mzGsClientCheckpointRequested(void)
 static inline int mzGsClientCheckpointFault(void)
 {
     return mzGsShared && mzGsShared->checkpoint.fault;
+}
+/* Caller supplies actual GIF bytes after DIRECT/XGKICK decoding and
+ * ordered completion, not merely a submitted DMA source. */
+static inline int mzGsClientObserveCompleted(unsigned path,mz_gs_register_shadow_t *shadow,
+                                              const void *gif,size_t bytes)
+{
+    if(!shadow)return 0;
+    if(path!=MZ_GS_PATH1_XGKICK && path!=MZ_GS_PATH2_VIF1 && path!=MZ_GS_PATH3_GIF_DMA){
+        mzCompletedInvalidate(shadow);return 0;
+    }
+    return mzGsObserveCompletedGif(shadow,gif,bytes);
 }
 static inline int mzGsClientCheckpointPark(const mz_gs_register_shadow_t *shadow)
 {
