@@ -95,6 +95,9 @@ static int mzOverlayPath;
 static u32 mzPendingLiveMask;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
+#ifdef MAIZO_IGR_LIVE
+static unsigned mzLiveVideoStatus; /* 0 idle, 1 queued, 2 rejected */
+#endif
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
 static int mzSkyMenu,mzSkyFogMenu,mzSkyReloadMenu;
 #endif
@@ -252,16 +255,28 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
 #else
     mzLine(4,8,3,"MAIZO IN-GAME PRO");
 #endif
+#ifdef MAIZO_IGR_LIVE
+    mzLine(15,8,1,mzLiveVideoStatus==1?"VIDEO: AGUARDE":
+        mzLiveVideoStatus==2?"VIDEO: N/D":"------------------");
+#else
     mzLine(15,8,1,"------------------");
+#endif
     if(s->page==MZ_PAGE_MAIN){
         for(i=0;i<count;i++)mzLine(25+i*10,11,4,mainNames[i]);
     }else if(s->page==MZ_PAGE_VIDEO){
         if(!s->video_caps){
             static const char *const labels[9]={
+#ifdef MAIZO_IGR_LIVE
+                "STRETCH X: N/D","STRETCH Y: N/D",
+                "POS. X: N/D","POS. Y: N/D",
+                "PRESET: N/D","FIELD: N/D",
+                "FILTROS >","RESTAURAR: N/D","VOLTAR"
+#else
                 "STRETCH X: GSM OFF","STRETCH Y: GSM OFF",
                 "POS. X: GSM OFF","POS. Y: GSM OFF",
                 "PRESET: GSM OFF","FIELD: GSM OFF",
                 "FILTROS >","RESTAURAR: GSM OFF","VOLTAR"
+#endif
             };
             for(i=0;i<9;i++)
                 if(i==5 && s->native_field_caps)
@@ -1190,11 +1205,112 @@ out:
     if(intr)EI();
     return ok;
 }
+/* CRTC changes are independent of the GIF drawing packet, but use the
+ * same conservative idle sample. Require real recorder provenance; a
+ * disabled circuit must also have been observed before using a filter
+ * that rewrites both circuit registers. */
+enum { MZ_LIVE_GEOMETRY=1, MZ_LIVE_FIELD=2, MZ_LIVE_FILTER=4, MZ_LIVE_BRIDGE=8 };
+static unsigned mzLiveVideoPending,mzLiveVideoAge;
+static maizo_igr_state_t mzLiveBefore;
+static int mzLiveVideoObserved(int both)
+{
+    const u64 *r=GSMSourceGSRegs;
+    mz_igr_frame_t frame;
+    return MaizoGsMonitorOnly && mzLiveSeenOK((u32)r[0],MaizoGsSeen,both) &&
+        mzIgrMonitorFrame(&frame,r[0],r[7],r[9],r[8],r[10],r[2],0);
+}
+static void mzLiveVideoCaps(void)
+{
+    int intr=DI();
+    int known=mzLiveVideoObserved(0);
+    mzState.video_caps=known && !MaizoGsFilterMode && !MaizoGs480iMode &&
+        mzNativeCaps()?MZ_VIDEO_NATIVE:MZ_VIDEO_NONE;
+    mzState.native_field_caps=known && !MaizoGs480iMode &&
+        (GSMSourceGSRegs[2]&1u) && GSMSourceSetGsCrt[0]==1 &&
+        (GSMSourceSetGsCrt[1]==2||GSMSourceSetGsCrt[1]==3);
+    mzState.filter_caps=known && mzLiveVideoObserved(1) &&
+        !MaizoNativeMask && !MaizoGs480iMode?mzFilterCapabilities():0;
+    mzState.frame480i_caps=known && !MaizoNativeMask && !MaizoGsFilterMode &&
+        mzFrame480iCaps();
+    if(!mzLiveVideoPending){
+        if(!MaizoNativeMask)mzState.width=mzState.height=mzState.x=mzState.y=0;
+        mzState.field_fix=!!MaizoNativeFieldInvert;
+        mzState.frame480i_mode=!!MaizoGs480iArmed;
+        mzState.filter_mode=(int)MaizoGsFilterMode;
+    }
+    if(intr)EI();
+}
+/* 1 applied, -1 unsupported, 0 retry next sleeping slice. No waits,
+ * no transfer/DMA state changes and no game thread suspension.
+ * Temporarily exclude IRQs for a small CRTC transaction only. The
+ * breakpoint is restored before the previous IRQ state is restored. */
+static int mzLiveVideoTry(void)
+{
+    int intr=DI(),ret=0;
+    u32 old;
+    unsigned pending=mzLiveVideoPending;
+    if(!mzLiveVideoObserved(!!(pending&MZ_LIVE_FILTER)))goto out;
+    if(!mzLivePathOK(*MZ_D_CTRL,*MZ_D_ENABLER,*MZ_D1_CHCR,*MZ_D2_CHCR,
+                    *MZ_VIF1_STAT,*MZ_GIF_STAT,*MZ_D_STAT,(u32)*MZ_GS_CSR,1))goto out;
+    /* Only one class per request. Combined changes are not a transaction. */
+    if(!pending || (pending&(pending-1u))){ret=-1;goto out;}
+    old=mzBpcOff();
+    if(!(old&0x20000000u)){mzBpcRestore(old);ret=-1;goto out;}
+    ret=-1;
+    switch(pending){
+    case MZ_LIVE_GEOMETRY:
+        if(!MaizoGs480iMode && mzNativeApply(&mzState))ret=1;
+        break;
+    case MZ_LIVE_FIELD:
+        if(!MaizoGs480iMode && (GSMSourceGSRegs[2]&1u) &&
+           GSMSourceSetGsCrt[0]==1 &&
+           (GSMSourceSetGsCrt[1]==2||GSMSourceSetGsCrt[1]==3)){
+            MaizoNativeFieldInvert=!!mzState.field_fix;ret=1;
+        }
+        break;
+    case MZ_LIVE_FILTER: {
+        unsigned intent=mzState.draw_modes&0x3c00u;
+        int desired=mzIntentGet(intent,5)?MZ_FILTER_SHARP:
+                    mzIntentGet(intent,6)?MZ_FILTER_SMOOTH:0;
+        if(!MaizoNativeMask && !MaizoGs480iMode &&
+           (!desired||(mzFilterCapabilities()&desired)) &&
+           (desired==(int)MaizoGsFilterMode||mzFilterApply(desired))){
+            mzGsShared->draw_intents=(mzGsShared->draw_intents&~0x3c00u)|intent;
+            ret=1;
+        }
+        break;
+    }
+    case MZ_LIVE_BRIDGE:
+        /* Native arm/disarm only. Actual timing transition belongs to
+         * the existing SetGsCrt hook, never force 31 kHz from the menu. */
+        if(!MaizoNativeMask && !MaizoGsFilterMode &&
+           mzFrame480iApply(!!mzState.frame480i_mode))ret=1;
+        break;
+    }
+    mzBpcRestore(old);
+out:
+    if(intr)EI();
+    return ret;
+}
+static void mzLiveVideoFinish(int success)
+{
+    if(!success){
+        mzState.width=mzLiveBefore.width;mzState.height=mzLiveBefore.height;
+        mzState.x=mzLiveBefore.x;mzState.y=mzLiveBefore.y;
+        mzState.legacy_geometry=mzLiveBefore.legacy_geometry;
+        mzState.field_fix=mzLiveBefore.field_fix;
+        mzState.frame480i_mode=mzLiveBefore.frame480i_mode;
+    }
+    mzLiveVideoStatus=success?0:2;
+    mzLiveVideoPending=mzLiveVideoAge=0;
+}
 static void mzLiveCaps(void)
 {
     USE_LOCAL_EECORE_CONFIG;
     mzState.draw_caps=mzGsRuntimeCaps()&~mzGsShared->native_owned;
-    mzState.draw_modes=mzGsShared->draw_intents;
+    mzState.draw_modes=(mzGsShared->draw_intents&~0x3c00u)|
+        (mzLiveVideoPending&MZ_LIVE_FILTER?mzState.draw_modes&0x3c00u:
+                                          mzGsShared->draw_intents&0x3c00u);
     mzState.effect_caps=mzGsEffectCaps()&~(mzGsShared->native_owned>>8);
     mzState.effect_modes=mzGsShared->effect_intents;
     mzState.effect_reduced=mzGsShared->effect_reduced;
@@ -1203,8 +1319,8 @@ static void mzLiveCaps(void)
     mzState.live_count=mzState.cheat_caps&&MaizoLiveCount?MaizoLiveCount:
         (config->MaizoLiveCheats.count<=MZ_LIVE_GROUPS?config->MaizoLiveCheats.count:0);
     mzPendingLiveMask=MaizoLiveMask;
-    mzState.video_caps=mzState.native_field_caps=mzState.frame480i_caps=0;
-    mzState.filter_caps=mzState.save_caps=0;
+    mzLiveVideoCaps();
+    mzState.save_caps=0;
 }
 int maizoIGR_LiveRun(int (*buttons)(u16 *,u32 *),int (*yield)(void))
 {
@@ -1216,7 +1332,9 @@ int maizoIGR_LiveRun(int (*buttons)(u16 *,u32 *),int (*yield)(void))
     int result=MAIZO_IGR_UNAVAILABLE;
     if(!config->EnableMaizoIgrMenu||config->EnableGSMOp)return result;
     mzGameHasGsm=0;mzOverlayPath=3;
-    maizoIgrStateInit(&mzState,0);
+    if(!mzStateReady){maizoIgrStateInit(&mzState,0);mzStateReady=1;}
+    mzState.page=MZ_PAGE_MAIN;mzState.selected=mzState.confirm=0;
+    mzLiveVideoPending=mzLiveVideoAge=mzLiveVideoStatus=0;
     mzLiveCaps();mzPage(&mzState);
     for(;;){
         u16 now=0;u32 frame=0;
@@ -1231,8 +1349,15 @@ int maizoIGR_LiveRun(int (*buttons)(u16 *,u32 *),int (*yield)(void))
                (pressed&MZ_KEY_START) || ((pressed&MZ_KEY_BACK)&&mzState.page==MZ_PAGE_MAIN)){
                 result=MAIZO_IGR_RESUME;break;
             }
-            if(visible&&pressed){
+            if(visible&&pressed&&!mzLiveVideoPending){
+                mzLiveCaps();mzLiveBefore=mzState;
                 int action=maizoIgrStep(&mzState,pressed|(now&0x0800u));
+                mzLiveVideoPending=(mzState.changed?MZ_LIVE_GEOMETRY:0)|
+                    (mzState.field_changed?MZ_LIVE_FIELD:0)|
+                    (mzState.filter_changed?MZ_LIVE_FILTER:0)|
+                    (mzState.frame480i_changed?MZ_LIVE_BRIDGE:0);
+                if(mzLiveVideoPending)mzLiveVideoStatus=1;
+                else mzLiveVideoStatus=0;
                 int intr=DI();
                 if(mzState.draw_changed)
                     for(unsigned i=0;i<5;i++)if(mzState.draw_changed&(1u<<i))
@@ -1256,14 +1381,23 @@ int maizoIGR_LiveRun(int (*buttons)(u16 *,u32 *),int (*yield)(void))
                 row=x=visible=0;
             }
         }
+        if(mzLiveVideoPending){
+            int status=mzLiveVideoTry();
+            if(status || ++mzLiveVideoAge>=120u){
+                mzLiveVideoFinish(status>0);
+                mzLiveCaps();mzPage(&mzState);
+                row=x=visible=0;
+            }
+        }
         unsigned progress=0;
         if(mzLiveSnapshot()){
             if(oldSx!=mzSx||oldSy!=mzSy||oldBpp!=mzBpp){
                 row=x=visible=0;oldSx=mzSx;oldSy=mzSy;oldBpp=mzBpp;
             }
             u32 start=mzLiveTicks();
+            unsigned rendered=~0u;
             while(progress<96u && mzLiveTicks()-start<147456u){
-                mzRenderLine(pixels,row);
+                if(rendered!=row){mzRenderLine(pixels,row);rendered=row;}
                 if(!mzLiveChunk(pixels,x,row))break;
                 progress++;x+=32u;
                 if(x>=PW*mzSx){x=0;if(++row>=PH*mzSy){row=0;visible=1;break;}}
@@ -1273,6 +1407,7 @@ int maizoIGR_LiveRun(int (*buttons)(u16 *,u32 *),int (*yield)(void))
         else if(++stalls>=120u)break;
         if(!yield())break;
     }
+    if(mzLiveVideoPending){mzLiveVideoFinish(0);mzLiveCaps();}
     /* No backup, SPU2 hold, channel reset, GS drain or resume transaction. */
     return result;
 }

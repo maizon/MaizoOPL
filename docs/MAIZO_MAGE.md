@@ -603,3 +603,19 @@ redrawn. Idle hardware does not prove internal GS transfer state is safe
 to replace. Not a universal or 100% compatible solution. Requires PS2
 hardware tests, including Ben 10 during loading. Regular PRO and
 Restoration workflows unchanged.
+
+### LIVE native video adapter (second iteration)
+Reuses existing native CRTC validation and transformations: geometry,
+position/crop/zoom, field inversion, sharp/smooth/deflicker, and native
+480i bridge arming. Each requested class is queued for up to 120 sleeping
+slices; only recorder-backed, valid scanout and idle hardware may enter
+a short IRQ-preserving CRTC transaction. Both circuits must have been
+observed before rewriting/restoring a filter. No waits or game thread
+suspension inside a transaction; restore GS comparator before IRQs.
+Conflicting geometry/filter/bridge requests fail closed and the UI
+reports N/D rather than pretending to apply them. Mode changes remain
+owned by the original SetGsCrt hook. Existing cooperative drawing and
+effect intents remain supported; no unsynchronized executable Sky patch,
+no GSM live paint, no forced unsupported effects or profile exit.
+The live painter now renders a line once per slice instead of per chunk.
+Real hardware validation remains necessary; regular builds are unchanged.
