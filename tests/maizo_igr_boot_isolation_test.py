@@ -14,7 +14,10 @@ menu = read("ee_core/src/maizo_igrmenu.c")
 api = read("ee_core/src/maizo_gsm_api.c")
 assert "#define MAIZO_IGR_POLL_PRIORITY 127" in pad
 assert "thread_param.initial_priority = 127;" in pad
-assert "iChangeThreadPriority(" not in pad
+alarm = pad.split("static void IGR_Poll_Alarm(", 1)[1].split("#ifdef MAIZO_IGR_MENU", 1)[0]
+assert "iChangeThreadPriority(" not in alarm
+assert "iWakeupThread(" in alarm
+assert "mzPollBoost" not in pad
 assert "ChangeThreadPriority(TH_SELF, 0);" in pad
 assert "maizoIGR_BootProfile" not in boot
 select = sky.split("void maizoSkySelect(", 1)[1].split("void maizoSkyPrepare(", 1)[0]

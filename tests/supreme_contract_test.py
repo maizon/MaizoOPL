@@ -177,7 +177,17 @@ assert "drawMaizoLibraryList" in art and "maizo_layout" in menu
 assert "maizoTextMatches" in library and "settingsQuery" in menu
 assert "menuSettingsBreadcrumb" in dia and "MENU_QUICK_SETUP" in menu
 
-assert "maizo_welcome_seen" in gui and "guiSelectPromptStyle(1)" in gui
+# Setup Dash supersedes the old one-page first-run prompt. Check the
+# actual first-run entry, prompt selection and transactional save path.
+assert "maizo_welcome_seen" in gui and "guiShowSetupDash(1)" in gui
+setup = gui.split("void guiShowSetupDash(int firstRun)", 1)[1].split("void guiMainLoop", 1)[0]
+assert "page==5" in setup and "s.v[SD_PROMPT]" in setup
+assert "s.v[SD_SEEN]=1" in setup and "sdSave(&s)" in setup
+assert "sdSave(&recommended)" in setup
+save = gui.split("static int sdSave(", 1)[1].split("void guiScheduleSetupDash", 1)[0]
+assert "configSetInt(cfg,sdKeys[i],s->v[i])" in save
+assert "saveConfig(CONFIG_OPL,0)" in save and "sdRestore(cfg," in save
+assert "guiSelectPromptStyle(0)" in gui
 assert "maizo_prompt_style" in ui and "MENU_PROMPT_STYLE" in menu
 assert "MAIZO_PROMPT_PS_SOUTH + style * 4 + index" in ui
 assert "maizoDrawPromptHint" in dia and "maizoDrawPromptHint" in menu
