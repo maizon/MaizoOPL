@@ -16,8 +16,20 @@ int main(void)
     assert(f.x==160 && f.y==49 && f.sx==2 && f.sy==1);
     assert(f.fbw==10 && f.psm==0 && f.pixel_bytes==4);
     assert(mzIgrMonitorFrame(&f,2u,0,fb,0,disp(640,224,4),1,0));
-    assert(!mzIgrMonitorFrame(&f,3u,fb,fb,disp(640,224,4),
-                              disp(640,224,4),1,0));
+    /* Both read circuits display the SAME image: real GS deflicker. */
+    assert(mzIgrMonitorFrame(&f,3u,fb,fb,disp(640,224,4),
+                             disp(640,224,4),3,0));
+    assert(f.x==160 && f.y==49);
+    assert(mzIgrMonitorFrame(&f,3u,fb,fb|((uint64_t)1u<<43),
+                             disp(640,224,4),disp(640,223,4),3,0));
+    assert(f.y==49); /* choose unshifted base */
+    /* Do not draw to two unrelated framebuffers or different readouts. */
+    assert(!mzIgrMonitorFrame(&f,3u,fb,fb|((uint64_t)3u<<43),
+                              disp(640,224,4),disp(640,224,4),3,0));
+    assert(!mzIgrMonitorFrame(&f,3u,fb,fb|((uint64_t)1u<<15),
+                              disp(640,224,4),disp(640,224,4),3,0));
+    assert(!mzIgrMonitorFrame(&f,3u,fb,fb,
+                              disp(640,224,4),disp(640,200,4),3,0));
     assert(!mzIgrMonitorFrame(&f,0u,fb,fb,disp(640,224,4),
                               disp(640,224,4),1,0));
     assert(!mzIgrMonitorFrame(&f,1u,0,fb,disp(640,224,4),0,1,0));

@@ -130,3 +130,23 @@ RiptOPL/RIPPS2 (overlay com GS), OPL GSM original.
   seletor/conversor de resolução. Não é uma instrumentação inteiramente
   separada do código GSM e ainda pode conflitar com jogos que alteram
   handlers de debug. Teste no PS2 físico é indispensável.
+
+## IGR não pode sair para Browser sem confirmação
+
+No ELF experimental, a combinação L1+L2+R1+R2+START+SELECT
+é sempre interceptada pelo MAIZO. Se o menu não estiver habilitado
+por configuração, se a leitura GS falhar ou a DMA estiver ocupada,
+o jogo é retomado; somente a opção SAIR DO JOGO, confirmada no menu,
+pode usar a rotina antiga de reset. Esta regra não altera o ELF padrão
+da Correção B. No ELF experimental o menu vem ativado por padrão
+quando a chave maizo_igr_menu está ausente, mas respeita OFF salvo.
+
+O resolvedor do framebuffer também aceita os dois circuitos GS
+ativados apenas quando compartilham a MESMA imagem e diferem por no
+máximo uma linha, uma configuração comum de deflicker. Se misturam
+imagens diferentes, o sistema não tenta desenhar. Os registros GSM
+SMODE2_fix (offset 11) e FIELD_fix (offset 17) são agora verificados
+por teste host, evitando mudanças indevidas em modo de vídeo.
+
+**Limites:** o funcionamento do overlay em títulos específicos ainda
+requer verificação real no PS2. O modo seguro preserva o IGR clássico.

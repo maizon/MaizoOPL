@@ -3,7 +3,8 @@
  *
  * Active output state must come from a recorder observing real GS writes,
  * not from guessing memory offsets or reading write-only GS registers.
- * Conservative: one read circuit, known color PSM, in-range GS VRAM.
+ * Conservative: one circuit or two proven same-image scanout circuits,
+ * known color PSM, in-range GS VRAM. Dual independent images fail closed.
  * No allocations, hardware access or GSM video forcing in this module.
  */
 #ifndef MAIZO_IGR_MONITOR_H
@@ -20,12 +21,32 @@ static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
                                     uint64_t display1, uint64_t display2,
                                     uint64_t smode2, int legacy_gsm_height)
 {
-    uint64_t fb,display;
+    uint64_t fb,display, ymask, hmask;
     uint32_t last_byte;
     uint32_t en,bpp,vram_bpp,fbw,bp,psm,dbx,dby,w,h,magh,magv,sx,sy,x,y;
     if(!out)return 0;
     en=(uint32_t)(pmode&3ULL);
-    if(en!=1u && en!=2u)return 0; /* mixed circuits: unknown image */
+    /* A common GS deflicker configuration uses BOTH read circuits
+     * with identical FB/format and a 0/1-line vertical offset.
+     * Show the panel in the shared image. Reject unrelated mixed
+     * framebuffers to avoid drawing into another game's surface. */
+    if(en==3u){
+        uint32_t y1,y2,h1,h2;
+        ymask=(uint64_t)2047<<43;
+        hmask=(uint64_t)2047<<44;
+        y1=(uint32_t)((fb1>>43)&2047ULL);
+        y2=(uint32_t)((fb2>>43)&2047ULL);
+        h1=(uint32_t)((display1>>44)&2047ULL);
+        h2=(uint32_t)((display2>>44)&2047ULL);
+        if(!fb1||!fb2||!display1||!display2||
+           (fb1&~ymask)!=(fb2&~ymask)||
+           (display1&~hmask)!=(display2&~hmask)||
+           (y1>y2?y1-y2:y2-y1)>1u||
+           (h1>h2?h1-h2:h2-h1)>1u)
+            return 0;
+        en=y1<=y2?1u:2u;
+    }
+    if(en!=1u && en!=2u)return 0;
     fb=en==1u?fb1:fb2;
     display=en==1u?display1:display2;
     if(!fb||!display)return 0;
