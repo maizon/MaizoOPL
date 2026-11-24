@@ -531,3 +531,19 @@ game RAM address. No Freeze Analyzer. Hardware testing required.
 
 References: RIPPS2/RiptOPL igrmbox and igrmenu (AFL-3.0), PS2SDK
 screenshot.c, PS2tek GS transfers and VIF1 STAT.
+
+### Separate EE menu
+
+The restoration laboratory now also selects
+MAIZO_IGR_OVERLAY_EXPERIMENTAL=1. The complete menu, font, private
+state and rendering routines link at 0xCA000 in a separate 24 KiB ELF;
+the resident core only exposes a typed, versioned ABI and entry gate.
+The frontend reserves the overlay range before packing IRXs, validates
+the single load segment and ABI, clears BSS, and extends the protected
+module wipe boundary to 0xD0000. No extra RAM above the known low arena.
+When the footprint does not fit or a title uses special module
+placement, select the original legacy core before copying data.
+The normal PRO build still uses its resident menu unchanged. The
+8 KiB main-stack assertion remains mandatory. Internal write-only GS
+transfer register restoration remains unsolved; this is not a
+universal hardware save-state implementation.

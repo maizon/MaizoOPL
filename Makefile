@@ -221,6 +221,10 @@ ifneq ($(DEBUG),1)
 ifneq ($(DTL_T10000),1)
   EE_CFLAGS += -DMAIZO_IGR_MENU
   EECORE_OBJS += ee_core_fallback.o
+  ifeq ($(MAIZO_IGR_OVERLAY_EXPERIMENTAL),1)
+    EE_CFLAGS += -DMAIZO_IGR_OVERLAY
+    EECORE_OBJS += maizo_overlay.o
+  endif
   ifeq ($(MAIZO_IGR_RESTORE_EXPERIMENTAL),1)
     EE_CFLAGS += -DMAIZO_IGR_RESTORE
     EECORE_OBJS += maizo_restore.o
@@ -308,6 +312,7 @@ clean:	download_lwNBD
 	echo " -resetspu"
 	$(MAKE) -C modules/iopcore/resetspu clean
 	$(MAKE) -C modules/iopcore/maizo_restore clean
+	$(MAKE) -C ee_core/overlay clean
 	echo "  -patches"
 	echo "   -iremsnd"
 	$(MAKE) -C modules/iopcore/patches/iremsndpatch clean
@@ -412,6 +417,12 @@ $(EE_VPKD).ZIP: $(EE_VPKD).ELF DETAILED_CHANGELOG CREDITS LICENSE README.md
 ee_core/ee_core.elf: ee_core
 	echo "-EE core"
 	$(MAKE) $(IGS_FLAGS) $(PADEMU_FLAGS) $(EECORE_EXTRA_FLAGS) -C $<
+
+ee_core/overlay/maizo_overlay.elf: $(wildcard ee_core/overlay/* ee_core/include/*) ee_core/src/maizo_igrmenu.c
+	$(MAKE) -C ee_core/overlay
+
+$(EE_ASM_DIR)maizo_overlay.c: ee_core/overlay/maizo_overlay.elf | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ maizo_overlay_elf
 
 $(EE_ASM_DIR)ee_core.c: ee_core/ee_core.elf | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ eecore_elf

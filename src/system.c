@@ -25,6 +25,9 @@
 #include "../ee_core/include/coreconfig.h"
 #ifdef MAIZO_IGR_MENU
 #include "../ee_core/include/maizo_ee_layout.h"
+#ifdef MAIZO_IGR_OVERLAY
+#include "../ee_core/include/maizo_overlay_layout.h"
+#endif
 #include "../ee_core/include/maizo_igr_profile.h"
 #include "include/maizo_mage_profiles.h"
 #endif
@@ -56,6 +59,10 @@ extern unsigned int size_eecore_elf;
 #ifdef MAIZO_IGR_MENU
 extern unsigned char eecore_fallback_elf[];
 extern unsigned int size_eecore_fallback_elf;
+#ifdef MAIZO_IGR_OVERLAY
+extern unsigned char maizo_overlay_elf[];
+extern unsigned int size_maizo_overlay_elf;
+#endif
 #ifdef MAIZO_IGR_RESTORE
 extern unsigned char maizo_restore_irx[];
 extern unsigned int size_maizo_restore_irx;
@@ -714,7 +721,13 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
         for(i=0;i<modcount;i++)
             footprint+=(GET_OPL_MOD_SIZE(localTable[i].info)+15u)&~15u;
         footprint=(footprint+63u)&~63u;
-        if(base==MZ_EE_EXP_TOP && !mzEeArenaFits(base,MZ_EE_LOW_LIMIT,footprint)){
+        if(base==MZ_EE_EXP_TOP && !mzEeArenaFits(base,
+#ifdef MAIZO_IGR_OVERLAY
+                MZ_OVL_BASE,
+#else
+                MZ_EE_LOW_LIMIT,
+#endif
+                footprint)){
             /* The legacy core can use its original low arena. Keep
              * game-specific high storage addresses unchanged. */
             base=MZ_EE_LEGACY_TOP;
@@ -729,7 +742,13 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 #endif
         }
         limit=base>=0x00100000u?(unsigned int)GetMemorySize():
-            (*fallback?0x00100000u:MZ_EE_LOW_LIMIT);
+            (*fallback?0x00100000u:
+#ifdef MAIZO_IGR_OVERLAY
+             MZ_OVL_BASE
+#else
+             MZ_EE_LOW_LIMIT
+#endif
+             );
         if(!mzEeArenaFits(base,limit,footprint)){
             free(ioprp_image);
             return 0;
@@ -1006,6 +1025,11 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
 #ifdef MAIZO_IGR_MENU
     /* Pick the matching module arena before any IRX table is written.
      * Preserve explicit per-title high-memory storage locations. */
+    #ifdef MAIZO_IGR_OVERLAY
+    /* A high per-title module location would put the fixed overlay in
+     * the lower wipe range. Use the legacy core instead. */
+    if(ModuleStorage!=(void *)MZ_EE_EXP_TOP)fallbackCore=1;
+    #endif
     if (fallbackCore && ModuleStorage == (void *)MZ_EE_EXP_TOP)
         ModuleStorage = (void *)MZ_EE_LEGACY_TOP;
 #endif
@@ -1030,6 +1054,37 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     }
     ModuleStorageSize=(ModuleStorageSize+0x3f)&~0x3f;
     ModuleStorageEnd = (void *)((u8 *)ModuleStorage + ModuleStorageSize);
+#ifdef MAIZO_IGR_OVERLAY
+    if(!fallbackCore){
+        /* Verify every PT_LOAD before publishing the ABI. No segment
+         * may overlap the module arena, resident core or game RAM. */
+        elf_header_t *oh=(elf_header_t *)maizo_overlay_elf;
+        elf_pheader_t *op=(elf_pheader_t *)(maizo_overlay_elf+oh->phoff);
+        int n=0,valid=(u32)ModuleStorageEnd<=MZ_OVL_BASE &&
+            size_maizo_overlay_elf>=sizeof(*oh) &&
+            oh->phoff<=size_maizo_overlay_elf &&
+            oh->phnum<=(size_maizo_overlay_elf-oh->phoff)/sizeof(*op);
+        if(valid)for(i=0;i<oh->phnum;i++){
+            if(op[i].type!=ELF_PT_LOAD)continue;
+            u32 dst=(u32)op[i].vaddr;
+            if(dst<MZ_OVL_BASE || dst>=MZ_OVL_END ||
+               op[i].memsz>MZ_OVL_END-dst || op[i].filesz>op[i].memsz ||
+               op[i].offset>size_maizo_overlay_elf ||
+               op[i].filesz>size_maizo_overlay_elf-op[i].offset){valid=0;break;}
+            n++;
+        }
+        if(!valid || n!=1){
+            guiMsgBox("Overlay PRO invalido. Use a build normal.",1,NULL);return;
+        }
+        memset((void *)MZ_OVL_BASE,0,MZ_OVL_END-MZ_OVL_BASE);
+        for(i=0;i<oh->phnum;i++)if(op[i].type==ELF_PT_LOAD)
+            memcpy(op[i].vaddr,maizo_overlay_elf+op[i].offset,op[i].filesz);
+        if(!mzOvlHeaderOK((const mz_ovl_header *)MZ_OVL_BASE)){
+            guiMsgBox("ABI do overlay PRO invalida.",1,NULL);return;
+        }
+        ModuleStorageEnd=(void *)MZ_OVL_END; /* include overlay in kernel wipe boundary */
+    }
+#endif
 
     // NB: LOADER.ELF is embedded
     boot_elf = (u8 *)&eecore_elf;

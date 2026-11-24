@@ -1,0 +1,12 @@
+ENTRY(mzOverlayHeader)
+MEMORY { ovl : ORIGIN = 0x000CA000, LENGTH = 24K }
+PHDRS { image PT_LOAD; }
+SECTIONS {
+ .text : { KEEP(*(.mzovl.hdr)) *(.text .text.* .gnu.linkonce.t*) } >ovl :image
+ .rodata ALIGN(16) : { *(.rodata .rodata.* .rdata .gnu.linkonce.r*) } >ovl :image
+ .data ALIGN(16) : { *(.data .data.* .sdata .sdata.* .got) } >ovl :image
+ .bss ALIGN(64) (NOLOAD) : { *(.bss .bss.* .sbss .sbss.*) *(COMMON) . = ALIGN(16); } >ovl :image
+ _mz_overlay_end = .;
+ /DISCARD/ : { *(.reginfo) *(.MIPS.abiflags) *(.comment) *(.pdr) *(.mdebug.*) *(.gnu.attributes) *(.eh_frame) }
+ ASSERT(_mz_overlay_end <= 0xD0000, "MAIZO: separate overlay exceeds reserved arena")
+}

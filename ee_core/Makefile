@@ -55,7 +55,12 @@ ifneq ($(EESIO_DEBUG),1)
 ifneq ($(LOAD_DEBUG_MODULES),1)
 ifneq ($(DTL_T10000),1)
 EE_OBJS := $(filter-out gsm_engine.o gsm_api.o,$(EE_OBJS))
-EE_OBJS += maizo_gsm_engine.o maizo_gsm_api.o maizo_igrmenu.o maizo_gs_runtime.o
+EE_OBJS += maizo_gsm_engine.o maizo_gsm_api.o maizo_gs_runtime.o
+ifeq ($(MAIZO_IGR_OVERLAY_EXPERIMENTAL),1)
+EE_OBJS += maizo_overlay_stub.o
+else
+EE_OBJS += maizo_igrmenu.o
+endif
 ifeq ($(MAIZO_IGR_RESTORE_EXPERIMENTAL),1)
 EE_OBJS += maizo_restore.o
 EE_CFLAGS += -DMAIZO_IGR_RESTORE

@@ -1,0 +1,57 @@
+/* Include after ALL declarations in maizo_igrmenu.c. */
+#ifndef MZ_OVERLAY_SIDE_H
+#define MZ_OVERLAY_SIDE_H
+#include "maizo_overlay_api.h"
+extern const mz_ovl_api *mzOvlApi;
+#define g_ee_core_config (*mzOvlApi->p_g_ee_core_config)
+#define GSMSourceGSRegs (*mzOvlApi->p_GSMSourceGSRegs)
+#define GSMDestGSRegs (*mzOvlApi->p_GSMDestGSRegs)
+#define GSMFlags (*mzOvlApi->p_GSMFlags)
+#define GSMSourceSetGsCrt (*mzOvlApi->p_GSMSourceSetGsCrt)
+#define GSMDestSetGsCrt (*mzOvlApi->p_GSMDestSetGsCrt)
+#define MaizoNativeMask (*mzOvlApi->p_MaizoNativeMask)
+#define MaizoNativeSource (*mzOvlApi->p_MaizoNativeSource)
+#define MaizoNativeTarget (*mzOvlApi->p_MaizoNativeTarget)
+#define MaizoGsMonitorOnly (*mzOvlApi->p_MaizoGsMonitorOnly)
+#define MaizoNativeFieldInvert (*mzOvlApi->p_MaizoNativeFieldInvert)
+#define MaizoGs480iMode (*mzOvlApi->p_MaizoGs480iMode)
+#define MaizoGs480iArmed (*mzOvlApi->p_MaizoGs480iArmed)
+#define MaizoGs480iOriginalFix (*mzOvlApi->p_MaizoGs480iOriginalFix)
+#define MaizoGs480iOriginalSMODE2 (*mzOvlApi->p_MaizoGs480iOriginalSMODE2)
+#define MaizoGsFilterMode (*mzOvlApi->p_MaizoGsFilterMode)
+#define MaizoGsFilterPrimary (*mzOvlApi->p_MaizoGsFilterPrimary)
+#define MaizoGsFilterSourceEN (*mzOvlApi->p_MaizoGsFilterSourceEN)
+#define MaizoNativeSmoothMaxFBP (*mzOvlApi->p_MaizoNativeSmoothMaxFBP)
+#define MaizoGsFilterPMODE (*mzOvlApi->p_MaizoGsFilterPMODE)
+#define MaizoGsFilterBaseFB (*mzOvlApi->p_MaizoGsFilterBaseFB)
+#define MaizoGsFilterBaseDisplay (*mzOvlApi->p_MaizoGsFilterBaseDisplay)
+#define MaizoGsSeen (*mzOvlApi->p_MaizoGsSeen)
+#define MaizoCheatPaused (*mzOvlApi->p_MaizoCheatPaused)
+#define MaizoCheatHookActive (*mzOvlApi->p_MaizoCheatHookActive)
+#define MaizoLiveMask (*mzOvlApi->p_MaizoLiveMask)
+#define MaizoLiveCount (*mzOvlApi->p_MaizoLiveCount)
+#define numcodes (*mzOvlApi->p_numcodes)
+#define mzGsProbe (*mzOvlApi->p_mzGsProbe)
+#define DIntr (*mzOvlApi->p_DIntr)
+#define EIntr (*mzOvlApi->p_EIntr)
+#define Enable_GSBreakpoint (*mzOvlApi->p_Enable_GSBreakpoint)
+#define GsGetIMR (*mzOvlApi->p_GsGetIMR)
+#define GsPutIMR (*mzOvlApi->p_GsPutIMR)
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+#define maizoSkyPrepare (*mzOvlApi->p_maizoSkyPrepare)
+#define maizoSkyAvailable (*mzOvlApi->p_maizoSkyAvailable)
+#define maizoSkySetMode (*mzOvlApi->p_maizoSkySetMode)
+#define maizoSkyFogAvailable (*mzOvlApi->p_maizoSkyFogAvailable)
+#define maizoSkyFogSet (*mzOvlApi->p_maizoSkyFogSet)
+#define maizoSkyReloadAvailable (*mzOvlApi->p_maizoSkyReloadAvailable)
+#define maizoSkyReloadSet (*mzOvlApi->p_maizoSkyReloadSet)
+#endif
+#ifdef MAIZO_IGR_RESTORE
+#define mzRestoreBegin (*mzOvlApi->p_mzRestoreBegin)
+#define mzRestoreWrite (*mzOvlApi->p_mzRestoreWrite)
+#define mzRestoreRead (*mzOvlApi->p_mzRestoreRead)
+#define mzRestoreHush (*mzOvlApi->p_mzRestoreHush)
+#define mzRestoreKeep (*mzOvlApi->p_mzRestoreKeep)
+#define mzRestoreEnd (*mzOvlApi->p_mzRestoreEnd)
+#endif
+#endif

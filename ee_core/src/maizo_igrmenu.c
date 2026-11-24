@@ -77,6 +77,9 @@ extern volatile u32 MaizoGsFilterSourceEN,MaizoNativeSmoothMaxFBP;
 extern volatile u64 MaizoGsFilterPMODE;
 extern volatile u64 MaizoGsFilterBaseFB;
 extern volatile u64 MaizoGsFilterBaseDisplay;
+#ifdef MAIZO_IGR_OVERLAY_SIDE
+#include "maizo_overlay_side.h"
+#endif
 
 typedef struct {
     u8 x, y, len, color;
