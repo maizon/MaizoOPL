@@ -240,7 +240,9 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
                 mzRuntimeMetrics.edits.texture_changes +
                 mzRuntimeMetrics.edits.dither_changes +
                 mzRuntimeMetrics.edits.scanmask_changes,0);
-        mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: ATIVO":"HOOK: N/D");
+        mzLine(105,8,5,mzGsRuntimeCaps()?
+            (mzOverlayPath==3?"HOOK ON / MENU GIF":"HOOK ON / MENU VIF"):
+            (mzOverlayPath==3?"HOOK N/D / MENU GIF":"HOOK N/D / MENU VIF"));
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG.");
         mzLine(35,11,4,"VOLTAR");
@@ -784,6 +786,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         pressed=now&~prev;
         prev=now;
         if(!pressed)continue;
+        /* Repeating the original six-button chord is always a
+         * non-destructive resume, even deep inside a submenu. */
+        if((now&0x0f09u)==0x0f09u){result=MAIZO_IGR_RESUME;break;}
         {
             int oldW=mzState.width,oldH=mzState.height;
             int oldX=mzState.x,oldY=mzState.y;

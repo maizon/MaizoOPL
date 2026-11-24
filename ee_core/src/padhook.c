@@ -251,6 +251,23 @@ static void maizoIgrYield(void)
     if(alarm>=0)SleepThread();
     else nopdelay();
 }
+/* Some pad libraries require a live EE worker to advance their pad
+ * buffer. Check for real progress after suspension, before modifying
+ * VRAM. A dead controller stream must not strand a paused game. */
+static int maizoIgrPadReady(void)
+{
+    u16 keys;
+    u32 frame,first=0;
+    int got=0,i;
+    for(i=0;i<24;i++){
+        if(maizoIgrButtons(&keys,&frame)){
+            if(got && frame!=first)return 1;
+            first=frame;got=1;
+        }
+        maizoIgrYield();
+    }
+    return 0;
+}
 #endif
 
 // In Game Reset Thread
@@ -297,6 +314,22 @@ maizo_igr_poll_again:
 #endif
         if (Pad_Data.pad_buf != NULL) {
             // Read through the uncached segment to obtain live pad data.
+#ifdef MAIZO_IGR_MENU
+            /* Use the same coherent bank for opening, release and
+             * navigation. The legacy polling path is kept for builds
+             * without the experimental menu. */
+            u16 keys;
+            u32 frame;
+            if(maizoIgrButtons(&keys,&frame)){
+                pad_pos_state=Pad_Data.libpad==IGR_LIBPAD?IGR_PAD_STABLE_V1:IGR_PAD_STABLE_V2;
+                pad_pos_frame=(u8)frame;
+                pad_pos_combo1=(u8)~(keys>>8);
+                pad_pos_combo2=(u8)~keys;
+            }else{
+                pad_pos_state=0;
+                pad_pos_frame=pad_pos_combo1=pad_pos_combo2=0;
+            }
+#else
             pad_pos_state =
                 ((u8 *)UNCACHED_SEG(Pad_Data.pad_buf))
                     [Pad_Data.pos_state];
@@ -312,6 +345,7 @@ maizo_igr_poll_again:
             pad_pos_combo2 =
                 ((u8 *)UNCACHED_SEG(Pad_Data.pad_buf))
                     [Pad_Data.pos_combo2];
+#endif
 
             // Check for the stable state used by the detected libpad.
             if (((Pad_Data.libpad == IGR_LIBPAD) &&
@@ -448,7 +482,7 @@ maizo_igr_poll_again:
             if(ready){
                 maizoIgrHold();
                 maizoIgrPauseThreads();
-                if(maizoIGR_Preflight())
+                if(maizoIgrPadReady() && maizoIGR_Preflight())
                     choice = maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield);
                 /* Restore IRQs only after the menu has relinquished DMA.
                  * Resume suspended threads on every non-destructive exit. */
