@@ -96,7 +96,7 @@ void sysMaizoPrepareProfile(const char *id)
     mzProfileID[0]=0;mzProfileValue=0;
     if(!mzProfileIdOK(id))return;
     memcpy(mzProfileID,id,12);
-    if(mzProfileLatest(id,&r)>=0)mzProfileValue=r.value;
+    if(mzProfileLatest(id,&r)>=0)mzProfileValue=mzProfileUpgrade(r.value);
 }
 int sysMaizoImportProfile(const char *arg)
 {

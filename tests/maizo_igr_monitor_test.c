@@ -64,8 +64,8 @@ int main(void)
         uint64_t original=disp(640,448,4)|200u|((uint64_t)40u<<12),out=0;
         assert(mzNativeDisplayEdit(original,0,0,0,0,&out)&&out==original);
         assert(mzNativeDisplayEdit(original,-2,-2,1,-1,&out));
-        assert((out&4095u)==212u && ((out>>12)&2047u)==41u);
-        assert(((out>>32)&4095u)==2543u && ((out>>44)&2047u)==443u);
+        assert((out&4095u)==208u && ((out>>12)&2047u)==40u);
+        assert(((out>>32)&4095u)==2551u && ((out>>44)&2047u)==445u);
         assert(((out>>23)&63u)==((original>>23)&63u));
         assert(!mzNativeDisplayEdit(original,1,0,0,0,&out)); /* not centered within bounds */
         original=disp(640,448,4)|400u|((uint64_t)280u<<12);
@@ -73,7 +73,9 @@ int main(void)
         assert((((out>>32)&4095u)+1)/(((out>>23)&15u)+1)==640u);
         assert((((out>>44)&2047u)+1)/(((out>>27)&3u)+1)==448u);
         assert(!mzNativeDisplayEdit(original,3,0,0,0,&out));
-        assert(!mzNativeDisplayEdit(original,0,0,25,0,&out));
+        assert(mzNativeDisplayEdit(original,0,0,25,0,&out));
+        assert(!mzNativeDisplayEdit(original,0,0,32,0,&out));
+        assert(mzNativeDisplayEdit(original,-32,-32,-32,31,&out));
         assert(!mzNativeDisplayEdit(disp(640,448,4),0,0,-1,0,&out));
     }
     puts("MAIZO In-Game independent observer safety PASS");

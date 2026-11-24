@@ -127,12 +127,12 @@ MZ_IGR_FN int mzNativeDisplayEdit(uint64_t base,int cropX,int cropY,
     int nw=dw,nh=dh,newH=mh,newV=mv;
     const uint64_t mask=4095ULL|(2047ULL<<12)|(63ULL<<23)|
                         (4095ULL<<32)|(2047ULL<<44);
-    if(!out||!base||cropX>2||cropX< -8||cropY>2||cropY< -8||
-       offsetX< -24||offsetX>24||offsetY< -24||offsetY>24)return 0;
+    if(!out||!base||cropX>2||cropX< -32||cropY>2||cropY< -32||
+       offsetX< -32||offsetX>31||offsetY< -32||offsetY>31)return 0;
     if(cropX>0){newH+=cropX;nw=(dw/mh)*newH;}
-    else nw+=cropX*mh*2;
+    else nw+=cropX*mh;
     if(cropY>0){newV+=cropY;nh=(dh/mv)*newV;}
-    else nh+=cropY*mv*2;
+    else nh+=cropY*mv;
     if(newH>16||newV>4||nw<168*newH||nh<130*newV||
        nw>4096||nh>2048)return 0;
     dx+=offsetX*mh+(dw-nw)/2;dy+=offsetY*mv+(dh-nh)/2;

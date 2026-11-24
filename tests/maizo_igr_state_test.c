@@ -17,10 +17,10 @@ int main(void) {
     assert(!s.changed);
     s.selected=0;
     s.video_caps=1;
-    for(int i=0;i<30;i++)maizoIgrStep(&s,MZ_KEY_RIGHT);
-    assert(s.width==8);
-    for(int i=0;i<40;i++)maizoIgrStep(&s,MZ_KEY_LEFT);
-    assert(s.width==-8);
+    for(int i=0;i<40;i++)maizoIgrStep(&s,MZ_KEY_RIGHT);
+    assert(s.width==31);
+    for(int i=0;i<80;i++)maizoIgrStep(&s,MZ_KEY_LEFT);
+    assert(s.width==-32);
     maizoIgrStep(&s,MZ_KEY_BACK);
     assert(s.page==MZ_PAGE_MAIN);
     maizoIgrStep(&s,MZ_KEY_UP);maizoIgrStep(&s,MZ_KEY_OK);
@@ -103,7 +103,7 @@ int main(void) {
     assert(!s.field_fix&&s.field_changed&&!s.changed);
     s.selected=4;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==-6&&s.height==-6);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==-12&&s.height==-12);
     s.selected=7;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height&&!s.x&&!s.y);
     maizoIgrStateInit(&s,0);s.page=MZ_PAGE_GAME;

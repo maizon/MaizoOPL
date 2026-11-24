@@ -5,6 +5,7 @@
 #include <stdint.h>
 #define MZ_PROFILE_ARG_SIZE 26
 #define MZ_PROFILE_VALID 0x80000000u
+#define MZ_PROFILE_V2 0xa0000000u
 static inline int mzProfileIdOK(const char *id)
 {
     unsigned i;
@@ -20,6 +21,9 @@ static inline int mzProfileIdOK(const char *id)
 }
 static inline int mzProfileValid(uint32_t v)
 {
+    if((v&0xe0000000u)==MZ_PROFILE_V2)
+        return ((v>>25)&3u)<=2u && ((v&(1u<<28)) ||
+               ((v&63u)<=34u && ((v>>6)&63u)<=34u));
     return (v&0xf8000000u)==MZ_PROFILE_VALID &&
         (v&31u)<=16u && ((v>>5)&31u)<=16u &&
         ((v>>10)&63u)<=48u && ((v>>16)&63u)<=48u &&
@@ -28,12 +32,23 @@ static inline int mzProfileValid(uint32_t v)
 }
 static inline uint32_t mzProfilePack(int w,int h,int x,int y,int field,int filter,int bridge,int gsm)
 {
-    if(w< -8||w>(gsm?8:2)||h< -8||h>(gsm?8:2)||x< -24||x>24||
-       y< -24||y>24||filter<0||filter>2)return 0;
-    return MZ_PROFILE_VALID|(uint32_t)(w+8)|((uint32_t)(h+8)<<5)|
-        ((uint32_t)(x+24)<<10)|((uint32_t)(y+24)<<16)|
-        ((uint32_t)!!field<<22)|((uint32_t)filter<<23)|
-        ((uint32_t)!!bridge<<25)|((uint32_t)!!gsm<<26);
+    if(w< -32||w>(gsm?31:2)||h< -32||h>(gsm?31:2)||x< -32||x>31||
+       y< -32||y>31||filter<0||filter>2)return 0;
+    return MZ_PROFILE_V2|(uint32_t)(w+32)|((uint32_t)(h+32)<<6)|
+        ((uint32_t)(x+32)<<12)|((uint32_t)(y+32)<<18)|
+        ((uint32_t)!!field<<24)|((uint32_t)filter<<25)|
+        ((uint32_t)!!bridge<<27)|((uint32_t)!!gsm<<28);
+}
+/* v1 used two-pixel native crops and 12/6 clock/line GSM increments.
+ * Upgrade without changing the old effective geometry. */
+static inline uint32_t mzProfileUpgrade(uint32_t v)
+{
+    if(!mzProfileValid(v))return 0;
+    if((v&0xe0000000u)==MZ_PROFILE_V2)return v;
+    int gsm=!!(v&(1u<<26)),w=(int)(v&31u)-8,h=(int)((v>>5)&31u)-8;
+    w*=gsm?3:(w<0?2:1);h*=gsm?3:(h<0?2:1);
+    return mzProfilePack(w,h,(int)((v>>10)&63u)-24,(int)((v>>16)&63u)-24,
+        !!(v&(1u<<22)),(v>>23)&3u,!!(v&(1u<<25)),gsm);
 }
 static inline int mzProfileArg(char *out,const char *id,uint32_t v)
 {

@@ -176,8 +176,8 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
                     mzLine(75,11,4,s->field_fix?"FIELD INV ON":"FIELD INV OFF");
                 else mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
         }else if(s->video_caps==MZ_VIDEO_NATIVE){
-            mzValue(0,"TAMANHO X",s->width,0);
-            mzValue(1,"TAMANHO Y",s->height,0);
+            mzValue(0,"REC/ZOOM X",s->width,0);
+            mzValue(1,"REC/ZOOM Y",s->height,0);
             mzValue(2,"POSICAO X",s->x,0);
             mzValue(3,"POSICAO Y",s->y,0);
             mzLine(65,11,4,"PRESET RECORTE");
@@ -187,8 +187,8 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
             mzLine(95,11,4,"RESTAURAR IMAGEM");
             mzLine(105,11,4,"VOLTAR");
         }else{
-        mzValue(0,"STRETCH X",s->width*2,1);
-        mzValue(1,"STRETCH Y",s->height*2,1);
+        mzValue(0,"LARGURA X",s->width*4,0);
+        mzValue(1,"ALTURA Y",s->height*2,0);
         mzValue(2,"POSICAO X",s->x*2,0);
         mzValue(3,"POSICAO Y",s->y*2,0);
         mzLine(65,11,4,"PRESET 4:3/EXPAND.");
@@ -433,8 +433,8 @@ static u64 mzDisplayEdit(u64 base,const maizo_igr_state_t *s)
 {
     int olddx=base&0xfff,olddy=(base>>12)&0x7ff;
     int olddw=(base>>32)&0xfff,olddh=(base>>44)&0x7ff;
-    int dw=maizoIgrBound(olddw+s->width*12,0,4095);
-    int dh=maizoIgrBound(olddh+s->height*6,0,2047);
+    int dw=maizoIgrBound(olddw+s->width*4,0,4095);
+    int dh=maizoIgrBound(olddh+s->height*2,0,2047);
     int dx=maizoIgrBound(olddx+s->x*2-(dw-olddw)/2,0,4095);
     int dy=maizoIgrBound(olddy+s->y*2-(dh-olddh)/2,0,2047);
     u64 clear=((u64)0xfff)|((u64)0x7ff<<12)|
@@ -771,11 +771,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     if(mzProfilePending){
         u32 v=config->MaizoProfile;
         mzProfilePending=0;
-        if(mzProfileValid(v)&&!!(v&(1u<<26))==mzGameHasGsm){
+        if((v&0xe0000000u)==MZ_PROFILE_V2&&mzProfileValid(v)&&!!(v&(1u<<28))==mzGameHasGsm){
             maizo_igr_state_t desired=mzState;
-            desired.width=(int)(v&31u)-8;desired.height=(int)((v>>5)&31u)-8;
-            desired.x=(int)((v>>10)&63u)-24;desired.y=(int)((v>>16)&63u)-24;
-            desired.field_fix=!!(v&(1u<<22));
+            desired.width=(int)(v&63u)-32;desired.height=(int)((v>>6)&63u)-32;
+            desired.x=(int)((v>>12)&63u)-32;desired.y=(int)((v>>18)&63u)-32;
+            desired.field_fix=!!(v&(1u<<24));
             if(mzGameHasGsm||mzNativeApply(&desired)){
                 if(mzGameHasGsm)mzApply(&desired);
                 mzState.width=desired.width;mzState.height=desired.height;
@@ -785,9 +785,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzState.field_fix=desired.field_fix;
                 if(!mzGameHasGsm)MaizoNativeFieldInvert=desired.field_fix;
             }
-            if(((v>>23)&3u)&&mzFilterApply((v>>23)&3u))
+            if(((v>>25)&3u)&&mzFilterApply((v>>25)&3u))
                 mzState.filter_mode=(int)MaizoGsFilterMode;
-            if((v&(1u<<25))&&mzFrame480iApply(1))
+            if((v&(1u<<27))&&mzFrame480iApply(1))
                 mzState.frame480i_mode=!!MaizoGs480iArmed;
             mzState.filter_caps=mzFilterCapabilities();
             mzState.frame480i_caps=mzFrame480iCaps();
@@ -821,6 +821,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             continue;
         }
         pressed=now&~prev;
+        if(!pressed && mzState.page==MZ_PAGE_VIDEO && mzState.selected<4 &&
+           (frame&7u)==0u)pressed=now&(MZ_KEY_LEFT|MZ_KEY_RIGHT);
         prev=now;
         if(!pressed)continue;
         /* Repeating the original six-button chord is always a
@@ -829,7 +831,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         {
             int oldW=mzState.width,oldH=mzState.height;
             int oldX=mzState.x,oldY=mzState.y;
-            action=maizoIgrStep(&mzState,pressed);
+            action=maizoIgrStep(&mzState,pressed|(now&0x0800u));
             if(mzState.changed){
                 if(mzGameHasGsm)mzApply(&mzState);
                 else if(!mzNativeApply(&mzState)){
