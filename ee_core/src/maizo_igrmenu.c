@@ -135,58 +135,58 @@ static void mzPage(const maizo_igr_state_t *s)
     mzLineCount=0;
     mzSelectedY=25+s->selected*10;
     mzLine(4,8,3,"MAIZO IN-GAME PRO");
-    mzLine(15,8,1,"-----------------------");
+    mzLine(15,8,1,"------------------");
     if(s->page==MZ_PAGE_MAIN){
         for(i=0;i<count;i++)mzLine(25+i*10,11,4,mainNames[i]);
     }else if(s->page==MZ_PAGE_VIDEO){
         if(!s->video_caps){
-            mzLine(25,11,5,"STRETCH X: REQUER GSM");
-            mzLine(35,11,5,"STRETCH Y: REQUER GSM");
-            mzLine(45,11,5,"POSICAO X: REQUER GSM");
-            mzLine(55,11,5,"POSICAO Y: REQUER GSM");
-            mzLine(65,11,5,"PRESET: REQUER GSM");
-            mzLine(75,11,5,"FIELD FIX: REQUER GSM");
-            mzLine(85,11,4,"FILTROS GRAFICOS >");
-            mzLine(95,11,5,"RESTAURAR: REQUER GSM");
+            mzLine(25,11,5,"STRETCH X: GSM OFF");
+            mzLine(35,11,5,"STRETCH Y: GSM OFF");
+            mzLine(45,11,5,"POS. X: GSM OFF");
+            mzLine(55,11,5,"POS. Y: GSM OFF");
+            mzLine(65,11,5,"PRESET: GSM OFF");
+            mzLine(75,11,5,"FIELD: GSM OFF");
+            mzLine(85,11,4,"FILTROS >");
+            mzLine(95,11,5,"RESTAURAR: GSM OFF");
             mzLine(105,11,4,"VOLTAR");
         }else{
         mzValue(0,"STRETCH X",s->width*2,1);
         mzValue(1,"STRETCH Y",s->height*2,1);
         mzValue(2,"POSICAO X",s->x*2,0);
         mzValue(3,"POSICAO Y",s->y*2,0);
-        mzLine(65,11,4,"PRESET 4:3 / EXPANDIDO");
-        mzLine(75,11,4,s->field_fix?"FIELD FIX    ON":"FIELD FIX    OFF");
-        mzLine(85,11,4,"FILTROS GRAFICOS >");
+        mzLine(65,11,4,"PRESET 4:3/EXPAND.");
+        mzLine(75,11,4,s->field_fix?"FIELD FIX ON":"FIELD FIX OFF");
+        mzLine(85,11,4,"FILTROS >");
         mzLine(95,11,4,"RESTAURAR IMAGEM");
         mzLine(105,11,4,"VOLTAR");
         }
     }else if(s->page==MZ_PAGE_FILTERS){
         mzLine(25,11,s->filter_caps&2?4:5,
-               s->filter_caps&2?(s->filter_mode==2?"DEFLICKER     ON":"DEFLICKER    OFF"):
-                                "DEFLICKER INDISP.");
+               s->filter_caps&2?(s->filter_mode==2?"DEFLICKER ON":"DEFLICKER OFF"):
+                                "DEFLICKER N/D");
         mzLine(35,11,s->filter_caps&1?4:5,
-               s->filter_caps&1?(s->filter_mode==1?"SHARP         ON":"SHARP        OFF"):
-                                "SHARP     INDISP.");
+               s->filter_caps&1?(s->filter_mode==1?"SHARP ON":"SHARP OFF"):
+                                "SHARP N/D");
         mzLine(45,11,s->filter_caps&2?4:5,
-               s->filter_caps&2?(s->filter_mode==2?"SMOOTH        ON":"SMOOTH       OFF"):
-                                "SMOOTH    INDISP.");
+               s->filter_caps&2?(s->filter_mode==2?"SMOOTH ON":"SMOOTH OFF"):
+                                "SMOOTH N/D");
         mzLine(55,11,s->draw_caps&1?4:5,
-               !(s->draw_caps&1)?"AA1: INDISPONIVEL":
+               !(s->draw_caps&1)?"AA1: N/D":
                ((s->draw_modes&3)==1?"AA1: ON":
                 (s->draw_modes&3)==2?"AA1: OFF":"AA1: JOGO"));
         mzLine(65,11,s->draw_caps&2?4:5,
-               !(s->draw_caps&2)?"BILINEAR: INDISP.":
+               !(s->draw_caps&2)?"BILINEAR: N/D":
                (((s->draw_modes>>2)&3)==1?"BILINEAR: ON":
                 ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":"BILINEAR: JOGO"));
         mzLine(75,11,s->draw_caps&4?4:5,
-               !(s->draw_caps&4)?"DITHER: INDISP.":
+               !(s->draw_caps&4)?"DITHER: N/D":
                (((s->draw_modes>>4)&3)==1?"DITHER: ON":
                 ((s->draw_modes>>4)&3)==2?"DITHER: OFF":"DITHER: JOGO"));
         mzLine(85,11,4,"GS AO VIVO >");
         mzLine(95,11,s->frame480i_caps?4:5,
                s->frame480i_caps?
-               (s->frame480i_mode?"480P>480I FRAME ON":"480P>480I FRAME OFF"):
-               "480P>480I INDISP.");
+               (s->frame480i_mode?"480P>480I ON":"480P>480I OFF"):
+               "480P>480I N/D");
         mzLine(105,11,4,"VOLTAR");
     }else if(s->page==MZ_PAGE_GS_STATUS){
         mzLine(25,11,4,"VOLTAR");
@@ -202,21 +202,21 @@ static void mzPage(const maizo_igr_state_t *s)
                 mzRuntimeMetrics.edits.primitive_changes +
                 mzRuntimeMetrics.edits.texture_changes +
                 mzRuntimeMetrics.edits.dither_changes,0);
-        mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: REGISTRADO":"HOOK: INDISPONIVEL");
+        mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: ATIVO":"HOOK: N/D");
     }else if(s->page==MZ_PAGE_PADS){
-        mzLine(25,11,4,"PAD EMU: CONFIG. MAIZO");
+        mzLine(25,11,4,"PAD EMU: CONFIG.");
         mzLine(35,11,4,"VOLTAR");
-        mzLine(56,8,5,"MUDAR DRIVER AO JOGAR");
-        mzLine(66,8,5,"NAO E UNIVERSAL.");
+        mzLine(56,8,5,"DRIVER: NAO AO VIVO");
+        mzLine(66,8,5,"COMPAT. LIMITADA");
     }else if(s->page==MZ_PAGE_GAME){
-        mzLine(25,11,4,"CHEATS: CONFIG. MAIZO");
+        mzLine(25,11,4,"CHEATS: CONFIG.");
         mzLine(35,11,4,"IGS: L1+L2+R1+R2+UP");
         mzLine(45,11,4,"VOLTAR");
-        mzLine(66,8,5,"CHEATS EM TEMPO REAL");
-        mzLine(76,8,5,"AINDA NAO SUPORTADOS");
+        mzLine(66,8,5,"CHEATS IN-GAME");
+        mzLine(76,8,5,"NAO SUPORTADOS");
     }else{
         for(i=0;i<count;i++)mzLine(25+i*10,11,4,systemNames[i]);
-        if(s->confirm)mzLine(78,8,5,"CONFIRME NOVAMENTE");
+        if(s->confirm)mzLine(78,8,5,"CONFIRME DE NOVO");
     }
     mzLine(114,8,3,"X OK  O VOLTAR START");
 }
