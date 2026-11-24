@@ -1708,8 +1708,22 @@ Enable_GSBreakpoint:
 # Trap writes to GS registers, so as to control their values
 
     li      $a0, TRAP_BASE                          # Address base for trapping
-    li      $a1, TRAP_MASK                          # Address mask for trapping
-                                                    # Trapping range is extended to match all kernel access segments
+    li      $a1, TRAP_MASK                          # Legacy GSM / explicit FIELD inversion
+    li      $a3, 0x60280000
+    la      $a2, MaizoGsMonitorOnly
+    lw      $a2, 0($a2)
+    beqz    $a2, maizo_bp_config
+    nop
+    la      $a2, MaizoNativeFieldInvert
+    lw      $a2, 0($a2)
+    bnez    $a2, maizo_bp_config
+    nop
+    # Passive native monitor only needs scanout writes. Leave CSR
+    # polling, FINISH/SIGNAL acknowledgements and all GS reads native.
+    # TX79 BPC.DRE=30, DWE=29; DABM one bits compare the address.
+    li      $a1, MZ_MONITOR_MASK
+    li      $a3, 0x20280000                         # DWE only, original mode bits
+maizo_bp_config:
 
     sync.l                                          # Synchronize pipeline. Wait for any preceding loads to complete.
 
@@ -1723,11 +1737,7 @@ Enable_GSBreakpoint:
 
     sync.p                                          # Await instruction completion
 
-    mfbpc   $a3
-    sync.p                                          # Await instruction completion
-
-    li      $a2, 0x60280000                         # Data read & write breakpoint on (DRE, DWE, DUE, DKE = 1). Syscalls are run in kernel mode, for the EE.
-    mtbpc   $a2
+    mtbpc   $a3                                     # Selected access policy; DAB/DABM are already set
 
     sync.p                                          # Await instruction completion
 

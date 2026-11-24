@@ -13,6 +13,7 @@
  * an unsupported display/framebuffer refuses to draw (fail closed).
  */
 #include "ee_core.h"
+#include "gsm_api.h"
 #include "coreconfig.h"
 #include "maizo_igrmenu.h"
 #include "maizo_igr_state.h"
@@ -756,7 +757,12 @@ static u32 mzBpcOff(void)
 static void mzBpcRestore(u32 old)
 {
     ee_kmode_enter();
-    asm volatile("sync.l\n\tmtbpc %0\n\tsync.p"::"r"(old));
+    /* A live FIELD toggle changes both DABM and BPC, not just BPC.
+     * If the game had disabled the recorder, preserve that decision. */
+    if(MaizoGsMonitorOnly && (old&0x20000000u))
+        Enable_GSBreakpoint();
+    else
+        asm volatile("sync.l\n\tmtbpc %0\n\tsync.p"::"r"(old));
     ee_kmode_exit();
 }
 /* Controller polling sleeps on the preserved kernel alarm instead

@@ -15,6 +15,8 @@
 
 .equ TRAP_BASE,   0x12000000
 .equ TRAP_MASK,   0x1FFFEF0F
+# Native recorder excludes the CSR page (bit 12 must match zero).
+.equ MZ_MONITOR_MASK, 0x1FFFFF0F
 .equ GS_BASE,     0x12000000
 .equ GS_PMODE,    0x0000
 .equ GS_SMODE1,   0x0010

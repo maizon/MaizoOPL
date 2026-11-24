@@ -316,3 +316,20 @@ RAM evidence. Unsupported revisions remain N/D. No effect is
 enabled automatically. See profiles/mage/sky_evidence.json.
 
 GS register reference: https://ps2dev.github.io/ps2sdk/gs__gp_8h.html
+
+## Passive GS recorder access scope
+
+The normal (GSM disabled, FIELD inversion disabled) In-Game recorder
+now uses BPC.DWE without DRE, and DABM 0x1FFFFF0F instead of 0x1FFFEF0F.
+This retains the scanout register observations needed by the menu
+without trapping the CSR page or intercepting reads during game boot,
+streaming or ordinary rendering. Explicit native FIELD inversion
+restores the prior full trap policy when leaving the menu; disabling
+it restores the narrow policy. GSM forced modes retain their existing
+policy. SetGsCrt uses the same policy selection when rearming.
+Source-linked host tests check bit fields and address selection, not
+actual R5900 trap behavior. No console reproduction or verified fix
+for a particular commercial game is claimed.
+
+Reference: TX79 Core Architecture manual, 4.2.17 and 13.2,
+https://lukasz.dk/files/tx79architecture.pdf

@@ -43,3 +43,25 @@ for imm in range(65536):
 has(body("GSHandler", "get_access_info"), r"sq\s+\$zero,\s*0x000\(\$k1\)")
 has(body("do_load", "do_load_byte"), r"beq\s+\$a1,\s*\$a2,\s*exit_GSHandler")
 print("MAIZO exception decoder: 1024 REGIMM fields, all 65536 signed immediates, r0 guard PASS")
+
+# Passive scanout capture must not trap CSR reads/writes during streaming.
+defines = (Path(__file__).resolve().parents[1] /
+           "ee_core/include/gsm_defines.h").read_text()
+mask = int(re.search(r"\.equ MZ_MONITOR_MASK,\s*(0x[0-9A-Fa-f]+)", defines)[1],16)
+oldmask = int(re.search(r"\.equ TRAP_MASK,\s*(0x[0-9A-Fa-f]+)", defines)[1],16)
+bp = source.split("\nEnable_GSBreakpoint:",1)[1].split(".end Enable_GSBreakpoint",1)[0]
+has(bp,r"li\s+\$a1,\s*MZ_MONITOR_MASK")
+has(bp,r"li\s+\$a3,\s*0x20280000")
+has(bp,r"li\s+\$a3,\s*0x60280000")
+has(bp,r"mtbpc\s+\$a3")
+assert 0x20280000 & (1<<29) and not 0x20280000 & (1<<30)
+assert 0x60280000 & (1<<30)
+for alias in (0x12000000,0x32000000,0x92000000,0xB2000000):
+    for offset in range(0,0xB0,16):
+        assert ((alias+offset)^0x12000000)&mask==0
+    assert ((alias+0x1000)^0x12000000)&mask!=0
+    assert ((alias+0x1000)^0x12000000)&oldmask==0
+menu=(Path(__file__).resolve().parents[1]/"ee_core/src/maizo_igrmenu.c").read_text()
+assert "if(MaizoGsMonitorOnly && (old&0x20000000u))" in menu
+assert "Enable_GSBreakpoint();" in menu
+print("Passive GS scope: native scanout writes only; CSR excluded by default PASS")
