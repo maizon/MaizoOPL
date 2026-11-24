@@ -18,6 +18,20 @@
       "version": "3.6"
     },
     {
+      "id": "SLES_539.67",
+      "game": "The Godfather (PT)",
+      "set": "0x002fd4a0",
+      "state": "0x002fd9f8",
+      "dispatch": "0x005ec4a0",
+      "table": "0x005ec520",
+      "device": "0x005c5568",
+      "fingerprint": "0x1fc4fa39",
+      "sha256": [
+        "ccd9a27ed7a3264d28de4ae32131b8e7e86a19b80f520130c5cd121c3554a2c2"
+      ],
+      "version": "unknown exact version"
+    },
+    {
       "id": "SLUS_205.52",
       "game": "Vice City PT-BR",
       "set": "0x003bd5c8",
@@ -101,12 +115,35 @@
         "141b05209570458af9c8e27ab1911f258da6353909d813cd572df026254ffe4c"
       ],
       "version": "unknown exact version"
+    },
+    {
+      "id": "SLUS_218.99",
+      "game": "Silent Hill - Shattered Memories",
+      "set": "0x002fef48",
+      "state": "0x002ff4a0",
+      "dispatch": "0x0058a3c0",
+      "table": "0x0058a440",
+      "device": "0x0047c390",
+      "fingerprint": "0x6c8a0849",
+      "sha256": [
+        "5875c87d5fd5aaccaba3a6fe37b2c1366cdc8657c777422223b6ff7629c9040e"
+      ],
+      "version": "unknown exact version"
     }
   ],
   "unmatched": [
     "SLES_501.85",
-    "SLES_539.67",
     "SLUS_215.43",
     "SLUS_216.13"
-  ]
+  ],
+  "scan_summary": {
+    "supplied_files": 57,
+    "distinct_sha256": 56,
+    "matched_files": 10,
+    "matched_game_ids": 9,
+    "not_matched": 46,
+    "rejected_by_load_range": 1,
+    "rejected_id": "SLES_555.22",
+    "hardware_verified": false
+  }
 }

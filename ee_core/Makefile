@@ -56,6 +56,11 @@ ifneq ($(LOAD_DEBUG_MODULES),1)
 ifneq ($(DTL_T10000),1)
 EE_OBJS := $(filter-out gsm_engine.o gsm_api.o,$(EE_OBJS))
 EE_OBJS += maizo_gsm_engine.o maizo_gsm_api.o maizo_igrmenu.o maizo_gs_runtime.o
+# Research-only route. Default In-Game must preserve the 8 KiB stack gate.
+ifeq ($(MAIZO_MAGE_SKY_EXPERIMENTAL),1)
+EE_OBJS += maizo_mage_sky.o
+EE_CFLAGS += -DMAIZO_MAGE_SKY_EXPERIMENTAL
+endif
 # Benchmark size settings only on this experimental core. The linker
 # guard is mandatory for every variant; never reduce the stack threshold.
 MAIZO_EE_SIZE_FLAGS ?= -Oz

@@ -27,5 +27,6 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_mage_sky_test.c -o /tmp/mage-sky
           /tmp/mage-sky
           python3 -m py_compile scripts/maizo_mage_sky_evidence.py
+          python3 tests/maizo_mage_sky_discover_test.py
       - name: Existing exact-revision installer
         run: python3 tests/maizo_gs_install_elf_test.py

@@ -20,7 +20,9 @@
 #include "maizo_igr_profile.h"
 #include "maizo_igr_filter.h"
 #include "maizo_gs_runtime.h"
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
 #include "maizo_mage_sky.h"
+#endif
 #include "maizo_gs_probe.h"
 #include "maizo_gs_480i_bridge.h"
 #include "maizo_igr_monitor.h"
@@ -83,7 +85,9 @@ static vu32 *mzDmaRegs;
 static int mzOverlayPath;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
 static int mzSkyMenu;
+#endif
 static u64 mzOriginalDisp[2];
 static int mzGameHasGsm;
 static int mzProfilePending;
@@ -215,9 +219,11 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
                 (s->draw_modes&3)==2?"AA1: OFF":"AA1: JOGO"));
         mzLine(65,11,s->draw_caps&2?4:5,
                !(s->draw_caps&2)?"BILINEAR: N/D":
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
                mzSkyMenu?(((s->draw_modes>>2)&3)==1?"SKY MIP: BILINEAR":
                  ((s->draw_modes>>2)&3)==2?"SKY MIP: NEAREST":
                  ((s->draw_modes>>2)&3)==3?"SKY MIP: TRILINEAR":"SKY MIP: JOGO"):
+#endif
                (((s->draw_modes>>2)&3)==1?"BILINEAR: ON":
                 ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":
                 ((s->draw_modes>>2)&3)==3?"TRILINEAR AUTO":"BILINEAR: JOGO"));
@@ -744,6 +750,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.filter_caps=mzFilterCapabilities();
     /* A DRAW switch is only actionable if a verified pre-DMA game
      * adapter registered support. Stock commercial games do not. */
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
     /* Prefer a registered renderer adapter; otherwise the matched Sky
      * state-9 table is a separate experimental mip-only route. */
     mzSkyMenu=maizoSkyAvailable() &&
@@ -751,6 +758,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);
     mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
         ((mzSkyMenu?maizoSkyMode():mzGsRuntimeMode(MZ_DRAW_BILINEAR))<<2) |
+#else
+    mzState.draw_caps=mzGsRuntimeCaps();
+    mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
+        (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2) |
+#endif
         (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4) |
         (mzGsRuntimeMode(MZ_DRAW_SCANLINES)<<6);
     mzState.draw_changed=0;
@@ -900,20 +912,27 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             if(features&MZ_DRAW_AA1)
                 mzGsRuntimeSetMode(MZ_DRAW_AA1,mzState.draw_modes&3u);
             if(features&MZ_DRAW_BILINEAR){
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
                 if(mzSkyMenu){
                     if(!maizoSkySetMode((mzState.draw_modes>>2)&3u)){
                         mzSkyMenu=0;
                         mzState.draw_modes=(mzState.draw_modes&~12u) |
                             (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2);
                     }
-                }else mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,(mzState.draw_modes>>2)&3u);
+                }else
+#endif
+                    mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,(mzState.draw_modes>>2)&3u);
             }
             if(features&MZ_DRAW_DITHER)
                 mzGsRuntimeSetMode(MZ_DRAW_DITHER,(mzState.draw_modes>>4)&3u);
             if(features&MZ_DRAW_SCANLINES)
                 mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,(mzState.draw_modes>>6)&3u);
             mzState.draw_changed=0;
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
             mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);
+#else
+            mzState.draw_caps=mzGsRuntimeCaps();
+#endif
         }
         if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
         if(action==MZ_ACTION_SAVE_EXIT){

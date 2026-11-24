@@ -114,3 +114,40 @@ adapter must not force texture filtering concurrently with this route.
 The unmatched four supplied executables have no enabled Sky profile.
 AA1, dithering and other filters are not implemented by this table.
 The 80% target remains a hardware acceptance criterion, not achieved.
+
+## Collection scan and build recovery
+
+A read-only structural scanner is available:
+`python3 scripts/maizo_mage_sky_discover.py GAME.ELF`.
+It resolves the LUI/ADDIU table addresses, checks the six TEX1 selector
+cases, state-9 dispatch and RwDevice setter record. It never installs
+a match. Scanned 57 supplied ELF files (56 distinct SHA-256); ten files,
+nine game IDs, matched. The Godfather SLES_539.67 and Silent Hill:
+Shattered Memories SLUS_218.99 are new matches. 46 files did not match;
+one (Up SLES_555.22) failed the conservative load-range check. Not
+matching does NOT demonstrate a non-RenderWare engine. Only one specific
+driver pattern is tested. Short bootstrap ELFs may not contain the renderer.
+
+The supplied Coney runtime captures show The Warriors uses TEX1 MMIN=5
+for streamed world sectors, but most textures have MXL=0; other passes
+already use bilinear. Consequently a mip-table remap is not a general
+visual upgrade. The driver uses two circuits in interlaced FIELD mode
+and 32-bit buffers; dithering is off. Do not force DTHE for this format,
+do not assume unused VRAM, and do not confuse disabling a scanout blend
+with improving texture detail. References: Coney PS2 render driver,
+sections GS memory/GS register shadows; Rendering: anatomy of a frame,
+sections State shared by every pass/The world; supplied librw
+ps2raster.cpp calcTEX1.
+
+The preceding commercial Sky commit failed the protected stack linker
+assertion and had host kernel.h / EE libc string linkage errors.
+The previous successful experimental build had only 504 bytes above the
+8 KiB minimum. This change restores the previous default resident path
+and isolates Sky in maizo_mage_sky.c behind the developer-only
+MAIZO_MAGE_SKY_EXPERIMENTAL=1 make flag. It does not weaken the linker
+guard. The Sky route is NOT included in standard In-Game builds; the
+optional research build still needs a verified memory solution and
+successful link before it is suitable for any hardware test.
+The separate source uses the EE core's _strncmp/_strcmp helpers.
+No player pre-launch selection is introduced; the eventual route
+remains an in-game feature.

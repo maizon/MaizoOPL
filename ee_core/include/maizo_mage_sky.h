@@ -1,4 +1,4 @@
-/* Sky state 9, statically matched against seven commercial game IDs.
+/* Sky state 9, statically matched against nine commercial game IDs.
  * Experimental live data-table remap; not a universal renderer hook.
  * No direct GS writes. No extra per-frame work. Non-mip cases untouched.
  * The caller may write only after the IGR capture paused game threads.
