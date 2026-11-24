@@ -108,29 +108,66 @@ static int mzProfileExitOK(const char *path)
         (base[2]|32)=='i' && (base[3]|32)=='z' && (base[4]|32)=='o';
 }
 
-/* Snapshot only capabilities actually registered or validated in RAM.
- * A patched Sky fog branch owns fog until the original word is restored;
- * do not also send fog requests to another adapter. */
+/* Called only inside a verified, visibly opened, suspended menu.
+ * Reserve native ownership before writing to game RAM. A later adapter
+ * registration cannot duplicate the Sky patch. If restoration fails,
+ * retain the reservation until a verified restore or next ELF. */
+static void __attribute__((noinline)) mzDrawSync(void)
+{
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+    unsigned bit=MZ_DRAW_BILINEAR,old=mzGsShared->native_owned&bit;
+    unsigned intent=mzIntentGet(mzGsShared->draw_intents,1);
+    mzSkyMenu=maizoSkyAvailable() && (old || !(mzGsRuntimeCaps()&bit));
+    if(mzSkyMenu && (intent||old)){
+        mzGsShared->native_owned|=bit;
+        mzGsDrawRequest(1,intent);
+        if(maizoSkySetMode(mzIntentDrawMode(1,intent))){
+            if(!intent)mzGsShared->native_owned&=~bit;
+        }else{
+            mzSkyMenu=0;
+            if(!old)mzGsShared->native_owned&=~bit;
+        }
+        mzGsDrawRequest(1,intent);
+    }
+#endif
+    mzState.draw_caps=mzGsRuntimeCaps()&~mzGsShared->native_owned;
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+    if(mzSkyMenu)mzState.draw_caps|=MZ_DRAW_BILINEAR;
+#endif
+    mzState.draw_modes=mzGsShared->draw_intents;
+}
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+static int mzNativeEffect(unsigned id,int available,int (*set)(unsigned))
+{
+    unsigned bit=1u<<id,owned=bit<<8,old=mzGsShared->native_owned&owned;
+    unsigned intent=mzIntentGet(mzGsShared->effect_intents,id);
+    if(!available || (!old && (mzGsEffectCaps()&bit)))return 0;
+    if(intent||old){
+        mzGsShared->native_owned|=owned;
+        mzGsEffectRequest(id,intent);
+        if(!set(mzIntentEffectMode(intent,0))){
+            if(!old)mzGsShared->native_owned&=~owned;
+            mzGsEffectRequest(id,intent);
+            return 0;
+        }
+        if(!intent)mzGsShared->native_owned&=~owned;
+        mzGsEffectRequest(id,intent);
+    }
+    return 1;
+}
+#endif
 static void __attribute__((noinline)) mzEffectsSync(void)
 {
-    mzState.effect_caps=mzGsEffectCaps();
-    mzState.effect_reduced=mzGsShared->effect_reduced;
-    mzState.effect_modes=mzGsShared->effect_modes;
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-    mzSkyFogMenu=maizoSkyFogAvailable() &&
-        (!(mzState.effect_caps&(1u<<MZ_EFFECT_FOG)) || maizoSkyFogMode()==MZ_EFFECT_OFF);
-    if(mzSkyFogMenu){
-        mzState.effect_caps|=1u<<MZ_EFFECT_FOG;
-        mzState.effect_reduced&=~(1u<<MZ_EFFECT_FOG);
-        mzState.effect_modes=mzEffectPut(mzState.effect_modes,MZ_EFFECT_FOG,maizoSkyFogMode());
-    }
-    mzSkyReloadMenu=maizoSkyReloadAvailable() &&
-        (!(mzState.effect_caps&(1u<<MZ_EFFECT_SCREEN_BLUR)) || maizoSkyReloadMode()==MZ_EFFECT_OFF);
-    if(mzSkyReloadMenu){
-        mzState.effect_caps|=1u<<MZ_EFFECT_SCREEN_BLUR;
-        mzState.effect_reduced&=~(1u<<MZ_EFFECT_SCREEN_BLUR);
-        mzState.effect_modes=mzEffectPut(mzState.effect_modes,MZ_EFFECT_SCREEN_BLUR,maizoSkyReloadMode());
-    }
+    mzSkyFogMenu=mzNativeEffect(MZ_EFFECT_FOG,maizoSkyFogAvailable(),maizoSkyFogSet);
+    mzSkyReloadMenu=mzNativeEffect(MZ_EFFECT_SCREEN_BLUR,maizoSkyReloadAvailable(),maizoSkyReloadSet);
+#endif
+    mzState.effect_caps=mzGsEffectCaps()&~(mzGsShared->native_owned>>8);
+    mzState.effect_reduced=mzGsShared->effect_reduced;
+    mzState.effect_modes=mzGsShared->effect_intents;
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+    if(mzSkyFogMenu)mzState.effect_caps|=1u<<MZ_EFFECT_FOG;
+    if(mzSkyReloadMenu)mzState.effect_caps|=1u<<MZ_EFFECT_SCREEN_BLUR;
 #endif
 }
 static const u8 mzColors[6][3] = {
@@ -178,6 +215,16 @@ static void mzValue(int row,const char *name,int number,int suffix)
     if(suffix)p=mzCopy(p,"%");
     mzLine(25+row*10,11,4,temp);
 }
+/* OK means a verified route, not proof that an eligible draw occurred.
+ * ESP means a queued request (no unverified patch). */
+static void mzIntentLine(int row,const char *name,unsigned intent,int ready,int owned,const char *alt)
+{
+    char label[CHARS+1],*p=mzCopy(label,name);
+    p=mzCopy(p,intent==MZ_INTENT_AUTO?" AUTO":intent==MZ_INTENT_FORCE?" FORC":
+        intent==MZ_INTENT_ALT?alt:" OFF");
+    if(intent||owned)mzCopy(p,ready?" OK":" ESP");
+    mzLine(25+row*10,11,(!intent&&!owned)||ready?4:5,label);
+}
 static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
 {
     int i, count=maizoIgrPageCount(s->page);
@@ -223,33 +270,16 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
             mzLine(105,11,4,"VOLTAR");
         }
     }else if(s->page==MZ_PAGE_FILTERS){
-        mzLine(25,11,s->filter_caps&2?4:5,
-               s->filter_caps&2?(s->filter_mode==2?"DEFLICKER ON":"DEFLICKER OFF"):
-                                "DEFLICKER N/D");
-        mzLine(35,11,s->filter_caps&1?4:5,
-               s->filter_caps&1?(s->filter_mode==1?"SHARP ON":"SHARP OFF"):
-                                "SHARP N/D");
-        mzLine(45,11,s->filter_caps&2?4:5,
-               s->filter_caps&2?(s->filter_mode==2?"SMOOTH ON":"SMOOTH OFF"):
-                                "SMOOTH N/D");
-        mzLine(55,11,s->draw_caps&1?4:5,
-               !(s->draw_caps&1)?"AA1: N/D":
-               ((s->draw_modes&3)==1?"AA1: ON":
-                (s->draw_modes&3)==2?"AA1: OFF":(s->draw_modes&3)==3?"AA1: AUTO":"AA1: JOGO"));
-        mzLine(65,11,s->draw_caps&2?4:5,
-               !(s->draw_caps&2)?"BILINEAR: N/D":
+        mzIntentLine(0,"DEFLICKER",mzIntentGet(s->draw_modes,6),s->filter_caps&2,0,"");
+        mzIntentLine(1,"SHARP",mzIntentGet(s->draw_modes,5),s->filter_caps&1,0,"");
+        mzIntentLine(2,"SMOOTH",mzIntentGet(s->draw_modes,6),s->filter_caps&2,0,"");
+        mzIntentLine(3,"AA1",mzIntentGet(s->draw_modes,0),s->draw_caps&1,0," SEM AA1");
+        mzIntentLine(4,
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-               mzSkyMenu?(((s->draw_modes>>2)&3)==1?"SKY MIP: BILINEAR":
-                 ((s->draw_modes>>2)&3)==2?"SKY MIP: NEAREST":
-                 ((s->draw_modes>>2)&3)==3?"SKY MIP: TRILINEAR":"SKY MIP: JOGO"):
+            mzSkyMenu?"SKY MIP":
 #endif
-               (((s->draw_modes>>2)&3)==1?"BILINEAR: ON":
-                ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":
-                ((s->draw_modes>>2)&3)==3?"TRILINEAR AUTO":"BILINEAR: JOGO"));
-        mzLine(75,11,s->draw_caps&4?4:5,
-               !(s->draw_caps&4)?"DITHER: N/D":
-               (((s->draw_modes>>4)&3)==1?"DITHER: ON":
-                ((s->draw_modes>>4)&3)==2?"DITHER: OFF":"DITHER: JOGO"));
+            "BILINEAR",mzIntentGet(s->draw_modes,1),s->draw_caps&2,mzGsShared->native_owned&2," NEAREST");
+        mzIntentLine(5,"DITHER",mzIntentGet(s->draw_modes,2),s->draw_caps&4,0," SEM DITHER");
         mzLine(85,11,4,"GS AO VIVO >");
         mzLine(95,11,s->frame480i_caps?4:5,
                s->frame480i_caps?
@@ -258,13 +288,8 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(105,11,4,"VOLTAR");
     }else if(s->page==MZ_PAGE_GS_STATUS){
         mzLine(25,11,4,"VOLTAR");
-        if(s->draw_caps&MZ_DRAW_SCANLINES)
-            mzValue(1,"SCANLINES",((s->draw_modes>>6)&3u)*25,1);
-        else mzLine(35,11,5,"SCANLINES: N/D");
-        mzLine(45,11,s->draw_caps&MZ_DRAW_LOD?4:5,
-            !(s->draw_caps&MZ_DRAW_LOD)?"LOD: N/D":
-            ((s->draw_modes>>8)&3u)==1?"LOD: QUALIDADE":
-            ((s->draw_modes>>8)&3u)==2?"LOD: DESEMPENHO":"LOD: JOGO");
+        mzIntentLine(1,"SCANLINES",mzIntentGet(s->draw_modes,3),s->draw_caps&MZ_DRAW_SCANLINES,0," 50%");
+        mzIntentLine(2,"LOD",mzIntentGet(s->draw_modes,4),s->draw_caps&MZ_DRAW_LOD,0," PERF");
         mzLine(55,11,4,"EFEITOS GRAFICOS >");
         mzValue(4,"PATH1",mzGsProbe.path1_active,0);
         mzValue(5,"PATH2",mzGsProbe.path2_active,0);
@@ -286,14 +311,12 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         };
         unsigned start=s->page==MZ_PAGE_EFFECTS_2?7u:0u;
         for(i=0;i<7;i++){
-            unsigned id=start+i,cap=s->effect_caps&(1u<<id),mode=mzEffectMode(s->effect_modes,id);
+            unsigned id=start+i,cap=s->effect_caps&(1u<<id),mode=mzIntentGet(s->effect_modes,id);
             const char *name=effects[id];
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
             if(id==MZ_EFFECT_SCREEN_BLUR&&mzSkyReloadMenu)name="BLUR RECARGA";
 #endif
-            char label[CHARS+1],*p=mzCopy(label,name);
-            mzCopy(p,!cap?" N/D":mode==MZ_EFFECT_OFF?" OFF":mode==MZ_EFFECT_REDUCED?" REDUZIDO":" JOGO");
-            mzLine(25+i*10,11,cap?4:5,label);
+            mzIntentLine(i,name,mode,cap,mzGsShared->native_owned&(1u<<(8u+id)),"");
         }
         mzLine(95,11,4,start?"< EFEITOS 1/2":"EFEITOS 2/2 >");
         mzLine(105,11,4,"VOLTAR");
@@ -754,6 +777,17 @@ static void mzBpcRestore(u32 old)
 }
 /* Controller polling sleeps on the preserved kernel alarm instead
  * of monopolizing priority zero with repeated COP0 syscalls. */
+static void __attribute__((noinline)) mzDisplayRequestSync(void)
+{
+    int desired=mzIntentGet(mzGsShared->draw_intents,5)?1:
+        mzIntentGet(mzGsShared->draw_intents,6)?2:0;
+    int caps=mzFilterCapabilities();
+    /* Never apply an unsupported scanout mode, even under FORCE. */
+    if(desired && !(caps&desired))desired=0;
+    if(desired!=(int)MaizoGsFilterMode)mzFilterApply(desired);
+    mzState.filter_mode=(int)MaizoGsFilterMode;
+    mzState.filter_caps=mzFilterCapabilities();
+}
 __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame),void (*yield)(void),u32 heldDmac)
 {
     USE_LOCAL_EECORE_CONFIG;
@@ -782,24 +816,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.video_caps=mzGameHasGsm?MZ_VIDEO_GSM:
         (mzNativeCaps()?MZ_VIDEO_NATIVE:MZ_VIDEO_NONE);
     mzState.filter_caps=mzFilterCapabilities();
-    /* A DRAW switch is only actionable if a verified pre-DMA game
-     * adapter registered support. Stock commercial games do not. */
-#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-    /* Prefer a registered renderer adapter; otherwise the matched Sky
-     * state-9 table is a separate experimental mip-only route. */
-    maizoSkyPrepare(); /* Game threads are paused; no launch-time address probes. */
-    mzSkyMenu=maizoSkyAvailable() &&
-        (!(mzGsRuntimeCaps()&MZ_DRAW_BILINEAR) || maizoSkyMode());
-    mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);
-    mzState.draw_modes=mzRuntimeModes;
-    if(mzSkyMenu)mzState.draw_modes=(mzState.draw_modes&~12u)|(maizoSkyMode()<<2);
-#else
-    mzState.draw_caps=mzGsRuntimeCaps();
-    mzState.draw_modes=mzRuntimeModes;
-#endif
     mzState.draw_changed=0;
     mzState.effect_choice=0;
-    mzEffectsSync();
+    mzState.filter_changed=0;
     mzState.cheat_caps=!!config->gCheatList && MaizoCheatHookActive && numcodes>0;
     mzState.cheat_paused=!!MaizoCheatPaused;
     mzState.cheat_changed=0;
@@ -866,6 +885,17 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
     first=mzDraw(p,&mzState);
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+    maizoSkyPrepare(); /* Only after visible menu and verified idle DMA. */
+#endif
+    /* A saved native scanout profile may have enabled a filter on the
+     * first menu open; represent it as AUTO unless an intent exists. */
+    if(!(mzGsShared->draw_intents&0x3c00u) && MaizoGsFilterMode)
+        mzGsShared->draw_intents=mzIntentPut(mzGsShared->draw_intents,
+            MaizoGsFilterMode==1?5u:6u,MZ_INTENT_AUTO);
+    mzDrawSync();
+    mzEffectsSync();
+    mzDisplayRequestSync();
     for(;;){
         int action,oldPage=mzState.page,oldSelected=mzState.selected;
         yield();
@@ -911,13 +941,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             }
         }
         if(mzState.effect_choice){
-            unsigned id=mzState.effect_choice-1,mode=mzEffectMode(mzState.effect_modes,id);
-#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-            if(id==MZ_EFFECT_FOG&&mzSkyFogMenu)maizoSkyFogSet(mode);
-            else if(id==MZ_EFFECT_SCREEN_BLUR&&mzSkyReloadMenu)maizoSkyReloadSet(mode);
-            else
-#endif
-                mzGsEffectSet(id,mode);
+            unsigned id=mzState.effect_choice-1;
+            mzGsEffectRequest(id,mzIntentGet(mzState.effect_modes,id));
             mzState.effect_choice=0;
             mzEffectsSync();
         }
@@ -941,11 +966,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             mzState.field_changed=0;
         }
         if(mzState.filter_changed){
-            int desired=mzState.filter_mode;
+            mzGsShared->draw_intents=(mzGsShared->draw_intents&~0x3c00u)|(mzState.draw_modes&0x3c00u);
             mzState.filter_changed=0;
-            if(!mzFilterApply(desired))
-                mzState.filter_mode=(int)MaizoGsFilterMode;
-            mzState.filter_caps=mzFilterCapabilities();
+            mzDisplayRequestSync();
         }
         if(mzState.frame480i_changed){
             int desired=(int)mzState.frame480i_mode;
@@ -955,26 +978,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             mzState.frame480i_caps=mzFrame480iCaps();
         }
         if(mzState.draw_changed){
-            unsigned int features=mzState.draw_changed;
-#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-            if((features&MZ_DRAW_BILINEAR)&&mzSkyMenu){
-                if(!maizoSkySetMode((mzState.draw_modes>>2)&3u))mzSkyMenu=0;
-                features&=~MZ_DRAW_BILINEAR;
-            }
-#endif
             for(unsigned i=0;i<5;i++)
-                if(features&(1u<<i))
-                    mzGsRuntimeSetMode(1u<<i,(mzState.draw_modes>>(2*i))&3u);
-            mzState.draw_modes=mzRuntimeModes;
-#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-            if(mzSkyMenu)mzState.draw_modes=(mzState.draw_modes&~12u)|(maizoSkyMode()<<2);
-#endif
+                if(mzState.draw_changed&(1u<<i))
+                    mzGsDrawRequest(i,mzIntentGet(mzState.draw_modes,i));
             mzState.draw_changed=0;
-#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-            mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);
-#else
-            mzState.draw_caps=mzGsRuntimeCaps();
-#endif
+            mzDrawSync();
         }
         if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
         if(action==MZ_ACTION_SAVE_EXIT){

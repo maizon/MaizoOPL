@@ -1,4 +1,4 @@
-/* Renderer-owned optional pass interface, ABI 4. Include before any
+/* Renderer-owned optional pass interface, ABI 6. Include before any
  * resident runtime headers. Apply BEFORE emitting draw commands or
  * allocating temporary resources. Always perform required cleanup and
  * preserve simulation, HUD, shared textures, depth and framebuffer swaps.

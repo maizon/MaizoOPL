@@ -185,6 +185,43 @@ int main(void)
     assert(mzGsEffectGet(MZ_EFFECT_FOG)==MZ_EFFECT_OFF);
     assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0)==MZ_GS_DMA_SKIPPED);
     assert(mzGifRead64(buf+16)==(tri|32ULL)); /* no duplicate route */
-    puts("MAIZO GS runtime: opt-in PATH1/PATH2/PATH3 policy and fallback PASS");
+    /* New menu intent cannot manufacture permission or patch unknown
+     * data. Late certified attach consumes pending policy; OFF cancels. */
+    mzGsRuntimeReset();
+    mzGsRuntimePublish(1);
+    mzGsDrawRequest(0,MZ_INTENT_FORCE);
+    mzGsDrawRequest(1,MZ_INTENT_AUTO);
+    mzGsEffectRequest(MZ_EFFECT_FOG,MZ_INTENT_FORCE);
+    assert(!mzGsRuntimeCaps()&&!mzRuntimeModes&&!mzGsShared->effect_modes);
+    assert(mzIntentGet(mzGsShared->draw_intents,0)==MZ_INTENT_FORCE);
+    gif_primitive(buf,tri|32ULL);
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0)==MZ_GS_DMA_SKIPPED);
+    assert(mzGifRead64(buf+16)==(tri|32ULL));
+    assert(mzGsRuntimeAttach(MZ_DRAW_AA1|MZ_DRAW_FOG));
+    assert(mzGsRuntimeMode(MZ_DRAW_AA1)==MZ_GS_AA1_ADAPTIVE);
+    assert(!mzGsRuntimeMode(MZ_DRAW_BILINEAR));
+    assert(mzEffectMode(mzGsShared->effect_modes,MZ_EFFECT_FOG)==MZ_EFFECT_OFF);
+    /* The native owner is reserved before an override; even a new
+     * registration cannot duplicate it. */
+    mzGsShared->native_owned|=MZ_DRAW_BILINEAR|(1u<<(8+MZ_EFFECT_FOG));
+    mzGsDrawRequest(1,MZ_INTENT_FORCE);
+    mzGsEffectRequest(MZ_EFFECT_FOG,MZ_INTENT_FORCE);
+    assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
+    assert(!mzGsRuntimeMode(MZ_DRAW_BILINEAR));
+    assert(!mzEffectMode(mzGsShared->effect_modes,MZ_EFFECT_FOG));
+    assert(!mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,1));
+    assert(!mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_OFF));
+    mzGsShared->native_owned=0;
+    mzGsDrawRequest(1,MZ_INTENT_FORCE);
+    assert(mzGsRuntimeMode(MZ_DRAW_BILINEAR)==MZ_GS_FORCE_ON);
+    mzGsDrawRequest(1,MZ_INTENT_OFF);
+    assert(!mzGsRuntimeMode(MZ_DRAW_BILINEAR));
+    for(unsigned i=0;i<3;i++)mzGsRuntimeRecord(MZ_GS_DMA_BAD_PACKET);
+    mzGsDrawRequest(0,MZ_INTENT_FORCE);
+    assert(!mzGsRuntimeCaps()&&!mzRuntimeModes);
+    assert(!mzGsRuntimeAttach(MZ_DRAW_ALL));
+    mzGsRuntimeReset();
+    assert(!mzGsShared->draw_intents&&!mzGsShared->effect_intents&&!mzGsShared->native_owned);
+    puts("MAIZO GS runtime: opt-in PATH1/PATH2/PATH3, pending intent and fallback PASS");
     return 0;
 }

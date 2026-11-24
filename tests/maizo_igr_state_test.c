@@ -33,56 +33,52 @@ int main(void) {
     for(int i=0;i<6;i++)maizoIgrStep(&s,MZ_KEY_DOWN);
     maizoIgrStep(&s,MZ_KEY_OK);
     assert(s.page==MZ_PAGE_FILTERS);
-    /* No fake on/off if hardware output is incompatible. */
-    maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==0);
-    s.filter_caps=2;
+    /* Choice is independent of capability; actual mode is not modified
+     * by the UI state machine until the verified renderer applies it. */
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert(s.filter_mode==2 && s.filter_changed);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==0);
-    maizoIgrStep(&s,MZ_KEY_DOWN);s.filter_caps=1;
-    maizoIgrStep(&s,MZ_KEY_OK);assert(s.filter_mode==1);
-    /* Drawing filters are unavailable unless an adapter was registered. */
-    for(int i=0;i<2;i++)maizoIgrStep(&s,MZ_KEY_DOWN);
-    assert(s.selected==3);
+    assert(mzIntentGet(s.draw_modes,6)==MZ_INTENT_AUTO && s.filter_changed && !s.filter_mode);
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert(s.draw_modes==0 && s.draw_changed==0);
-    s.draw_caps=1|4; /* AA1 and dithering, NOT bilinear */
+    assert(mzIntentGet(s.draw_modes,6)==MZ_INTENT_FORCE);
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert((s.draw_modes&3u)==3 && (s.draw_changed&1u));
+    assert(!mzIntentGet(s.draw_modes,6));
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert((s.draw_modes&3u)==2);
-    maizoIgrStep(&s,MZ_KEY_OK);
-    assert((s.draw_modes&3u)==0);
     maizoIgrStep(&s,MZ_KEY_DOWN);
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert(((s.draw_modes>>2)&3u)==0); /* No phantom bilinear toggle */
-    s.draw_caps |= 2u;
-    for (int i=1;i<=4;i++) {
+    assert(mzIntentGet(s.draw_modes,5)==MZ_INTENT_AUTO && !mzIntentGet(s.draw_modes,6));
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(mzIntentGet(s.draw_modes,6)==MZ_INTENT_AUTO && !mzIntentGet(s.draw_modes,5));
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    assert(s.selected==3 && !s.draw_caps);
+    for(unsigned i=1;i<=3;i++){
         maizoIgrStep(&s,MZ_KEY_OK);
-        assert(((s.draw_modes>>2)&3u)==(unsigned)(i%4));
+        assert(mzIntentGet(s.draw_modes,0)==i%3u && (s.draw_changed&1u));
+    }
+    maizoIgrStep(&s,MZ_KEY_LEFT);
+    assert(mzIntentGet(s.draw_modes,0)==MZ_INTENT_ALT);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(mzIntentGet(s.draw_modes,0)==MZ_INTENT_OFF);
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    for(unsigned i=1;i<=3;i++){
+        maizoIgrStep(&s,MZ_KEY_OK);
+        assert(mzIntentGet(s.draw_modes,1)==i%3u);
     }
     maizoIgrStep(&s,MZ_KEY_DOWN);
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert(((s.draw_modes>>4)&3u)==1);
+    assert(mzIntentGet(s.draw_modes,2)==MZ_INTENT_AUTO);
     maizoIgrStep(&s,MZ_KEY_DOWN);
     assert(s.selected==6);
     maizoIgrStep(&s,MZ_KEY_OK);
     assert(s.page==MZ_PAGE_GS_STATUS && s.selected==0);
-    maizoIgrStep(&s,MZ_KEY_DOWN);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(!(s.draw_changed&8u));
-    s.draw_caps|=8u;
-    for(int i=1;i<=4;i++){
+    for(unsigned j=3;j<=4;j++){
+        maizoIgrStep(&s,MZ_KEY_DOWN);
+        for(unsigned i=1;i<=3;i++){
+            maizoIgrStep(&s,MZ_KEY_OK);
+            assert(mzIntentGet(s.draw_modes,j)==i%3u && (s.draw_changed&(1u<<j)));
+        }
+        maizoIgrStep(&s,MZ_KEY_LEFT);
+        assert(mzIntentGet(s.draw_modes,j)==MZ_INTENT_ALT);
         maizoIgrStep(&s,MZ_KEY_OK);
-        assert(((s.draw_modes>>6)&3u)==(unsigned)(i%4));
-    }
-    maizoIgrStep(&s,MZ_KEY_DOWN);
-    assert(s.selected==2);
-    maizoIgrStep(&s,MZ_KEY_OK);
-    assert(!(s.draw_changed&16u));
-    s.draw_caps|=16u;
-    for(unsigned i=1;i<=3;i++){
-        maizoIgrStep(&s,MZ_KEY_OK);
-        assert(((s.draw_modes>>8)&3u)==i%3u);
     }
     maizoIgrStep(&s,MZ_KEY_BACK);
     assert(s.page==MZ_PAGE_FILTERS && s.selected==6);
@@ -137,16 +133,20 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_GAME);
     maizoIgrStateInit(&s,0);s.page=MZ_PAGE_GS_STATUS;s.selected=3;
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_EFFECTS_1&&s.selected==0);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.effect_choice&&!s.effect_modes);
-    s.effect_caps=(1u<<MZ_EFFECT_MOTION_BLUR)|(1u<<MZ_EFFECT_FOG)|(1u<<MZ_EFFECT_REFLECTIONS);
-    s.effect_reduced=1u<<MZ_EFFECT_MOTION_BLUR;
-    maizoIgrStep(&s,MZ_KEY_OK);assert(s.effect_choice==1&&mzEffectMode(s.effect_modes,0)==MZ_EFFECT_REDUCED);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,0)==MZ_EFFECT_OFF);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,0)==MZ_EFFECT_ORIGINAL);
-    s.selected=6;maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,MZ_EFFECT_FOG)==MZ_EFFECT_OFF);
-    maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,MZ_EFFECT_FOG)==0);
+    for(unsigned i=1;i<=3;i++){
+        maizoIgrStep(&s,MZ_KEY_OK);
+        assert(s.effect_choice==1 && mzIntentGet(s.effect_modes,0)==i%3u);
+    }
+    s.selected=6;
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.effect_choice==7 && mzIntentGet(s.effect_modes,6)==MZ_INTENT_AUTO);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(mzIntentGet(s.effect_modes,6)==MZ_INTENT_FORCE);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(!mzIntentGet(s.effect_modes,6));
     s.selected=7;maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_EFFECTS_2);
-    s.selected=6;maizoIgrStep(&s,MZ_KEY_OK);assert(s.effect_choice==14&&mzEffectMode(s.effect_modes,13)==MZ_EFFECT_OFF);
+    s.selected=6;maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.effect_choice==14 && mzIntentGet(s.effect_modes,13)==MZ_INTENT_AUTO);
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_GS_STATUS&&s.selected==3);
-    puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;
+    puts("MAIZO IGR navigation + independent pending filter choices OK");return 0;
 }

@@ -356,3 +356,31 @@ These changes isolate concrete differences, not a reproduced root
 cause for BLACK, GTA, Ben 10 or Justiceiro. Hardware A/B testing
 with the same ISO, SMB settings, controller and game options is
 required before calling the regression fixed.
+
+## Independent live filter requests (ABI 6)
+
+X cycles OFF / AUTO / FORC (forçado) for drawing, scanout filters and
+MAEC effects, even before a compatible route is registered. OFF means
+remove MAIZO's override (original game behavior), not disable a game's
+own effect. ESP is a pending request; OK means a verified control route,
+not proof that a particular scene has been changed. The existing GS
+edit counter remains actual packet-edit telemetry, not a compatibility
+percentage. LEFT on drawing options retains the former manual
+alternative (AA1/dither disabled, nearest, 50% scanlines, performance LOD).
+
+AUTO uses scoped AA1, mip-safe trilinear, dithering, mild scanlines,
+quality LOD, and certified reduced/suppressed effects. FORC chooses
+bilinear, stronger scanlines and complete certified optional-effect
+suppression; AA1, dithering, LOD and native scanout retain the same
+mandatory safety rules in both modes. No arbitrary commercial-game
+hooks are installed. A pending cooperative request activates only
+after a verified adapter registers; native Sky and scanout choices
+are checked on the next visibly opened paused menu, never in boot.
+An owned Sky patch excludes duplicate cooperative overrides until
+verified restoration or ELF reset. Old ABI clients refuse to bind,
+rather than assume compatibility with the changed mailbox.
+
+No new per-frame background polling, memory scanning, graphics
+breakpoints or module arena expansion. Preserve the recovery revision's
+sleeping monitor and guarded capture. This is not evidence that the
+commercial-game freezes have been eliminated.

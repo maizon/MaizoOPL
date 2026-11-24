@@ -2,6 +2,7 @@
 #ifndef MAIZO_IGR_STATE_H
 #define MAIZO_IGR_STATE_H
 #include "maizo_effects.h"
+#include "maizo_filter_intent.h"
 enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS, MZ_PAGE_CHEATS, MZ_PAGE_EFFECTS_1, MZ_PAGE_EFFECTS_2 };
 enum { MZ_VIDEO_NONE=0, MZ_VIDEO_GSM=1, MZ_VIDEO_NATIVE=2 };
 enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF, MZ_ACTION_SAVE_EXIT };
@@ -86,6 +87,19 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         }
         return MZ_ACTION_NONE;
     }
+    /* LEFT on a drawing filter retains the previous manual alternative;
+     * X always cycles OFF/AUTO/FORCADO, even without a registered route. */
+    if(pressed&MZ_KEY_LEFT){
+        int index=-1;
+        if(s->page==MZ_PAGE_FILTERS&&s->selected>=3&&s->selected<=5)index=s->selected-3;
+        if(s->page==MZ_PAGE_GS_STATUS&&(s->selected==1||s->selected==2))index=s->selected+2;
+        if(index>=0){
+            unsigned i=(unsigned)index;
+            s->draw_modes=mzIntentPut(s->draw_modes,i,
+                mzIntentGet(s->draw_modes,i)==MZ_INTENT_ALT?MZ_INTENT_OFF:MZ_INTENT_ALT);
+            s->draw_changed|=1u<<i;return MZ_ACTION_NONE;
+        }
+    }
     if(!(pressed&MZ_KEY_OK))return MZ_ACTION_NONE;
     if(s->page==MZ_PAGE_MAIN) {
         if(s->selected==0)return MZ_ACTION_RESUME;
@@ -110,22 +124,19 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         else if(s->selected==7 && s->video_caps){s->width=s->height=s->x=s->y=s->legacy_geometry=0;s->changed=1;}
         else if(s->selected==8){s->page=MZ_PAGE_MAIN;s->selected=1;}
     }else if(s->page==MZ_PAGE_FILTERS){
-        int target=s->filter_mode;
-        if(s->selected==0 || s->selected==2){
-            /* Deflicker and Smooth are the SAME low-cost GS scanout filter. */
-            target=(target==2)?0:2;
-        }else if(s->selected==1){
-            target=(target==1)?0:1;
+        if(s->selected<3){
+            /* Deflicker/Smooth share one scanout route; Sharp is exclusive.
+             * Preserve intent even when the current mode cannot apply it. */
+            unsigned i=s->selected==1?5u:6u;
+            unsigned next=mzIntentNext(mzIntentGet(s->draw_modes,i));
+            s->draw_modes=mzIntentPut(s->draw_modes,i,next);
+            if(next)s->draw_modes=mzIntentPut(s->draw_modes,i==5?6u:5u,0);
+            s->filter_changed=1;
+            return MZ_ACTION_NONE;
         }else if(s->selected>=3 && s->selected<=5){
-            unsigned int bit=1u<<(s->selected-3);
-            unsigned int shift=2u*(s->selected-3);
-            if(s->draw_caps&bit){
-                unsigned int old=(s->draw_modes>>shift)&3u;
-                unsigned int next=bit==1u?(old==0u?3u:old==2u?0u:2u):
-                    (old+1u)%(bit==2u?4u:3u); /* Safe AA1 auto, off, game. */
-                s->draw_modes=(s->draw_modes&~(3u<<shift))|(next<<shift);
-                s->draw_changed|=bit;
-            }
+            unsigned i=(unsigned)s->selected-3u;
+            s->draw_modes=mzIntentPut(s->draw_modes,i,mzIntentNext(mzIntentGet(s->draw_modes,i)));
+            s->draw_changed|=1u<<i;
             return MZ_ACTION_NONE;
         }else if(s->selected==6){
             s->page=MZ_PAGE_GS_STATUS;s->selected=0;
@@ -140,34 +151,18 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             s->page=MZ_PAGE_VIDEO;s->selected=6;
             return MZ_ACTION_NONE;
         }
-        /* Never offer fake effects in unsupported video modes. */
-        if(target!=s->filter_mode &&
-           (target==0 || (s->filter_caps & target)==target)){
-            s->filter_mode=target;
-            s->filter_changed=1;
-        }
     }else if(s->page==MZ_PAGE_GS_STATUS){
-        if(s->selected==1){
-            if(s->draw_caps&8u){
-                s->draw_modes=(s->draw_modes&~(3u<<6))|((((s->draw_modes>>6)+1u)&3u)<<6);
-                s->draw_changed|=8u;
-            }
-        }else if(s->selected==2){
-            if(s->draw_caps&16u){
-                unsigned next=((s->draw_modes>>8)+1u)%3u;
-                s->draw_modes=(s->draw_modes&~(3u<<8))|(next<<8);
-                s->draw_changed|=16u;
-            }
+        if(s->selected==1||s->selected==2){
+            unsigned i=(unsigned)s->selected+2u;
+            s->draw_modes=mzIntentPut(s->draw_modes,i,mzIntentNext(mzIntentGet(s->draw_modes,i)));
+            s->draw_changed|=1u<<i;
         }else if(s->selected==3){s->page=MZ_PAGE_EFFECTS_1;s->selected=0;}
         else{s->page=MZ_PAGE_FILTERS;s->selected=6;}
     }else if(s->page==MZ_PAGE_EFFECTS_1||s->page==MZ_PAGE_EFFECTS_2){
         if(s->selected<7){
-            unsigned id=s->selected+(s->page==MZ_PAGE_EFFECTS_2?7:0),bit=1u<<id;
-            if(s->effect_caps&bit){
-                unsigned next=mzEffectNext(mzEffectMode(s->effect_modes,id),s->effect_reduced&bit);
-                s->effect_modes=mzEffectPut(s->effect_modes,id,next);
-                s->effect_choice=id+1;
-            }
+            unsigned id=s->selected+(s->page==MZ_PAGE_EFFECTS_2?7:0);
+            s->effect_modes=mzIntentPut(s->effect_modes,id,mzIntentNext(mzIntentGet(s->effect_modes,id)));
+            s->effect_choice=id+1;
         }else if(s->selected==7){
             s->page=s->page==MZ_PAGE_EFFECTS_1?MZ_PAGE_EFFECTS_2:MZ_PAGE_EFFECTS_1;
             s->selected=0;

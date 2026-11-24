@@ -41,6 +41,16 @@ int main(void)
     assert(mzGsClientEffectsAttach(1u<<MZ_EFFECT_FOG,0));
     assert(!mzGsEffectSet(MZ_EFFECT_GLOW,MZ_EFFECT_OFF));
     assert(mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_OFF));
+    mzGsRuntimeReset();
+    mzGsEffectRequest(MZ_EFFECT_BLOOM,MZ_INTENT_AUTO);
+    assert(mzGsClientEffectStrength(MZ_EFFECT_BLOOM,100,1)==100);
+    assert(mzGsClientEffectsAttach(1u<<MZ_EFFECT_BLOOM,1u<<MZ_EFFECT_BLOOM));
+    assert(mzGsClientEffectStrength(MZ_EFFECT_BLOOM,101,1)==51);
+    mzGsEffectRequest(MZ_EFFECT_BLOOM,MZ_INTENT_FORCE);
+    assert(!mzGsClientEffectShouldRun(MZ_EFFECT_BLOOM,1));
+    assert(mzGsClientEffectShouldRun(MZ_EFFECT_BLOOM,0));
+    mzGsEffectRequest(MZ_EFFECT_BLOOM,MZ_INTENT_OFF);
+    assert(mzGsClientEffectStrength(MZ_EFFECT_BLOOM,100,1)==100);
     shared.enabled=0;
     assert(mzGsClientEffectShouldRun(MZ_EFFECT_FOG,1));
     return 0;
