@@ -23,6 +23,9 @@
 #include "include/extern_irx.h"
 #include "../ee_core/include/modules.h"
 #include "../ee_core/include/coreconfig.h"
+#ifdef MAIZO_IGR_MENU
+#include "../ee_core/include/maizo_ee_layout.h"
+#endif
 #include <osd_config.h>
 #include "include/pggsm.h"
 #include "include/cheatman.h"
@@ -48,6 +51,10 @@ typedef struct
 
 extern unsigned char eecore_elf[];
 extern unsigned int size_eecore_elf;
+#ifdef MAIZO_IGR_MENU
+extern unsigned char eecore_fallback_elf[];
+extern unsigned int size_eecore_fallback_elf;
+#endif
 extern unsigned char elfldr_elf[];
 extern unsigned int size_elfldr_elf;
 
@@ -482,16 +489,28 @@ static void *GetModStorageLocation(const char *startup, unsigned compatFlags)
         }
     }
 
+#ifdef MAIZO_IGR_MENU
+    return (void *)MZ_EE_EXP_TOP;
+#else
     return ((void *)OPL_MOD_STORAGE);
+#endif
 }
 
-static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, unsigned int modules, void *ModuleStorage, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx)
+static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, unsigned int modules, void **storagePtr, int *fallback, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx)
 { // Send IOP modules that core must use to Kernel RAM
     irxtab_t *irxtable;
     irxptr_t *irxptr_tab;
     void *irxptr, *ioprp_image;
     int i, modcount;
     unsigned int curIrxSize, size_ioprp_image, total_size;
+    void *ModuleStorage=*storagePtr;
+#ifdef MAIZO_IGR_MENU
+    /* Assemble the table in frontend RAM, not in the destination arena.
+     * Determine the full aligned footprint before copying anything. */
+    irxptr_t localTable[MAX_MODULES];
+#else
+    (void)fallback;
+#endif
 
     if (!strcmp(mode_str, "BDM_USB_MODE"))
         modules |= CORE_IRX_USB;
@@ -507,10 +526,16 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
         modules |= CORE_IRX_HDD;
 
     irxtable = (irxtab_t *)ModuleStorage;
+#ifdef MAIZO_IGR_MENU
+    irxptr_tab=localTable;
+#else
     irxptr_tab = (irxptr_t *)((unsigned char *)irxtable + sizeof(irxtab_t));
+#endif
     size_ioprp_image = size_IOPRP_img + size_cdvdman_irx + size_cdvdfsv_irx + size_eesync_irx + 256;
     LOG("IOPRP image size calculated: %d\n", size_ioprp_image);
     ioprp_image = malloc(size_ioprp_image);
+    if (!ioprp_image)
+        return 0;
     size_ioprp_image = patch_IOPRP_image(ioprp_image, cdvdman_irx, size_cdvdman_irx);
     LOG("IOPRP image size actual:     %d\n", size_ioprp_image);
 
@@ -607,6 +632,32 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 
     modcount += addIopPatch(mode_str, startup, &irxptr_tab[modcount]);
 
+#ifdef MAIZO_IGR_MENU
+    {
+        unsigned int footprint=(sizeof(irxtab_t)+sizeof(irxptr_t)*modcount+15u)&~15u;
+        unsigned int base=(unsigned int)ModuleStorage,limit;
+        for(i=0;i<modcount;i++)
+            footprint+=(GET_OPL_MOD_SIZE(localTable[i].info)+15u)&~15u;
+        footprint=(footprint+63u)&~63u;
+        if(base==MZ_EE_EXP_TOP && !mzEeArenaFits(base,MZ_EE_LOW_LIMIT,footprint)){
+            /* The legacy core can use its original low arena. Keep
+             * game-specific high storage addresses unchanged. */
+            base=MZ_EE_LEGACY_TOP;
+            *fallback=1;
+        }
+        limit=base>=0x00100000u?(unsigned int)GetMemorySize():
+            (*fallback?0x00100000u:MZ_EE_LOW_LIMIT);
+        if(!mzEeArenaFits(base,limit,footprint)){
+            free(ioprp_image);
+            return 0;
+        }
+        ModuleStorage=(void *)base;
+        *storagePtr=ModuleStorage;
+        irxtable=(irxtab_t *)ModuleStorage;
+        irxptr_tab=(irxptr_t *)((unsigned char *)irxtable+sizeof(irxtab_t));
+        memcpy(irxptr_tab,localTable,sizeof(irxptr_t)*modcount);
+    }
+#endif
     irxtable->modules = irxptr_tab;
     irxtable->count = modcount;
 
@@ -825,7 +876,8 @@ void sysPrintEECoreConfig(struct EECoreConfig_t *config)
 
 void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx, int EnablePS2Logo, unsigned int compatflags)
 {
-    unsigned int modules, ModuleStorageSize;
+    unsigned int modules, ModuleStorageSize, coreSize;
+    int fallbackCore=0;
     void *ModuleStorage, *ModuleStorageEnd;
     u8 local_ip_address[4], local_netmask[4], local_gateway[4];
     u8 *boot_elf = NULL;
@@ -873,12 +925,26 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     modules |= CORE_IRX_VMC;
 
     LOG("SYSTEM LaunchLoaderElf loading modules\n");
-    ModuleStorageSize = (sendIrxKernelRAM(filename, mode_str, modules, ModuleStorage, size_cdvdman_irx, cdvdman_irx, size_mcemu_irx, mcemu_irx) + 0x3F) & ~0x3F;
-
+    ModuleStorageSize = sendIrxKernelRAM(filename, mode_str, modules, &ModuleStorage, &fallbackCore, size_cdvdman_irx, cdvdman_irx, size_mcemu_irx, mcemu_irx);
+    if(!ModuleStorageSize){
+        LOG("SYSTEM module arena does not fit\n");
+        guiMsgBox("Memoria de modulos insuficiente. Desative recursos opcionais.",1,NULL);
+        return;
+    }
+    ModuleStorageSize=(ModuleStorageSize+0x3f)&~0x3f;
     ModuleStorageEnd = (void *)((u8 *)ModuleStorage + ModuleStorageSize);
 
     // NB: LOADER.ELF is embedded
     boot_elf = (u8 *)&eecore_elf;
+    coreSize=size_eecore_elf;
+#ifdef MAIZO_IGR_MENU
+    if(fallbackCore){
+        boot_elf=(u8 *)eecore_fallback_elf;
+        coreSize=size_eecore_fallback_elf;
+        LOG("SYSTEM guarded legacy core fallback: module arena full\n");
+        guiMsgBox("In-Game PRO indisponivel nesta configuracao. IGR original.",1,NULL);
+    }
+#endif
     eh = (elf_header_t *)boot_elf;
     eph = (elf_pheader_t *)(boot_elf + eh->phoff);
 
@@ -907,9 +973,9 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     }
 
     struct EECoreConfig_t *config = NULL;
-    u32 *core_ptr = (u32 *)&eecore_elf;
+    u32 *core_ptr = (u32 *)boot_elf;
 
-    for (i = 0; i < size_eecore_elf / 4; i++) {
+    for (i = 0; i+1 < coreSize / 4; i++) {
         if (core_ptr[0] == EE_CORE_MAGIC_0 && core_ptr[1] == EE_CORE_MAGIC_1) {
             config = (struct EECoreConfig_t *)core_ptr;
             break;
@@ -922,7 +988,12 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         asm volatile("break\n");
     }
 
-    memset(config, 0, sizeof(struct EECoreConfig_t));
+#ifdef MAIZO_IGR_MENU
+    if(fallbackCore)
+        memset(config,0,(unsigned int)((u8 *)&config->EnableMaizoIgrMenu-(u8 *)config));
+    else
+#endif
+        memset(config, 0, sizeof(struct EECoreConfig_t));
 
     config->magic[0] = EE_CORE_MAGIC_0;
     config->magic[1] = EE_CORE_MAGIC_1;
@@ -949,9 +1020,11 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     /* Field is compiled into both EE config producer and consumer. */
     /* The dedicated In-Game ELF starts with the menu ON. A missing
      * saved key can no longer silently select stock IGR reset. */
-    config->EnableMaizoIgrMenu=1;
-    configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &config->EnableMaizoIgrMenu);
-    config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
+    if(!fallbackCore){
+        config->EnableMaizoIgrMenu=1;
+        configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &config->EnableMaizoIgrMenu);
+        config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
+    }
 #endif
     config->EnableGSMOp = GetGSMEnabled();
     if (config->EnableGSMOp) {

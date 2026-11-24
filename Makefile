@@ -220,6 +220,7 @@ ifneq ($(IGS),1)
 ifneq ($(DEBUG),1)
 ifneq ($(DTL_T10000),1)
   EE_CFLAGS += -DMAIZO_IGR_MENU
+  EECORE_OBJS += ee_core_fallback.o
 endif
 endif
 endif
@@ -286,6 +287,7 @@ clean:	download_lwNBD
 	rm -fr $(MAPFILE) $(EE_BIN) $(EE_BIN_PACKED) $(EE_BIN_STRIPPED) $(EE_VPKD).* $(EE_OBJS_DIR) $(EE_ASM_DIR)
 	echo "-EE core"
 	$(MAKE) -C ee_core clean
+	rm -rf ee_core/obj-fallback ee_core/ee_core_fallback.elf ee_core/ee_core_fallback.map
 	echo "-POPStarter handoff helper"
 	$(MAKE) -C elfldr clean
 	echo "-IOP core"
@@ -408,6 +410,15 @@ ee_core/ee_core.elf: ee_core
 
 $(EE_ASM_DIR)ee_core.c: ee_core/ee_core.elf | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ eecore_elf
+
+# Experimental frontend also embeds the unchanged legacy-layout core.
+# If the shifted module arena cannot hold the requested IRXs, fall
+# back before writing any modules rather than overwriting game RAM.
+ee_core/ee_core_fallback.elf: $(wildcard ee_core/src/* ee_core/include/*) ee_core/linkfile ee_core/Makefile
+	$(MAKE) $(IGS_FLAGS) $(PADEMU_FLAGS) $(EECORE_EXTRA_FLAGS) -C ee_core MAIZO_IGR_EXPERIMENTAL=0 EE_OBJS_DIR=obj-fallback/ EE_BIN=ee_core_fallback.elf MAPFILE=ee_core_fallback.map
+
+$(EE_ASM_DIR)ee_core_fallback.c: ee_core/ee_core_fallback.elf | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ eecore_fallback_elf
 
 elfldr/elfldr.elf: elfldr/elfldr.c elfldr/crt0.S elfldr/linkfile elfldr/Makefile
 	echo "-POPStarter ELF handoff helper"

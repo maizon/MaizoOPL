@@ -20,6 +20,8 @@ CHEATCORE_EE_OBJS = cheat_engine.o cheat_api.o
 EE_OBJS = main.o syshook.o iopmgr.o modmgr.o util.o patches.o patches_asm.o \
 	  padhook.o cd_igr_rpc.o tlb.o asm.o crt0.o $(GSMCORE_EE_OBJS) $(CHEATCORE_EE_OBJS)
 MAPFILE = ee_core.map
+EE_LINKFILE = linkfile
+EE_STACK_TOP = 0x97000
 
 EE_INCS := -I$(PS2SDK)/ee/include -I$(PS2SDK)/common/include -I$(PS2SDK)/ports/include -Iinclude -I.
 EE_CFLAGS = -D_EE -Os -G0 -Wall $(EE_INCS)
@@ -61,6 +63,8 @@ EE_CFLAGS += -DMAIZO_IGR_MENU -ffunction-sections -fdata-sections -flto $(MAIZO_
 # LTO is limited to the opt-in In-Game EE core, never the proven
 # Correction B release core, PadEmu IOP drivers, or the frontend.
 EE_EXTRA_GC := -Wl,--gc-sections -flto
+EE_LINKFILE = linkfile.maizo
+EE_STACK_TOP = 0x9b000
 endif
 endif
 endif
@@ -74,7 +78,7 @@ endif
 
 EE_OBJS := $(EE_OBJS:%=$(EE_OBJS_DIR)%)
 
-EE_LDFLAGS = -nostartfiles -nostdlib -Tlinkfile -L$(PS2SDK)/ee/lib -s -Wl,-Map,$(MAPFILE) $(EE_EXTRA_GC)
+EE_LDFLAGS = -nostartfiles -nostdlib -T$(EE_LINKFILE) -L$(PS2SDK)/ee/lib -s -Wl,-Map,$(MAPFILE) $(EE_EXTRA_GC)
 EE_LIBS += -lpatches
 
 ifeq ($(PADEMU),1)
@@ -95,9 +99,9 @@ $(EE_OBJS_DIR)%.o : $(EE_SRC_DIR)%.s
 	@mkdir -p $(EE_OBJS_DIR)
 	$(EE_AS) $(EE_ASFLAGS) $< -o $@
 
-$(EE_BIN) : $(EE_OBJS)
+$(EE_BIN) : $(EE_OBJS) $(EE_LINKFILE)
 	$(EE_CC) $(EE_CFLAGS) $(EE_LDFLAGS) -o $(EE_BIN) $(EE_OBJS) $(EE_LIBS)
-	@python3 ../scripts/check_ee_core_stack.py "$(MAPFILE)" 8192 $(if $(filter 1,$(IGS) $(EESIO_DEBUG) $(LOAD_DEBUG_MODULES) $(DTL_T10000)),--warn-only,)
+	@python3 ../scripts/check_ee_core_stack.py "$(MAPFILE)" 8192 --stack-top $(EE_STACK_TOP) $(if $(filter 1,$(IGS) $(EESIO_DEBUG) $(LOAD_DEBUG_MODULES) $(DTL_T10000)),--warn-only,)
 
 all: $(EE_BIN)
 
