@@ -3,14 +3,14 @@
 #define MAIZO_IGR_STATE_H
 enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS };
 enum { MZ_VIDEO_NONE=0, MZ_VIDEO_GSM=1, MZ_VIDEO_NATIVE=2 };
-enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF };
+enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF, MZ_ACTION_SAVE_EXIT };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
        MZ_KEY_OK=0x4000, MZ_KEY_BACK=0x2000, MZ_KEY_START=0x0008 };
 typedef struct { int page, selected, confirm, field_fix; int width, height, x, y, changed;
              int filter_mode, filter_caps, filter_changed;
              unsigned int draw_caps, draw_modes, draw_changed;
              unsigned int frame480i_caps, frame480i_mode, frame480i_changed;
-             unsigned int video_caps, native_field_caps, field_changed; } maizo_igr_state_t;
+             unsigned int video_caps, native_field_caps, field_changed, save_caps; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
 {
     s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;s->field_fix=!!field_fix;
@@ -18,7 +18,7 @@ static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
     s->filter_mode=s->filter_caps=s->filter_changed=0;
     s->draw_caps=s->draw_modes=s->draw_changed=0;
     s->frame480i_caps=s->frame480i_mode=s->frame480i_changed=0;
-    s->video_caps=s->native_field_caps=s->field_changed=0;
+    s->video_caps=s->native_field_caps=s->field_changed=s->save_caps=0;
 }
 static int maizoIgrPageCount(int page)
 {
@@ -27,7 +27,7 @@ static int maizoIgrPageCount(int page)
     case MZ_PAGE_VIDEO: return 9;
     case MZ_PAGE_PADS: return 2;
     case MZ_PAGE_GAME: return 3;
-    case MZ_PAGE_SYSTEM: return 4;
+    case MZ_PAGE_SYSTEM: return 5;
     case MZ_PAGE_FILTERS: return 9;
     case MZ_PAGE_GS_STATUS: return 1;
     default: return 1;
@@ -132,6 +132,10 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
                 return s->selected==1?MZ_ACTION_EXIT:MZ_ACTION_POWEROFF;
             s->confirm=s->selected+1;
         }else if(s->selected==3){s->page=MZ_PAGE_MAIN;s->selected=4;}
+        else if(s->selected==4 && s->save_caps){
+            if(s->confirm==5)return MZ_ACTION_SAVE_EXIT;
+            s->confirm=5;
+        }
     }
     return MZ_ACTION_NONE;
 }

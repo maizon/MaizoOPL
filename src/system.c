@@ -25,6 +25,7 @@
 #include "../ee_core/include/coreconfig.h"
 #ifdef MAIZO_IGR_MENU
 #include "../ee_core/include/maizo_ee_layout.h"
+#include "../ee_core/include/maizo_igr_profile.h"
 #endif
 #include <osd_config.h>
 #include "include/pggsm.h"
@@ -54,6 +55,68 @@ extern unsigned int size_eecore_elf;
 #ifdef MAIZO_IGR_MENU
 extern unsigned char eecore_fallback_elf[];
 extern unsigned int size_eecore_fallback_elf;
+static char mzProfileID[12];
+static u32 mzProfileValue;
+/* Two independent slots: an interrupted write cannot truncate the
+ * other valid profile, or the user's global/game configuration. */
+static int mzProfilePath(char *out,const char *id,int slot)
+{
+    config_set_t *cfg=configGetByType(CONFIG_OPL);
+    const char *end;
+    size_t n;
+    if(!cfg||!cfg->filename||!mzProfileIdOK(id))return 0;
+    end=strrchr(cfg->filename,'/');
+    if(!end)return 0;
+    n=end-cfg->filename+1;
+    if(n>220)return 0;
+    memcpy(out,cfg->filename,n);
+    snprintf(out+n,256-n,"IGR_%s.%d",id,slot);
+    return 1;
+}
+static int mzProfileReadSlot(const char *id,int slot,mz_profile_record_t *r)
+{
+    char path[256];int fd,n;
+    if(!mzProfilePath(path,id,slot))return 0;
+    fd=openFile(path,O_RDONLY);
+    if(fd<0)return 0;
+    n=read(fd,r,sizeof(*r));close(fd);
+    return n==sizeof(*r)&&mzProfileRecordOK(r);
+}
+static int mzProfileLatest(const char *id,mz_profile_record_t *r)
+{
+    mz_profile_record_t a,b;
+    int x=mzProfileReadSlot(id,0,&a),y=mzProfileReadSlot(id,1,&b);
+    if(!x&&!y)return -1;
+    if(x&&(!y||(s32)(a.seq-b.seq)>0)){*r=a;return 0;}
+    *r=b;return 1;
+}
+void sysMaizoPrepareProfile(const char *id)
+{
+    mz_profile_record_t r;
+    mzProfileID[0]=0;mzProfileValue=0;
+    if(!mzProfileIdOK(id))return;
+    memcpy(mzProfileID,id,12);
+    if(mzProfileLatest(id,&r)>=0)mzProfileValue=r.value;
+}
+int sysMaizoImportProfile(const char *arg)
+{
+    char id[12],path[256];
+    u32 value;
+    mz_profile_record_t r,verify;
+    int slot,fd,n,closed;
+    if(!mzProfileParse(arg,id,&value))return 0;
+    slot=mzProfileLatest(id,&r);
+    r.seq=slot<0?1:r.seq+1;
+    slot=slot==0?1:0;
+    r.magic=0x4d5a5031u;r.value=value;r.check=mzProfileCheck(r.seq,value);
+    if(!mzProfilePath(path,id,slot))return -1;
+    fd=openFile(path,O_WRONLY|O_CREAT|O_TRUNC);
+    if(fd<0)return -1;
+    n=write(fd,&r,sizeof(r));closed=close(fd);
+    if(n!=sizeof(r)||closed<0||!mzProfileReadSlot(id,slot,&verify)||
+       verify.seq!=r.seq||verify.value!=value)return -1;
+    return 1;
+}
 #endif
 extern unsigned char elfldr_elf[];
 extern unsigned int size_elfldr_elf;
@@ -1024,6 +1087,8 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         config->EnableMaizoIgrMenu=1;
         configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &config->EnableMaizoIgrMenu);
         config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
+        memcpy(config->MaizoProfileID,mzProfileID,sizeof(mzProfileID));
+        config->MaizoProfile=mzProfileValue;
     }
 #endif
     config->EnableGSMOp = GetGSMEnabled();

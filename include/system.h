@@ -23,6 +23,10 @@ int sysInitDECI2(void);
 
 void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx, int EnablePS2Logo, unsigned int compatflags);
 
+#ifdef MAIZO_IGR_MENU
+void sysMaizoPrepareProfile(const char *id);
+int sysMaizoImportProfile(const char *arg);
+#endif
 int sysExecElf(const char *path);
 /* OPL Daily Builds-compatible POPStarter argv[0] handoff. */
 int sysExecElfWithParam(const char *path, const char *param);

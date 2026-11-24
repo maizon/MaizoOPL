@@ -72,6 +72,8 @@ struct EECoreConfig_t
 #ifdef MAIZO_IGR_MENU
     /* Last field only; both frontend and EE build must opt in. */
     int EnableMaizoIgrMenu;
+    char MaizoProfileID[12];
+    u32 MaizoProfile;
 #endif
 };
 

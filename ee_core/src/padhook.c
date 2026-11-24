@@ -143,7 +143,8 @@ static void t_loadElf(void)
 {
     USE_LOCAL_EECORE_CONFIG;
     int ret;
-    char *argv[2];
+    char *argv[3];
+    int argc=1;
     t_ExecData elf;
 
     if (EnableDebug)
@@ -179,6 +180,13 @@ static void t_loadElf(void)
     // Load exit ELF
     argv[0] = config->ExitPath;
     argv[1] = NULL;
+#ifdef MAIZO_IGR_MENU
+    if(maizoIGR_ProfileArg()){
+        argv[1]=maizoIGR_ProfileArg();
+        argv[2]=NULL;
+        argc=2;
+    }
+#endif
 
     // Wipe everything, even the module storage.
     WipeUserMemory((void *)&_end, (void *)GetMemorySize());
@@ -201,7 +209,7 @@ static void t_loadElf(void)
             DBGCOL(0x0080FF, LOADELF, "ExecPS2() begins");
 
         // Execute BOOT.ELF
-        ExecPS2((void *)elf.epc, (void *)elf.gp, 1, argv);
+        ExecPS2((void *)elf.epc, (void *)elf.gp, argc, argv);
     }
 
     if (EnableDebug) {

@@ -585,6 +585,9 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
 
     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
         strcpy(filename, game->startup);
+#ifdef MAIZO_IGR_MENU
+    sysMaizoPrepareProfile(game->startup);
+#endif
 
     if (gPS2Logo)
         EnablePS2Logo = CheckPS2Logo(0, game->start_sector + OPL_HDD_MODE_PS2LOGO_OFFSET);

@@ -16,6 +16,7 @@
 #include "coreconfig.h"
 #include "maizo_igrmenu.h"
 #include "maizo_igr_state.h"
+#include "maizo_igr_profile.h"
 #include "maizo_igr_filter.h"
 #include "maizo_gs_runtime.h"
 #include "maizo_gs_probe.h"
@@ -80,6 +81,22 @@ static maizo_igr_state_t mzState;
 static int mzStateReady;
 static u64 mzOriginalDisp[2];
 static int mzGameHasGsm;
+static int mzProfilePending;
+static char mzProfileReturn[MZ_PROFILE_ARG_SIZE];
+char *maizoIGR_ProfileArg(void)
+{
+    return mzProfileReturn[0]?mzProfileReturn:0;
+}
+static int mzProfileExitOK(const char *path)
+{
+    const char *base=path,*p=path;
+    for(;*p;p++)if(*p=='/'||*p=='\\'||*p==':')base=p+1;
+    /* Only explicitly selected loader return paths; never Browser or
+     * arbitrary homebrew. ASCII case-insensitive first five letters. */
+    if((base[0]|32)=='o' && (base[1]|32)=='p' && (base[2]|32)=='l' && base[3]=='.')return 1;
+    return (base[0]|32)=='m' && (base[1]|32)=='a' &&
+        (base[2]|32)=='i' && (base[3]|32)=='z' && (base[4]|32)=='o';
+}
 
 static const u8 mzColors[6][3] = {
     {9, 15, 27},      /* panel */
@@ -133,8 +150,8 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         "CONTINUAR", "IMAGEM E VIDEO", "CONTROLES", "JOGO E CHEATS",
         "SISTEMA", "VOLTAR AO MAIZO"
     };
-    static const char *const systemNames[4] = {
-        "CONTINUAR", "SAIR DO JOGO", "DESLIGAR PS2", "VOLTAR"
+    static const char *const systemNames[5] = {
+        "CONTINUAR", "SAIR DO JOGO", "DESLIGAR PS2", "VOLTAR", "SALVAR E SAIR"
     };
     mzLineCount=0;
     mzSelectedY=25+s->selected*10;
@@ -231,8 +248,9 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(66,8,5,"CHEATS IN-GAME");
         mzLine(76,8,5,"NAO SUPORTADOS");
     }else{
-        for(i=0;i<count;i++)mzLine(25+i*10,11,4,systemNames[i]);
-        if(s->confirm)mzLine(78,8,5,"CONFIRME DE NOVO");
+        for(i=0;i<count;i++)mzLine(25+i*10,11,i==4&&!s->save_caps?5:4,
+            i==4&&!s->save_caps?"SALVAR: N/D":systemNames[i]);
+        if(s->confirm)mzLine(86,8,5,"CONFIRME DE NOVO");
     }
     mzLine(114,8,3,"X OK  O VOLTAR START");
 }
@@ -663,6 +681,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         mzOriginalDisp[0]=GSMDestGSRegs[8];
         mzOriginalDisp[1]=GSMDestGSRegs[10];
         mzStateReady=1;
+        mzProfilePending=1;
     }
     if(!mzFrame())return MAIZO_IGR_UNAVAILABLE;
     /* The menu remains navigable without GSM. Unsafe video controls
@@ -689,6 +708,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         if(!mzState.native_field_caps)MaizoNativeFieldInvert=0;
         mzState.field_fix=!!MaizoNativeFieldInvert;
     }
+    mzState.save_caps=mzProfileIdOK(config->MaizoProfileID)&&mzProfileExitOK(config->ExitPath);
     mzState.filter_mode=(int)MaizoGsFilterMode; /* Another SetGsCrt cancelled the filter. */
     if(!mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                            *MZ_VIF1_STAT,*MZ_GIF_STAT))
@@ -705,6 +725,33 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     if(mzGameHasGsm && MaizoGs480iMode && !mzFrame480iSourceOK()){
         mzFrame480iApply(0);
         mzState.frame480i_mode=0;
+    }
+    /* Apply a saved profile once, at a verified idle/menu boundary,
+     * never during boot or an active game DMA. Invalid parts stay off. */
+    if(mzProfilePending){
+        u32 v=config->MaizoProfile;
+        mzProfilePending=0;
+        if(mzProfileValid(v)&&!!(v&(1u<<26))==mzGameHasGsm){
+            maizo_igr_state_t desired=mzState;
+            desired.width=(int)(v&31u)-8;desired.height=(int)((v>>5)&31u)-8;
+            desired.x=(int)((v>>10)&63u)-24;desired.y=(int)((v>>16)&63u)-24;
+            desired.field_fix=!!(v&(1u<<22));
+            if(mzGameHasGsm||mzNativeApply(&desired)){
+                if(mzGameHasGsm)mzApply(&desired);
+                mzState.width=desired.width;mzState.height=desired.height;
+                mzState.x=desired.x;mzState.y=desired.y;
+            }
+            if(mzGameHasGsm||mzState.native_field_caps){
+                mzState.field_fix=desired.field_fix;
+                if(!mzGameHasGsm)MaizoNativeFieldInvert=desired.field_fix;
+            }
+            if(((v>>23)&3u)&&mzFilterApply((v>>23)&3u))
+                mzState.filter_mode=(int)MaizoGsFilterMode;
+            if((v&(1u<<25))&&mzFrame480iApply(1))
+                mzState.frame480i_mode=!!MaizoGs480iArmed;
+            mzState.filter_caps=mzFilterCapabilities();
+            mzState.frame480i_caps=mzFrame480iCaps();
+        }
     }
     suspend=0;
     if(mfifo==2){
@@ -790,6 +837,13 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             mzState.draw_caps=mzGsRuntimeCaps();
         }
         if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
+        if(action==MZ_ACTION_SAVE_EXIT){
+            u32 v=mzProfilePack(mzState.width,mzState.height,mzState.x,mzState.y,
+                mzState.field_fix,mzState.filter_mode,mzState.frame480i_mode,mzGameHasGsm);
+            if(mzState.save_caps&&mzProfileArg(mzProfileReturn,config->MaizoProfileID,v)){
+                result=MAIZO_IGR_EXIT;break;
+            }
+        }
         if(action==MZ_ACTION_EXIT){result=MAIZO_IGR_EXIT;break;}
         if(action==MZ_ACTION_POWEROFF){result=MAIZO_IGR_POWEROFF;break;}
         if(!mzDraw(p,&mzState)){result=MAIZO_IGR_UNAVAILABLE;break;}

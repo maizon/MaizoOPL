@@ -2090,6 +2090,12 @@ int main(int argc, char *argv[])
     ioPutRequest(IO_CUSTOM_SIMPLEACTION, &deferredInit);
 
     guiIntroLoop();
+#ifdef MAIZO_IGR_MENU
+    if(argc==2){
+        int saved=sysMaizoImportProfile(argv[1]);
+        if(saved)guiMsgBox(saved>0?"Perfil In-Game salvo.":"Falha ao salvar perfil In-Game.",1,NULL);
+    }
+#endif
     guiMainLoop();
 
     return 0;

@@ -520,6 +520,9 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
 
     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
         strcpy(filename, game->startup);
+#ifdef MAIZO_IGR_MENU
+    sysMaizoPrepareProfile(game->startup);
+#endif
 
     // deinit will free per device data.. copy driver name before free to compare for launch
     char bdmCurrentDriver[32];

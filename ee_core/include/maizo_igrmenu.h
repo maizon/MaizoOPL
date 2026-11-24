@@ -6,4 +6,5 @@
 /* Return 1 for a coherent, stable pad sample, 0 for retry. */
 int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame));
 int maizoIGR_Preflight(void);
+char *maizoIGR_ProfileArg(void);
 #endif
