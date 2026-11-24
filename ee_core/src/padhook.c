@@ -83,6 +83,7 @@ volatile u32 MaizoPadMailbox[16] __attribute__((aligned(64)));
 static u8 *mzPadSlots[8];
 static u32 mzPadFrames[9],mzPadEpoch;
 static u8 mzPadAge[9];
+static u16 mzMenuPrev[12];
 
 /* Padman updates this area asynchronously via SIF DMA, not EE code.
  * UNCACHED alone does not stop LTO from caching ordinary C loads. */
@@ -114,28 +115,40 @@ static int mzPadFresh(unsigned i,u32 f)
     else if(mzPadAge[i]<255)mzPadAge[i]++;
     return mzPadAge[i]<60;
 }
-static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons,u32 *frame)
+static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,int menu)
 {
     const volatile u32 *mb=(const volatile u32 *)UNCACHED_SEG(MaizoPadMailbox);
     uint32_t p[4];
-    unsigned k,valid=0,keys=0;
+    unsigned k,valid=0,keys=0,rank=0;
     /* Prefer independent live PadEmu input, then all opened game slots.
      * A stale/disconnected slot cannot monopolize navigation. */
     for(k=0;k<4;k++)p[k]=mb[k];
     if(p[0]==mb[0]&&mzPadPacketOK(p)&&mzPadFresh(8,p[0])){
         for(k=0;k<4;k++)if(p[3]&(1u<<k)){
             unsigned v=(p[1+k/2]>>((k&1u)*16u))&65535u;
-            keys=mzPadPick(keys,v);valid=1;
+            keys=menu?mzPadMenuChoose(keys,&rank,v,mzMenuPrev[8+k]):mzPadPick(keys,v);
+            if(menu)mzMenuPrev[8+k]=(u16)v;
+            valid=1;
         }
     }
     for(k=0;k<8;k++){
         u16 v;u32 f;
         if(mzPadSample(mzPadSlots[k],&v,&f)&&mzPadFresh(k,f)){
-            keys=mzPadPick(keys,v);valid=1;
+            keys=menu?mzPadMenuChoose(keys,&rank,v,mzMenuPrev[k]):mzPadPick(keys,v);
+            if(menu)mzMenuPrev[k]=v;
+            valid=1;
         }
     }
     *buttons=(u16)keys;*frame=mzPadEpoch;
     return valid;
+}
+static int maizoIgrButtons(u16 *buttons,u32 *frame)
+{
+    return mzIgrReadButtons(buttons,frame,0);
+}
+static int maizoIgrMenuButtons(u16 *buttons,u32 *frame)
+{
+    return mzIgrReadButtons(buttons,frame,1);
 }
 static void maizoIgrHold(void)
 {
@@ -555,7 +568,8 @@ maizo_igr_poll_again:
                             maizoIgrHold();
                             if(maizoIgrPadReady() &&
                                maizoIGR_Preflight(MaizoIgrDmacMask)){
-                                choice=maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield,MaizoIgrDmacMask);
+                                for(unsigned k=0;k<12;k++)mzMenuPrev[k]=0;
+                                choice=maizoIGR_MenuRun(maizoIgrMenuButtons,maizoIgrYield,MaizoIgrDmacMask);
                                 maizoIgrUnhold();
                                 goto mz_capture_done;
                             }
@@ -1120,9 +1134,30 @@ int Install_PadOpen_Hook(u32 mem_start, u32 mem_end, int mode)
 
     found = 0;
     patched = 0;
+#ifdef MAIZO_IGR_MENU
+    /* Pad reopen is common at loading boundaries. If the installed
+     * original still matches its exact signature, do not search 31 MiB
+     * of game RAM or replace its pointer with another library copy. */
+    if(mode==PADOPEN_CHECK){
+        u32 original=Pad_Data.libpad==IGR_LIBPAD?(u32)scePadPortOpen:(u32)scePad2CreateSocket;
+        for(i=0;i<NB_PADOPEN_PATTERN;i++){
+            unsigned size=padopen_patterns[i].size;
+            if(Pad_Data.libpad==padopen_patterns[i].type &&
+               Pad_Data.libversion==padopen_patterns[i].version &&
+               original>=mem_start && original<mem_end && size<=mem_end-original &&
+               find_pattern_with_mask((u32 *)original,size,padopen_patterns[i].pattern,
+                                      padopen_patterns[i].mask,size))return 0;
+        }
+    }
+#endif
 
     // Loop for each libpad version
     for (i = 0; i < NB_PADOPEN_PATTERN; i++) {
+#ifdef MAIZO_IGR_MENU
+        /* CHECK must not switch the installed wrapper to another ABI. */
+        if(mode==PADOPEN_CHECK && (Pad_Data.libpad!=padopen_patterns[i].type ||
+           Pad_Data.libversion!=padopen_patterns[i].version))continue;
+#endif
         ptr = (u32 *)mem_start;
         while (ptr) {
             // Purple while PadOpen pattern search

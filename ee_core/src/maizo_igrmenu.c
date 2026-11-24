@@ -873,7 +873,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     first=mzDraw(p,&mzState);
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
     for(;;){
-        int action;
+        int action,oldPage=mzState.page,oldSelected=mzState.selected;
         yield();
         if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame && now==prev)){
             /* A dead pad stream must not strand the game in suspended
@@ -993,7 +993,22 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         }
         if(action==MZ_ACTION_EXIT){result=MAIZO_IGR_EXIT;break;}
         if(action==MZ_ACTION_POWEROFF){result=MAIZO_IGR_POWEROFF;break;}
-        if(!mzDraw(p,&mzState)){result=MAIZO_IGR_UNAVAILABLE;break;}
+        /* A direction-only change needs only the two highlight bands.
+         * Keep the same transfer format and idle checks as full draw. */
+        if(oldPage==mzState.page && oldSelected!=mzState.selected &&
+           (pressed&(MZ_KEY_UP|MZ_KEY_DOWN))){
+            int y,ok=1;
+            mzPage(&mzState);
+            for(y=0;y<PH*mzSy;y++){
+                int uy=y/mzSy,oldY=25+oldSelected*10,newY=mzSelectedY;
+                if((uy>=oldY-2&&uy<oldY+8)||(uy>=newY-2&&uy<newY+8)||
+                   (oldPage==MZ_PAGE_SYSTEM&&uy>=96&&uy<103)){
+                    mzRenderLine((u8 *)(p+28),y);
+                    if(!mzSendLine(p,y)){ok=0;break;}
+                }
+            }
+            if(!ok||!mzWait(MZ_GIF_STAT,GIF_BUSY)){result=MAIZO_IGR_UNAVAILABLE;break;}
+        }else if(!mzDraw(p,&mzState)){result=MAIZO_IGR_UNAVAILABLE;break;}
     }
     if(result==MAIZO_IGR_RESUME){
         /* Consume release so button combo does not reach/reopen in game. */

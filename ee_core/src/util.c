@@ -329,7 +329,8 @@ u32 *find_pattern_with_mask(u32 *buf, unsigned int bufsize, const u32 *pattern, 
     len /= sizeof(u32);
     bufsize /= sizeof(u32);
 
-    for (i = 0; i < bufsize - len; i++) {
+    if (!len || len > bufsize) return NULL;
+    for (i = 0; i <= bufsize - len; i++) {
         for (j = 0; j < len; j++) {
             if ((buf[i + j] & mask[j]) != pattern[j])
                 break;
