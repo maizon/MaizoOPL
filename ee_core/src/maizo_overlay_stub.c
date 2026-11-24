@@ -71,6 +71,9 @@ static const mz_ovl_header *find(void)
 int maizoIGR_Preflight(u32 mask)
 {
     const mz_ovl_header *h=find();
+    #ifdef MAIZO_IGR_RESTORE
+    if(!mzRestoreReady())return 0;
+    #endif
     return h?((int (*)(const mz_ovl_api *,u32))h->preflight)(&api,mask):0;
 }
 int maizoIGR_MenuRun(int (*buttons)(u16 *,u32 *),void (*yield)(void),u32 mask)

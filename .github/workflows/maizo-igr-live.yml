@@ -1,8 +1,6 @@
 name: MAIZO In-Game LIVE experimental (no title suspension)
 
 on:
-  push:
-    branches: [feat/recovery-b-ingame-pro-safe]
   workflow_dispatch:
 
 permissions:

@@ -8,7 +8,8 @@
 IRX_ID("maizo_restore",1,0);
 static volatile mzr_req req;
 static mzr_ack ack;
-static u32 eeAck,eeLine,bufSize;
+static u32 eeAck,eeLine,bufSize,written;
+static int sealed;
 static u8 *buf;
 static u8 upload[MZR_LINE] __attribute__((aligned(16)));
 static u16 vol[2][2],pitch[2][24];
@@ -42,7 +43,7 @@ static void silence(void)
 static void release(void)
 {
     if(buf && !dmaBusy)FreeSysMemory(buf);
-    if(!dmaBusy){buf=0;bufSize=0;ack.buf=0;}
+    if(!dmaBusy){buf=0;bufSize=written=0;sealed=0;ack.buf=0;}
 }
 static int send(void *src,u32 dst,u32 len)
 {
@@ -66,6 +67,7 @@ static int execute(const mzr_req *r)
 {
     switch(r->op){
     case MZR_BEGIN:
+        if(sealed || dmaBusy)return -1;
         release();
         if(!r->len || r->len>MZR_MAX || (r->len&15u))return -1;
         buf=AllocSysMemory(ALLOC_FIRST,r->len,0);
@@ -74,16 +76,21 @@ static int execute(const mzr_req *r)
     case MZR_WRITE:
         /* DMA only targets permanent upload storage, never a buffer
          * which may be freed by the inactivity lease. */
-        if(!buf || !mzrRange(r->off,r->len,bufSize))return -1;
+        if(!buf || sealed || !mzrRange(r->off,r->len,bufSize) ||
+           !mzrAppendOK(r->off,r->len,written,bufSize) ||
+           mzrHash(upload,r->len)!=r->pad[0])return -1;
         for(u32 j=0;j<r->len;j++)buf[r->off+j]=upload[j];
-        return r->len;
+        if(mzrHash(buf+r->off,r->len)!=r->pad[0])return -1;
+        written+=r->len;return r->len;
     case MZR_READ:
-        if(!buf || r->ee!=eeLine || !mzrRange(r->off,r->len,bufSize))return -1;
+        if(!buf || !sealed || r->ee!=eeLine || !mzrRange(r->off,r->len,bufSize))return -1;
         return send(buf+r->off,eeLine,r->len)?(int)r->len:-1;
-    case MZR_END: release();return 0;
-    case MZR_HUSH: silence();return 0;
+    case MZR_END: wake();release();return 0;
+    case MZR_HUSH:
+        if(!buf || sealed || !mzrSealable(written,bufSize))return -1;
+        sealed=1;silence();return 0;
     case MZR_WAKE: wake();release();return 0;
-    case MZR_KEEP: return 0;
+    case MZR_KEEP: return buf?0:-1;
     default:return -1;
     }
 }
@@ -95,7 +102,7 @@ static void worker(void *arg)
         u32 seq=req.seq;
         if(dmaBusy){
             wake();
-            if(sceSifDmaStat(dmaBusy)<0){dmaBusy=0;release();}
+            if(sceSifDmaStat(dmaBusy)<0){dmaBusy=0;if(!sealed)release();}
         }else if(seq && seq!=seen){
             mzr_req r=req;
             if(seq==r.seq && seq==req.seq){
@@ -104,9 +111,11 @@ static void worker(void *arg)
                 if(!send(&ack,eeAck,sizeof(ack)))wake();
             }
         }else if((buf || hush) && ++idle>=20000u){
-            wake();release();idle=0;
+            /* A sealed backup is the only copy of overwritten pixels.
+             * Never free it behind the EE's back. Audio still wakes on
+             * timeout. Explicit WAKE/END or IOP reset releases storage. */
+            wake();if(!sealed)release();idle=0;
         }
-        /* 10-second lease while allocated or muted. */
         DelayThread((buf || hush || dmaBusy)?500:20000);
     }
 }

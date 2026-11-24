@@ -14,6 +14,11 @@ jobs:
         with:
           fetch-depth: 0
       - run: python3 -m pip install --break-system-packages -r requirements.txt
+      - name: Test backup integrity and boot isolation
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_integrity_test.c -o /tmp/mzr-integrity
+          /tmp/mzr-integrity
+          python3 tests/maizo_igr_boot_isolation_test.py
       - name: Build and validate independent restoration components
         run: |
           make -C modules/iopcore/maizo_restore

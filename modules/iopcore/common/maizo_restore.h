@@ -4,6 +4,7 @@
 #ifndef MAIZO_RESTORE_WIRE_H
 #define MAIZO_RESTORE_WIRE_H
 #include <tamtypes.h>
+#include "maizo_restore_integrity.h"
 #define MZR_MAX (320u*252u*4u)
 #define MZR_LINE 1280u
 enum { MZR_BEGIN=1, MZR_READ, MZR_END, MZR_HUSH, MZR_WAKE, MZR_KEEP, MZR_WRITE };

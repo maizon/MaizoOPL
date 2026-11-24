@@ -452,9 +452,19 @@ static int __attribute__((noinline)) mzCapturePath(u32 heldDmac)
     u32 stat=mzIgrOriginalDstat(*MZ_D_STAT,heldDmac);
     u32 vif=*MZ_VIF1_STAT,gif=*MZ_GIF_STAT;
     if(!mzIgrGsFifoEmpty((u32)*MZ_GS_CSR))return 0;
+#ifdef MAIZO_IGR_RESTORE
+    /* Readback uses PATH3 and reverses VIF1. Never suspend in an
+     * MFIFO transfer, pending graphics completion, reverse FIFO,
+     * IPU or scratchpad DMA. Wait for an actual quiet boundary. */
+    if((dctrl&12u) || (stat&0xe006u) || (vif&0x800000u) ||
+       ((*(vu32 *)0x10008000u|*(vu32 *)0x1000b000u|
+         *(vu32 *)0x1000b400u|*MZ_D8_CHCR|*(vu32 *)0x1000d400u)&0x100u))return 0;
+    return mzIgrSafePath(ch1,ch2,vif,gif,stat)==3?3:0;
+#else
     if(!(dctrl&12u))return mzIgrSafePath(ch1,ch2,vif,gif,stat);
     return mzIgrMfifoPath(dctrl,ch1,ch2,*MZ_D8_CHCR,*MZ_D1_QWC,
                          *MZ_D1_TADR,*MZ_D8_MADR,*MZ_D_RBSR,vif,gif,stat);
+#endif
 }
 /* Non-destructive preflight while game threads keep running. It is
  * intentionally separate from GSM: it only checks the GS readout
@@ -594,7 +604,7 @@ static int mzBackup(u32 *p)
         if(!mzReadLine(p,y)||!mzRestoreWrite(y*len,p,len)){
             mzRestoreEnd();return -1;
         }
-        mzRestoreKeep();
+        if(!mzRestoreKeep()){mzRestoreEnd();return -1;}
     }
     return 1;
 }
@@ -923,7 +933,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     int result=MAIZO_IGR_RESUME;
     int first;
 #ifdef MAIZO_IGR_RESTORE
-    int backup=0;
+    int backup=0,dirty=0;
 #endif
     if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
     mzGameHasGsm=!!config->EnableGSMOp;
@@ -970,19 +980,23 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
      * before touching more VRAM. Fail closed instead of pretending
      * a 224-line title has a native 480-line render buffer. */
     if(mzGameHasGsm && MaizoGs480iMode && !mzFrame480iSourceOK()){
+#ifdef MAIZO_IGR_RESTORE
+        mzBpcRestore(oldBpc);return MAIZO_IGR_UNAVAILABLE;
+#else
         mzFrame480iApply(0);
         mzState.frame480i_mode=0;
+#endif
     }
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
 #ifdef MAIZO_IGR_RESTORE
     backup=mzBackup(p);
-    if(backup<0){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    /* A complete, verified, sealed backup is mandatory before the
+     * first pixel write. PATH2/MFIFO/no IOP memory must never paint. */
+    if(backup!=1 || !mzRestoreHush()){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    dirty=1; /* even a partially completed first draw must roll back */
 #endif
     first=mzDraw(p,&mzState);
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
-#ifdef MAIZO_IGR_RESTORE
-    mzRestoreHush();
-#endif
     if(!mzGameHasGsm && !mzState.native_field_caps)MaizoNativeFieldInvert=0;
     /* Restore saved settings only AFTER the first complete draw. A
      * failed opening must not activate a saved native override. */
@@ -1025,7 +1039,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     for(;;){
         int action,oldPage=mzState.page,oldSelected=mzState.selected;
 #ifdef MAIZO_IGR_RESTORE
-        mzRestoreKeep();
+        if(!mzRestoreKeep()){result=MAIZO_IGR_UNAVAILABLE;break;}
 #endif
         yield();
         if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame && now==prev)){
@@ -1142,7 +1156,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     }
 cleanup:
 #ifdef MAIZO_IGR_RESTORE
-    if(backup>0 && (result==MAIZO_IGR_RESUME || result==MAIZO_IGR_UNAVAILABLE)){
+    if(dirty && (result==MAIZO_IGR_RESUME || result==MAIZO_IGR_UNAVAILABLE)){
         if(!mzRestorePixels(p))result=MAIZO_IGR_UNAVAILABLE;
     }
     mzRestoreEnd();

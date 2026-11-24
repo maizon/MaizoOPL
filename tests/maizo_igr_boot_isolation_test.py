@@ -126,3 +126,14 @@ assert "boot_elf=(u8 *)maizo_pro_elf;" in system
 assert "MAIZO_IGR_OVERLAY_EXPERIMENTAL=0 MAIZO_IGR_RESTORE_EXPERIMENTAL=0" in read("Makefile")
 assert "LoadMemModule(0,module,size,sizeof(arg),arg)" in transport
 print("Boot handoff: pre-deinit configuration, no dead GUI, optional restoration downgrade PASS")
+
+# Restore-only transaction: never paint before complete backup and seal.
+assert run.index("if(backup!=1 || !mzRestoreHush())") < run.index("first=mzDraw")
+assert run.index("dirty=1;") < run.index("first=mzDraw")
+assert "if(dirty &&" in run and "if(!mzRestoreKeep())" in run
+assert "mzrHash(dst,n)==lineHash[off/n]" in transport
+assert "mzrSealable(written,bufSize)" in service
+assert "wake();if(!sealed)release();" in service
+assert "if(!mzRestoreReady())return 0;" in read("ee_core/src/maizo_overlay_stub.c")
+assert "ready=quiet>=2;" in pad
+print("Restore: verified sequential backup, seal, pin, heartbeat and quiet boundary PASS")

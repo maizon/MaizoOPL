@@ -619,3 +619,34 @@ effect intents remain supported; no unsynchronized executable Sky patch,
 no GSM live paint, no forced unsupported effects or profile exit.
 The live painter now renders a line once per slice instead of per chunk.
 Real hardware validation remains necessary; regular builds are unchanged.
+
+### Restoration priority / mandatory backup transaction
+
+LIVE is no longer built automatically on branch pushes. Its source and
+manual workflow remain for reproducibility. Restoration-only changes:
+
+* Ready service gate before pausing; conservative PATH3-only readback
+  boundary, two quiet scheduler samples, no active IPU, VIF0, or SPR DMA,
+  no pending graphics completions or MFIFO. Partial thread suspension
+  is immediately reversed. These gates do not establish that all title
+  semaphores or streaming operations are safe to pause.
+* IOP accepts contiguous checksummed writes only; EE retains the
+  original per-line hashes and validates each returned line. All bytes
+  must be received and sealed before audio hush or the first draw.
+  No unbacked drawing when PATH2, MFIFO, allocation or handshake fails.
+* A sealed buffer is pinned until explicit release or IOP reset, not
+  freed by the old inactivity lease; the lease still unmutes audio.
+  A poisoned transport can retain the allocation until IOP reset.
+  Heartbeat failures close the menu and partial first draws attempt
+  rollback. A hardware/transport failure during rollback remains an
+  unresolved failure mode; no claim of guaranteed recovery.
+* If the Restoration overlay cannot fit, the conventional PRO core
+  still boots but its unbacked pause menu is disabled in this build;
+  if even that core cannot fit, legacy boot uses mode 6 when PRO was
+  requested. Separate conventional build remains unchanged.
+* Full internal GS write-only transfer-state tracking, validated
+  reverse-transfer DMA and MFIFO restoration, complete SPU2/AutoDMA
+  state, safe title-specific thread selection and full VRAM snapshot
+  remain open. No FreezeAnalyzer and no arbitrary game-RAM reservation.
+  Hardware tests, especially Ben 10 during loading, repeated open/close,
+  and low-memory configurations, are release blockers.

@@ -591,6 +591,9 @@ maizo_igr_poll_again:
              * Never wait for a stalled chain with its completion IRQ
              * masked, and always release failed captures. */
             int retries,attempt;
+#ifdef MAIZO_IGR_RESTORE
+            int quiet=0;
+#endif
             /* A short request-scoped window covers many more frame flips
              * without enabling the GS recorder at boot. */
             for(attempt=0;attempt<180;attempt++){
@@ -602,8 +605,17 @@ maizo_igr_poll_again:
                 if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE))
                     for(retries=0;retries<16;retries++)
                         if(maizoIGR_Preflight(0)){ready=1;break;}
+                #ifdef MAIZO_IGR_RESTORE
+                /* Require quiet samples separated by a scheduling gap.
+                 * Do not hold the title on a single lucky idle sample. */
+                quiet=ready?quiet+1:0;
+                ready=quiet>=2;
+                #endif
                 if(ready){
                     int suspended=maizoIgrPauseThreads();
+#ifdef MAIZO_IGR_RESTORE
+                    if(!suspended){maizoIgrResumeThreads();break;}
+#endif
                     for(retries=0;suspended&&retries<8;retries++){
                         if(maizoIGR_Preflight(0)){
                             maizoIgrHold();
@@ -621,6 +633,9 @@ maizo_igr_poll_again:
                         maizoIgrYield();
                     }
                     maizoIgrResumeThreads();
+#ifdef MAIZO_IGR_RESTORE
+                    quiet=0;
+#endif
                 }
                 /* Let title workers and their IRQs make progress before
                  * another short capture. Never leave the title paused

@@ -1117,14 +1117,17 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         boot_elf=(u8 *)maizo_pro_elf;
         coreSize=size_maizo_pro_elf;
         LOG("SYSTEM restoration unavailable: conventional PRO selected\n");
+#ifdef MAIZO_IGR_RESTORE
+        proEnabled=0; /* keep normal boot, never use unbacked pause menu */
+#endif
     }
 #endif
 #ifdef MAIZO_IGR_MENU
     if(fallbackCore){
         boot_elf=(u8 *)eecore_fallback_elf;
         coreSize=size_eecore_fallback_elf;
-#ifdef MAIZO_IGR_LIVE
-        if(proEnabled)compatflags|=COMPAT_MODE_6; /* unavailable live chord must not reset */
+#if defined(MAIZO_IGR_LIVE) || defined(MAIZO_IGR_RESTORE)
+        if(proEnabled)compatflags|=COMPAT_MODE_6; /* unavailable menu chord must not reset */
 #endif
         if (proEnabled) {
             LOG("SYSTEM guarded legacy core fallback: module arena full\n");
