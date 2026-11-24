@@ -10,20 +10,7 @@ permissions:
 
 jobs:
   protected-ingame:
-    name: EE size guard (${{ matrix.variant }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: oz
-            flags: "-Oz"
-          - variant: oz-no-once
-            flags: "-Oz -fno-inline-functions-called-once"
-          - variant: os-no-once
-            flags: "-Os -fno-inline-functions-called-once"
-          - variant: sky-compact
-            flags: "-Oz"
-            sky: 1
+    name: EE size guard (Sky Compact)
     runs-on: ubuntu-latest
     container: ghcr.io/ps2homebrew/ps2homebrew:main
     steps:
@@ -34,22 +21,22 @@ jobs:
         run: python3 -m pip install --break-system-packages -r requirements.txt
       - name: Build the complete In-Game PRO without compromising the EE stack
         env:
-          MAIZO_EE_SIZE_FLAGS: ${{ matrix.flags }}
+          MAIZO_EE_SIZE_FLAGS: "-Oz"
         run: |
           set -o pipefail
           make clean
-          make --trace release MAIZO_IGR_EXPERIMENTAL=1 MAIZO_MAGE_SKY_EXPERIMENTAL=${{ matrix.sky || 0 }} 2>&1 | tee build-igr-experimental.log
+          make --trace release MAIZO_IGR_EXPERIMENTAL=1 MAIZO_MAGE_SKY_EXPERIMENTAL=1 2>&1 | tee build-igr-experimental.log
       - name: Resident memory diagnostics (even on guard failure)
         if: always()
         run: |
           if test -f ee_core/ee_core.map; then
             grep -E '^\.(text|rodata|data|bss|sbss|sdata)|_end_bss' ee_core/ee_core.map || true
           fi
-      - name: Upload diagnostic build log (including memory budget)
-        if: always()
+      - name: Upload diagnostic build log only on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: MAIZO-IGR-EXPERIMENTAL-LOG-${{ matrix.variant }}
+          name: MAIZO-IGR-BUILD-ERROR
           path: |
             build-igr-experimental.log
             ee_core/ee_core.map
@@ -59,6 +46,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: MAIZO-IGR-EXPERIMENTAL-ELF-${{ matrix.variant }}
+          name: MAIZO-IGR-PRO
           path: OPNPS2LD-*.ELF
           if-no-files-found: error
