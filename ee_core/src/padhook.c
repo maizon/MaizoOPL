@@ -243,7 +243,8 @@ static void maizoIgrYield(void)
     /* Bounded polling during suspension: kernel alarm callbacks can
      * depend on services that a title has disabled. Do not SleepThread
      * with the game suspended. IRQs remain enabled for SIF pad DMA. */
-    delay(1);
+    unsigned int n;
+    for(n=0;n<0x80000u;n++)asm volatile("nop\nnop\nnop\nnop" ::: "memory");
 }
 /* Some pad libraries require a live EE worker to advance their pad
  * buffer. Check for real progress after suspension, before modifying
