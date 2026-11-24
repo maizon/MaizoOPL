@@ -610,6 +610,7 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Organizar biblioteca", MENU_LIBRARY_SORT, -1);
         submenuAppendItem(&mainMenu, -1, "Filtrar por origem", MENU_SOURCE_FILTER, -1);
         submenuAppendItem(&mainMenu, -1, "Preferências dos jogos", MENU_GAME_PREFERENCES, -1);
+#ifdef MAIZO_IGR_MENU
         {
             int igrEnabled = 0;
             configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &igrEnabled);
@@ -618,6 +619,11 @@ static void menuInitMainMenu(void)
                                            "MAIZO In-Game PRO [Desligado]",
                               MENU_INGAME_PRO, -1);
         }
+#else
+        submenuAppendItem(&mainMenu, -1,
+                          "MAIZO In-Game PRO [Modo seguro]",
+                          MENU_INGAME_PRO, -1);
+#endif
         submenuAppendItem(&mainMenu, -1, "Atualizar biblioteca", MENU_LIBRARY_REFRESH, -1);
         submenuAppendItem(&mainMenu, -1, "Capas dos jogos", MENU_COVER_MODE, -1);
         submenuAppendItem(&mainMenu, -1, "Visualização da biblioteca", MENU_VIEW_LAYOUT, -1);
@@ -1778,18 +1784,23 @@ void menuHandleInputMenu()
             if (menuCheckParentalLock() == 0)
                 guiShowGamePreferences();
         } else if (id == MENU_INGAME_PRO) {
+#ifdef MAIZO_IGR_MENU
             if (menuCheckParentalLock() == 0) {
                 int enabled = 0;
                 config_set_t *cfg = configGetByType(CONFIG_OPL);
                 configGetInt(cfg, "maizo_igr_menu", &enabled);
                 if (!enabled &&
-                    !guiMsgBox("Funcao experimental. Requer GSM ativo no jogo. "
-                               "Use com cautela. Ativar?", 1, NULL))
+                    !guiMsgBox("In-Game experimental: GS e DMA podem conflitar "
+                               "com alguns jogos. Ativar?", 1, NULL))
                     return;
                 configSetInt(cfg, "maizo_igr_menu", !enabled);
                 saveConfig(CONFIG_OPL, 0);
                 menuInitMainMenu();
             }
+#else
+            guiMsgBox("Menu In-Game completo reservado para build de teste. "
+                      "Nucleo de jogos protegido.", 0, NULL);
+#endif
         } else if (id == MENU_FILE_MANAGER) {
             if (menuCheckParentalLock() == 0)
                 maizoFileManagerOpen();

@@ -29,6 +29,10 @@
 #include "syshook.h"
 #include "tlb.h"
 #include "gsm_api.h"
+#ifdef MAIZO_IGR_MENU
+#include "maizo_igrmenu.h"
+#include "maizo_gs_probe.h"
+#endif
 #ifdef IGS
 #include "igs_api.h"
 #endif
@@ -48,6 +52,70 @@ static powerbuttondata_t Power_Button;
 
 /* IGR Thread ID and interrupt handler */
 static int IGR_Thread_ID = -1;
+#ifdef MAIZO_IGR_MENU
+/*
+ * Optional compact overlay. Only pauses threads actually suspended here,
+ * and keeps the SIF DMA alive so IOP padman can update the controller buffer.
+ * Technique credited to RiptOPL / RIPPS2 / ORBIT (AFL-3.0).
+ */
+static u32 MaizoIgrSuspended[8];
+static u32 MaizoIgrIntcMask, MaizoIgrDmacMask;
+static int MaizoIgrWaitRelease;
+
+static u16 maizoIgrButtons(void)
+{
+    const u8 *b;
+    u8 state;
+    if (Pad_Data.pad_buf == NULL)
+        return 0;
+    b = (const u8 *)UNCACHED_SEG(Pad_Data.pad_buf);
+    if (Pad_Data.libpad == IGR_LIBPAD) {
+        const u8 *other = b + (Pad_Data.libversion >= 0x0160 ? 128 : 64);
+        if (*(const u32 *)(b + Pad_Data.pos_frame) <
+            *(const u32 *)(other + Pad_Data.pos_frame))
+            b = other;
+    }
+    state = b[Pad_Data.pos_state];
+    if (!((Pad_Data.libpad == IGR_LIBPAD && state == IGR_PAD_STABLE_V1) ||
+          (Pad_Data.libpad == IGR_LIBPAD2 && state == IGR_PAD_STABLE_V2)))
+        return 0;
+    return ~(b[Pad_Data.pos_combo2] | b[Pad_Data.pos_combo1] << 8) & 0xffff;
+}
+static void maizoIgrHold(void)
+{
+    int i;
+    MaizoIgrIntcMask = *(vu32 *)0x1000f010 & 0x7ffd; /* exclude SIF SBUS */
+    MaizoIgrDmacMask = (*R_EE_D_STAT >> 16) & 0x431f; /* exclude SIF channels */
+    for (i = 0; i < 15; i++) {
+        if (MaizoIgrIntcMask & (1u << i)) DisableIntc(i);
+        if (MaizoIgrDmacMask & (1u << i)) DisableDmac(i);
+    }
+}
+static void maizoIgrUnhold(void)
+{
+    int i;
+    for (i = 0; i < 15; i++) {
+        if (MaizoIgrDmacMask & (1u << i)) EnableDmac(i);
+        if (MaizoIgrIntcMask & (1u << i)) EnableIntc(i);
+    }
+}
+static void maizoIgrPauseThreads(void)
+{
+    int i;
+    for (i = 0; i < 8; i++) MaizoIgrSuspended[i] = 0;
+    for (i = 1; i < 256; i++)
+        if (i != IGR_Thread_ID && SuspendThread(i) >= 0)
+            MaizoIgrSuspended[i >> 5] |= (1u << (i & 31));
+}
+static void maizoIgrResumeThreads(void)
+{
+    int i;
+    for (i = 1; i < 256; i++)
+        if (MaizoIgrSuspended[i >> 5] & (1u << (i & 31)))
+            ResumeThread(i);
+}
+
+#endif /* MAIZO_IGR_MENU */
 static int IGR_Intc_ID = -1;
 
 /* IGR thread stack & stack size */
@@ -167,7 +235,25 @@ static void IGR_Thread(void *arg)
      *
      * Poll the same controller buffer from an ordinary EE thread instead.
      */
+#ifdef MAIZO_IGR_MENU
+maizo_igr_poll_again:
+#endif
     for (;;) {
+#ifdef MAIZO_IGR_MENU
+        /*
+         * Read-only once-per-alarm GS activity sample. No extra IRQ,
+         * DMAC interception, VU reads or contention with GSM's hardware
+         * breakpoint. Designed not to change rendering or pad timing.
+         * The sample may miss a short-lived transfer; it is telemetry,
+         * never a universal-game compatibility claim.
+         */
+        if (config->EnableMaizoIgrMenu) {
+            mzGsProbeSample(&mzGsProbe,
+                            *(vu32 *)0x10003020, /* GIF_STAT */
+                            *(vu32 *)0x10009000, /* D1_CHCR */
+                            *(vu32 *)0x1000a000); /* D2_CHCR */
+        }
+#endif
         if (Pad_Data.pad_buf != NULL) {
             // Read through the uncached segment to obtain live pad data.
             pad_pos_state =
@@ -208,10 +294,20 @@ static void IGR_Thread(void *arg)
                     Pad_Data.vb_count = 0;
                 }
 
+#ifdef MAIZO_IGR_MENU
+                /* A closed menu must not reopen until the combo is released. */
+                if (pad_pos_combo1 != IGR_COMBO_R1_L1_R2_L2 ||
+                    pad_pos_combo2 != IGR_COMBO_START_SELECT)
+                    MaizoIgrWaitRelease = 0;
+#endif
                 // R1 + L1 + R2 + L2
                 if (pad_pos_combo1 == IGR_COMBO_R1_L1_R2_L2) {
                     // Start + Select: reset to configured exit path.
+#ifdef MAIZO_IGR_MENU
+                    if (pad_pos_combo2 == IGR_COMBO_START_SELECT && !MaizoIgrWaitRelease) {
+#else
                     if (pad_pos_combo2 == IGR_COMBO_START_SELECT) {
+#endif
                         Pad_Data.combo_type = pad_pos_combo2;
                     }
                     // R3 + L3: power off.
@@ -281,6 +377,30 @@ static void IGR_Thread(void *arg)
     }
 
     DPRINTF("IGR combination detected by polling thread.\n");
+
+#ifdef MAIZO_IGR_MENU
+    if (Pad_Data.combo_type == IGR_COMBO_START_SELECT &&
+        config->EnableMaizoIgrMenu &&
+        !Power_Button.press) {
+        int choice;
+        ChangeThreadPriority(TH_SELF, 0);
+        maizoIgrHold();
+        maizoIgrPauseThreads();
+        choice = maizoIGR_MenuRun(maizoIgrButtons);
+        maizoIgrUnhold();
+        if (choice == MAIZO_IGR_RESUME) {
+            maizoIgrResumeThreads();
+            Pad_Data.combo_type = 0;
+            MaizoIgrWaitRelease = 1;
+            ChangeThreadPriority(TH_SELF, 127);
+            goto maizo_igr_poll_again;
+        }
+        if (choice == MAIZO_IGR_POWEROFF)
+            Pad_Data.combo_type = IGR_COMBO_R3_L3;
+        /* EXIT or unsafe GS state: fall back to the original reset path.
+         * Suspended game threads stay suspended because reset follows. */
+    }
+#endif /* MAIZO_IGR_MENU */
 
     /*
      * Raise this thread to the priority previously assigned by the

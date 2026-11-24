@@ -15,5 +15,8 @@ void UpdateGSMParams(s16 interlace, s16 mode, s16 ffmd, u64 display, u64 syncv, 
 void Enable_GSBreakpoint(void);
 void Disable_GSBreakpoint(void);
 void EnableGSM(void);
+#ifdef MAIZO_IGR_MENU
+void EnableMaizoGsMonitor(void);
+#endif
 void DisableGSM(void);
 void setdve_576P(void);

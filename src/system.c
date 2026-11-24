@@ -945,6 +945,12 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     sprintf(config->g_ps2_gateway, "%u.%u.%u.%u", local_gateway[0], local_gateway[1], local_gateway[2], local_gateway[3]);
 
     // GSM now.
+#ifdef MAIZO_IGR_MENU
+    /* Field is compiled into both EE config producer and consumer. */
+    config->EnableMaizoIgrMenu=0;
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &config->EnableMaizoIgrMenu);
+    config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu==1);
+#endif
     config->EnableGSMOp = GetGSMEnabled();
     if (config->EnableGSMOp) {
         PrepareGSM(NULL, &gsm_config);

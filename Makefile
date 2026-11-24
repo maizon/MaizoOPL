@@ -212,6 +212,19 @@ else
   SMSTCPIP_INGAME_CFLAGS = INGAME_DRIVER=1
 endif
 
+# The proven Beta-39 resident core is ALWAYS used by the default build.
+# A separate opt-in build explores MAIZO In-Game without silently
+# modifying the stable ELF or the USB / BT / SMB driver integrations.
+ifeq ($(MAIZO_IGR_EXPERIMENTAL),1)
+ifneq ($(IGS),1)
+ifneq ($(DEBUG),1)
+ifneq ($(DTL_T10000),1)
+  EE_CFLAGS += -DMAIZO_IGR_MENU
+endif
+endif
+endif
+endif
+
 EE_CFLAGS += -fsingle-precision-constant -DOPL_VERSION=\"$(OPL_VERSION)\"
 
 # There are a few places where the config key/value are truncated, so disable these warnings

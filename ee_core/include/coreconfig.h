@@ -69,6 +69,10 @@ struct EECoreConfig_t
 
     int EnableGSMOp;
     struct GsmConfig_t GsmConfig;
+#ifdef MAIZO_IGR_MENU
+    /* Last field only; both frontend and EE build must opt in. */
+    int EnableMaizoIgrMenu;
+#endif
 };
 
 #define USE_LOCAL_EECORE_CONFIG struct EECoreConfig_t *config = &g_ee_core_config;

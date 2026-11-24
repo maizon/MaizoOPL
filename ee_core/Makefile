@@ -44,6 +44,24 @@ EE_CFLAGS += -D__LOAD_DEBUG_MODULES
     endif
 endif
 
+# Opt-in per-build only; normal build uses the validated Beta-39 EE core
+# exactly as shipped in Correction B. Never install an overlay simply
+# because the user enabled a menu item.
+ifeq ($(MAIZO_IGR_EXPERIMENTAL),1)
+ifneq ($(IGS),1)
+ifneq ($(EESIO_DEBUG),1)
+ifneq ($(LOAD_DEBUG_MODULES),1)
+ifneq ($(DTL_T10000),1)
+EE_OBJS := $(filter-out gsm_engine.o gsm_api.o,$(EE_OBJS))
+EE_OBJS += maizo_gsm_engine.o maizo_gsm_api.o maizo_igrmenu.o maizo_gs_runtime.o
+EE_CFLAGS += -DMAIZO_IGR_MENU -ffunction-sections -fdata-sections
+EE_EXTRA_GC := -Wl,--gc-sections
+endif
+endif
+endif
+endif
+endif
+
 ifeq ($(IGS),1)
 EE_OBJS += $(IGSCORE_EE_OBJS)
 EE_CFLAGS += -DIGS
@@ -51,7 +69,7 @@ endif
 
 EE_OBJS := $(EE_OBJS:%=$(EE_OBJS_DIR)%)
 
-EE_LDFLAGS = -nostartfiles -nostdlib -Tlinkfile -L$(PS2SDK)/ee/lib -s -Wl,-Map,$(MAPFILE)
+EE_LDFLAGS = -nostartfiles -nostdlib -Tlinkfile -L$(PS2SDK)/ee/lib -s -Wl,-Map,$(MAPFILE) $(EE_EXTRA_GC)
 EE_LIBS += -lpatches
 
 ifeq ($(PADEMU),1)
@@ -74,6 +92,7 @@ $(EE_OBJS_DIR)%.o : $(EE_SRC_DIR)%.s
 
 $(EE_BIN) : $(EE_OBJS)
 	$(EE_CC) $(EE_CFLAGS) $(EE_LDFLAGS) -o $(EE_BIN) $(EE_OBJS) $(EE_LIBS)
+	@python3 ../scripts/check_ee_core_stack.py "$(MAPFILE)" 8192 $(if $(filter 1,$(IGS) $(EESIO_DEBUG) $(LOAD_DEBUG_MODULES) $(DTL_T10000)),--warn-only,)
 
 all: $(EE_BIN)
 
