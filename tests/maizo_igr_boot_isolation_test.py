@@ -130,7 +130,7 @@ print("Boot handoff: pre-deinit configuration, no dead GUI, optional restoration
 # Restore-only transaction: never paint before complete backup and seal.
 assert run.index("if(backup!=1 || !mzRestoreHush())") < run.index("first=mzDraw")
 assert run.index("dirty=1;") < run.index("first=mzDraw")
-assert "if(dirty &&" in run and "if(!mzRestoreKeep())" in run
+assert "if(dirty &&" in run and "if(!full && !mzRestoreKeep())" in run
 assert "mzrHash(dst,n)==lineHash[off/n]" in transport
 assert "mzrSealable(written,bufSize)" in service
 assert "wake();if(!sealed)release();" in service
@@ -146,3 +146,10 @@ assert "if(retain)request=0;" in transport
 assert "mzrRingIdle(dctrl" in menu
 assert "if(started && !ok)mzReverseFault=1;" in menu
 print("Restoration: inactive MFIFO, audio non-interference, handshake and failed rollback retention PASS")
+
+assert "mzFullVram(0)" in run and "full?mzFullVram(1):mzRestorePixels(p)" in run
+assert "mzRestoreTransferRegs()" in run and "checkpoint.fault=1" in run
+assert "if(mzRestoreTransition)break;" in pad
+assert "mzRestoreTransition|=1u;" in read("ee_core/src/iopmgr.c")
+assert "mzRestoreTransition|=2u;" in read("ee_core/src/syshook.c")
+print("Cooperative full VRAM checkpoint and observed ELF/IOP transition gates PASS")

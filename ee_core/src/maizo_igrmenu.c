@@ -33,6 +33,7 @@
 #ifdef MAIZO_IGR_RESTORE
 #include "maizo_restore.h"
 #include "maizo_restore_guard.h"
+#include "../../modules/iopcore/common/maizo_restore_integrity.h"
 #endif
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
@@ -529,7 +530,7 @@ static int mzOverlayDrain(void)
         if(mzIgrGsFifoEmpty((u32)*MZ_GS_CSR))return 1;
     return 0;
 }
-static int mzSendLine(u32 *p,int line)
+static int mzSendRow(const u8 *pixels,int line,unsigned width)
 {
     /* 32 pixels = 4/6/8 QWs for 16/24/32-bit. Header is 6 QWs,
      * so each complete EOP packet fits in the 16-QW GIF FIFO.
@@ -537,7 +538,7 @@ static int mzSendLine(u32 *p,int line)
     u32 chunk[16*4] __attribute__((aligned(16)));
     u64 *q=(u64 *)chunk;
     unsigned x,qw=32u*mzBpp/16u;
-    for(x=0;x<(unsigned)(PW*mzSx);x+=32u){
+    for(x=0;x<width;x+=32u){
         q[0]=(u64)4|((u64)1<<60);q[1]=0x0e;
         q[2]=(u64)mzBp<<32|(u64)mzBw<<48|(u64)mzPsm<<56;
         q[3]=0x50;
@@ -546,10 +547,14 @@ static int mzSendLine(u32 *p,int line)
         q[6]=32u|((u64)1<<32);q[7]=0x52;
         q[8]=0;q[9]=0x53;
         q[10]=(u64)qw|((u64)1<<15)|((u64)2<<58);q[11]=0;
-        memcpy(chunk+24,(u8 *)(p+28)+x*mzBpp,qw*16u);
+        memcpy(chunk+24,pixels+x*mzBpp,qw*16u);
         if(!mzGifFifo(chunk,6u+qw))return 0;
     }
     return 1;
+}
+static int mzSendLine(u32 *p,int line)
+{
+    return mzSendRow((const u8 *)(p+28),line,PW*mzSx);
 }
 static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t *s)
 {
@@ -572,10 +577,10 @@ static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t 
 // Once a reverse transaction fails, do not open again in this overlay.
 #define MZR_BUSDIR ((vu64 *)0x12001040)
 static int mzReverseFault;
-static int __attribute__((noinline)) mzReadLine(u32 *p,int y)
+static int __attribute__((noinline)) mzReadRect(u32 *p,int y,unsigned width,unsigned height)
 {
     u64 q[12] __attribute__((aligned(16)));
-    u32 n=PW*mzSx*mzBpp/16u;
+    u32 n=width*height*mzBpp/16u;
     u64 imr;
     int ok=0,started=0;
     if(mzReverseFault || (*MZ_GS_CSR&3u)||!mzOverlayDrain()||(*MZ_VIF1_STAT&0x1f803f0fu))return 0;
@@ -584,13 +589,15 @@ static int __attribute__((noinline)) mzReadLine(u32 *p,int y)
     q[0]=5u|(1ull<<15)|(1ull<<60);q[1]=0xe;
     q[2]=(u64)mzBp|((u64)mzBw<<16)|((u64)mzPsm<<24);q[3]=0x50;
     q[4]=(u64)mzX|((u64)(mzY+y)<<16);q[5]=0x51;
-    q[6]=(u64)(PW*mzSx)|(1ull<<32);q[7]=0x52;
+    q[6]=(u64)width|((u64)height<<32);q[7]=0x52;
     q[8]=0;q[9]=0x61;
     q[10]=1;q[11]=0x53;
     if(!mzGifFifo((u32 *)q,6))goto done;
     started=1;
     for(u32 i=0;i<2000000u;i++)if(*MZ_GS_CSR&2u){ok=1;break;}
-    if(!ok)goto done;
+    if(!ok || !mzWait(MZ_GIF_STAT,GIF_BUSY) || !mzWait(MZ_VIF1_STAT,0x1f000000u)){
+        ok=0;goto done;
+    }
     *MZ_VIF1_STAT=0x800000u;*MZR_BUSDIR=1;
     asm volatile("sync.l");
     for(u32 i=0;i<n;i++,p+=4){
@@ -608,12 +615,50 @@ done:
     asm volatile("sync.l");
     return ok;
 }
+/* Complete GS VRAM in PSMCT32 pages: 64x32x4 = 8192 bytes,
+ * 512 pages cover all physical GS local memory, independent of title PSM.
+ * This path is opt-in by a cooperating renderer, never guesses EE space.
+ * CPU FIFO reverse transfers still need PS2 hardware validation. */
+static u32 mzFullHash;
+static int __attribute__((noinline)) mzFullVram(int restore)
+{
+    mz_gs_checkpoint_t *c=&mzGsShared->checkpoint;
+    if(!mzGsCheckpointReady(c)||mzReverseFault)return 0;
+    u8 *base=(u8 *)c->address;
+    if(restore && mzrHash(base,MZ_GS_VRAM_BYTES)!=mzFullHash)return 0;
+    unsigned bp=mzBp,bw=mzBw,x=mzX,y=mzY,psm=mzPsm,bpp=mzBpp;
+    int ok=1;
+    mzBw=1;mzX=mzY=mzPsm=0;mzBpp=4;
+    for(unsigned page=0;page<MZ_GS_PAGE_COUNT&&ok;page++){
+        u8 *data=base+page*MZ_GS_PAGE_BYTES;
+        mzBp=mzGsPageBase(page);
+        if(!restore)ok=mzReadRect((u32 *)data,0,64,32);
+        else for(unsigned row=0;row<32&&ok;row++)ok=mzSendRow(data+row*256,row,64);
+    }
+    mzBp=bp;mzBw=bw;mzX=x;mzY=y;mzPsm=psm;mzBpp=bpp;
+    if(!ok||!mzOverlayDrain())return 0;
+    if(!restore)mzFullHash=mzrHash(base,MZ_GS_VRAM_BYTES);
+    return 1;
+}
+/* Only the four registers touched by the menu are replayed.
+ * Do not replay a saved active TRXDIR, FINISH, SIGNAL, LABEL, vertex
+ * kicks or hidden GS state. The game supplies actual known values. */
+static int mzRestoreTransferRegs(void)
+{
+    mz_gs_checkpoint_t *c=&mzGsShared->checkpoint;
+    u64 q[10] __attribute__((aligned(16)));
+    if(!mzGsCheckpointReady(c)||mzReverseFault||
+       !mzrTransferReplayable(c->known,c->transfer[3])||!mzOverlayDrain())return 0;
+    q[0]=4ull|(1ull<<15)|(1ull<<60);q[1]=14;
+    for(unsigned i=0;i<4;i++){q[2+i*2]=c->transfer[i];q[3+i*2]=0x50u+i;}
+    return mzGifFifo((u32 *)q,5)&&mzOverlayDrain();
+}
 static int mzBackup(u32 *p)
 {
     u32 len=PW*mzSx*mzBpp, h=PH*mzSy;
     if(mzOverlayPath!=3 || !mzRestoreBegin(len*h))return 0;
     for(u32 y=0;y<h;y++){
-        if(!mzReadLine(p,y)||!mzRestoreWrite(y*len,p,len)){
+        if(!mzReadRect(p,y,PW*mzSx,1)||!mzRestoreWrite(y*len,p,len)){
             mzRestoreEnd(0);return -1;
         }
         if(!mzRestoreKeep()){mzRestoreEnd(0);return -1;}
@@ -949,7 +994,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     int result=MAIZO_IGR_RESUME;
     int first;
 #ifdef MAIZO_IGR_RESTORE
-    int backup=0,dirty=0,retain=0;
+    int backup=0,dirty=0,retain=0,full=0;
     if(mzReverseFault)return MAIZO_IGR_UNAVAILABLE;
 #endif
     if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
@@ -1006,10 +1051,16 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     }
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
 #ifdef MAIZO_IGR_RESTORE
-    backup=mzBackup(p);
-    /* A complete, verified, sealed backup is mandatory before the
-     * first pixel write. PATH2/MFIFO/no IOP memory must never paint. */
-    if(backup!=1 || !mzRestoreHush()){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    full=mzGsCheckpointReady(&mzGsShared->checkpoint);
+    if(full){
+        backup=mzFullVram(0);
+        if(!backup){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    }else{
+        backup=mzBackup(p);
+        /* A complete, verified, sealed backup is mandatory before the
+         * first pixel write. PATH2/no IOP memory must never paint. */
+        if(backup!=1 || !mzRestoreHush()){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    }
     dirty=1; /* even a partially completed first draw must roll back */
 #endif
     first=mzDraw(p,&mzState);
@@ -1056,7 +1107,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     for(;;){
         int action,oldPage=mzState.page,oldSelected=mzState.selected;
 #ifdef MAIZO_IGR_RESTORE
-        if(!mzRestoreKeep()){result=MAIZO_IGR_UNAVAILABLE;break;}
+        if(!full && !mzRestoreKeep()){result=MAIZO_IGR_UNAVAILABLE;break;}
 #endif
         yield();
         if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame && now==prev)){
@@ -1174,11 +1225,14 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
 cleanup:
 #ifdef MAIZO_IGR_RESTORE
     if(dirty && (result==MAIZO_IGR_RESUME || result==MAIZO_IGR_UNAVAILABLE)){
-        if(!mzRestorePixels(p)){
+        if(!(full?mzFullVram(1):mzRestorePixels(p))){
             retain=1;result=MAIZO_IGR_UNAVAILABLE;
         }
     }
-    mzRestoreEnd(retain);
+    if(full){
+        if(!mzRestoreTransferRegs())retain=1;
+        if(retain){mzGsShared->checkpoint.fault=1;result=MAIZO_IGR_UNAVAILABLE;}
+    }else mzRestoreEnd(retain);
 #endif
     /* No DMA channel or D_STAT bits were modified. PATH2 changes
      * VIF CODE; every submitted packet is complete. */

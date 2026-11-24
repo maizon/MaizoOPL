@@ -162,6 +162,9 @@ static void ResetIopSpecial(const char *args, unsigned int arglen)
 int New_Reset_Iop(const char *arg, int arglen)
 {
     USE_LOCAL_EECORE_CONFIG;
+#ifdef MAIZO_IGR_RESTORE
+    mzRestoreTransition|=1u;
+#endif
     DPRINTF("New_Reset_Iop start!\n");
     if (EnableDebug)
         DBGCOL(0xFF00FF, IOPMGR, "New_Reset_Iop()");
@@ -234,6 +237,9 @@ int New_Reset_Iop(const char *arg, int arglen)
     LoadFileExit();
     SifExitRpc();
 
+#ifdef MAIZO_IGR_RESTORE
+    mzRestoreTransition&=~1u;
+#endif
     DPRINTF("New_Reset_Iop complete!\n");
     // we have 4 SifSetReg calls to skip in ELF's SifResetIop, not when we use it ourselves
     if (set_reg_disabled)

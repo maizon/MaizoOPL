@@ -672,3 +672,28 @@ Full GS write-only register state, active MFIFO, full SPU2 checkpoint,
 4 MiB VRAM storage and universal thread classification remain unimplemented.
 The panel backup is at most 322560 bytes; IOP has only 2 MiB total RAM.
 No speculative allocation in game RAM, no FreezeAnalyzer, no LIVE.
+
+### Cooperative full-VRAM checkpoint (ABI 7 / overlay ABI 4)
+
+The new renderer checkpoint is an opt-in execution route, not automatic
+commercial game integration. A renderer allocates and exclusively owns
+4 MiB of aligned EE memory, registers after attaching, tracks completed
+register writes (128-entry software shadow), and publishes only at a
+verified frame/streaming boundary with TRXDIR explicitly deactivated.
+It must park every graphics producer until the request is cleared.
+The resident waits for this acknowledgement before pausing, and rejects
+registered clients that cannot provide it. Full backup uses 512 physical
+PSMCT32 pages of 8192 bytes each, with an integrity hash; on resume it
+restores those pages and the four known transfer registers. A failed
+rollback marks the checkpoint faulted, and the client must retain the
+buffer until ELF reset. No guessed game memory is used. Full mode leaves
+SPU2/IOP audio streaming untouched rather than forcing a mute without the
+panel backup service. Unregistered titles retain the previous guarded
+panel-only path. Readback and page mapping require real PS2 validation;
+full backup/restore may be slow. Core transition gates explicitly block
+menu capture during New_Reset_Iop and sysLoadElf, but do not recognize
+arbitrary in-game asset-loading code. Active MFIFO still needs drain;
+no universal safe thread classification, complete hidden GS/SPU2 state,
+AutoDMA checkpoint, or guaranteed hardware-fault recovery exists here.
+No LIVE or FreezeAnalyzer. Tests cover buffer ownership contract,
+checkpoint state and source-level integration, not real PS2 hardware.

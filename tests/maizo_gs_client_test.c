@@ -36,6 +36,28 @@ int main(void){
  g.path=MZ_GS_PATH2_VIF1;
  assert(mzGsClientSend(MZ_SUBMIT_PATH2_VIF1,a,b,64,48,&g,1,send,flush,0)==17);
  assert(last==b&&sent==5&&flushed==3&&mzGifRead64(b+32)==131);
+ {
+    mz_gs_register_shadow_t shadow={0};
+    assert(!mzGsClientCheckpointRegister(0x100000,0x200000));
+    assert(!mzGsClientCheckpointRegister(0x1c00040,MZ_GS_VRAM_BYTES));
+    assert(mzGsClientCheckpointRegister(0x100000,MZ_GS_VRAM_BYTES));
+    assert(!mzGsClientCheckpointRequested());
+    fake.checkpoint.request=1;
+    assert(mzGsClientCheckpointRequested());
+    assert(!mzGsClientCheckpointPark(&shadow));
+    for(unsigned i=0;i<4;i++)mzGsShadowObserve(&shadow,0x50+i,i);
+    assert(mzGsClientCheckpointPark(&shadow));
+    assert(mzGsCheckpointReady(&fake.checkpoint));
+    assert(!mzGsClientCheckpointPark(&shadow));
+    assert(mzGsPageBase(511)==16352);
+    assert(MZ_GS_PAGE_COUNT*MZ_GS_PAGE_BYTES==MZ_GS_VRAM_BYTES);
+    fake.checkpoint.fault=1;
+    assert(!mzGsCheckpointReady(&fake.checkpoint)&&mzGsClientCheckpointFault());
+    mzGsCheckpointRelease(&fake.checkpoint);
+    assert(!mzGsClientCheckpointRequested());
+    mzGsRuntimeReset();
+    assert(!fake.checkpoint.registered&&!fake.checkpoint.fault);
+ }
  fake.enabled=0;assert(!mzGsClientBindRange(&fake,sizeof(fake)));
  return 0;
 }

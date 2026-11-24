@@ -13,6 +13,7 @@ static u8 line[MZR_LINE] __attribute__((aligned(64)));
 static u32 request,upload,bytes,seq,last;
 static u32 written,lineBytes,lineHash[MZR_ROWS];
 static int active,sealed;
+volatile u32 mzRestoreTransition;
 static inline u32 ticks(void){u32 c;asm volatile("mfc0 %0,$9":"=r"(c));return c;}
 #define MZR_TIMEOUT 29491200u
 static int dma(void *src,u32 dst,u32 len)
@@ -66,7 +67,7 @@ void mzRestoreLink(int enable)
 }
 int mzRestoreReady(void)
 {
-    return request && upload && !active;
+    return request && upload && !active && !mzRestoreTransition;
 }
 int mzRestoreBegin(u32 n)
 {

@@ -24,6 +24,9 @@
 #endif
 #endif
 
+#ifdef MAIZO_IGR_RESTORE
+#include "maizo_restore.h"
+#endif
 #include <syscallnr.h>
 #include <ee_regs.h>
 #include <ps2_reg_defs.h>
@@ -75,6 +78,9 @@ void sysLoadElf(char *filename, int argc, char **argv)
     USE_LOCAL_EECORE_CONFIG;
     int r;
     t_ExecData elf;
+#ifdef MAIZO_IGR_RESTORE
+    mzRestoreTransition|=2u;
+#endif
 #ifdef MAIZO_IGR_MENU
     /* No native capture or previous title video override may leak
      * into an ELF transition. Explicit legacy GSM remains untouched. */
@@ -141,6 +147,9 @@ void sysLoadElf(char *filename, int argc, char **argv)
         disable_padOpen_hook = 0;
 
         DPRINTF("t_loadElf: executing...\n");
+#ifdef MAIZO_IGR_RESTORE
+        mzRestoreTransition&=~2u;
+#endif
         CleanExecPS2((void *)elf.epc, (void *)elf.gp, argc, argv);
     }
 

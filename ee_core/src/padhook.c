@@ -33,6 +33,10 @@
 #include "maizo_igrmenu.h"
 #include "maizo_gs_probe.h"
 #include "maizo_igr_input.h"
+#ifdef MAIZO_IGR_RESTORE
+#include "maizo_gs_runtime.h"
+#include "maizo_restore.h"
+#endif
 #endif
 #ifdef IGS
 #include "igs_api.h"
@@ -588,6 +592,14 @@ maizo_igr_poll_again:
             choice=maizoIGR_LiveRun(maizoIgrMenuButtons,maizoIgrLiveYield);
         #else
         ChangeThreadPriority(TH_SELF, 0);
+#ifdef MAIZO_IGR_RESTORE
+        if(mzRestoreTransition)goto mz_capture_done;
+        if(mzGsResident.checkpoint.registered){
+            if(mzGsResident.checkpoint.fault)goto mz_capture_done;
+            mzGsResident.checkpoint.ready=0;
+            mzGsCheckpointBarrier();mzGsResident.checkpoint.request=1;
+        }
+#endif
         if (config->EnableMaizoIgrMenu &&
             (config->EnableGSMOp || EnableMaizoGsMonitor())) {
             /* Stop EE producers first, but leave completion IRQs live
@@ -602,6 +614,9 @@ maizo_igr_poll_again:
             /* A short request-scoped window covers many more frame flips
              * without enabling the GS recorder at boot. */
             for(attempt=0;attempt<180;attempt++){
+#ifdef MAIZO_IGR_RESTORE
+                if(mzRestoreTransition)break;
+#endif
                 /* Check the real DMA boundary while producers are still
                  * runnable. Avoid suspending a game in the middle of
                  * constructing a VIF/GIF command. A short bounded sample
@@ -655,6 +670,9 @@ maizo_igr_poll_again:
             }
         }
 mz_capture_done:
+#ifdef MAIZO_IGR_RESTORE
+        mzGsCheckpointRelease(&mzGsResident.checkpoint);
+#endif
         #endif /* !LIVE */
         /* No always-on GS trap just because PRO is enabled. Release
          * temporary capture before ordinary game threads resume. */

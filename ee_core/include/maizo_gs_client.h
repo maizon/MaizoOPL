@@ -37,6 +37,32 @@ static inline int mzGsClientAttach(unsigned int caps)
 {
     return mzGsShared&&mzGsShared->enabled&&mzGsRuntimeAttach(caps);
 }
+/* Register ONLY memory explicitly allocated and exclusively held by
+ * the renderer. Register after Attach. Never pass unused-looking game RAM.
+ * At a drained frame boundary, record the actual completed writes to
+ * 0x50..0x53 (TRXDIR must be explicitly deactivated), publish and park
+ * all producers until Requested() becomes false. If Fault() is true,
+ * retain the buffer until the ELF is reset; do not reuse it. */
+static inline int mzGsClientCheckpointRegister(uint32_t address,uint32_t bytes)
+{
+    if(!mzGsShared||!mzGsShared->enabled||!mzGsCheckpointBufferOK(address,bytes))return 0;
+    mz_gs_checkpoint_t *c=&mzGsShared->checkpoint;
+    if(c->request||c->registered||c->fault)return 0;
+    c->address=address;c->bytes=bytes;
+    mzGsCheckpointBarrier();c->registered=1;return 1;
+}
+static inline int mzGsClientCheckpointRequested(void)
+{
+    return mzGsShared && mzGsShared->checkpoint.request;
+}
+static inline int mzGsClientCheckpointFault(void)
+{
+    return mzGsShared && mzGsShared->checkpoint.fault;
+}
+static inline int mzGsClientCheckpointPark(const mz_gs_register_shadow_t *shadow)
+{
+    return mzGsShared && mzGsCheckpointPublish(&mzGsShared->checkpoint,shadow);
+}
 /* Caller owns an immutable packet and separate scratch until DMA
  * completion. Protected UI/text or unknown pass -> original. */
 static inline int mzGsClientStage(unsigned type,const void *original,void *scratch,

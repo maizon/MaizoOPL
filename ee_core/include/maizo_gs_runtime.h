@@ -11,6 +11,7 @@
 #include "maizo_gs_vif1_mixed.h"
 #include "maizo_mage_modes.h"
 #include "maizo_filter_intent.h"
+#include "maizo_gs_checkpoint.h"
 
 enum {
     MZ_DRAW_AA1 = 1,
@@ -38,7 +39,7 @@ enum {
 #define MZ_GS_SHARED_MAGIC0 0x4d5a4753u
 #define MZ_GS_SHARED_MAGIC1 0x92a5b8acu
 #include "maizo_effects.h"
-#define MZ_GS_SHARED_ABI 6u
+#define MZ_GS_SHARED_ABI 7u
 typedef struct {
     uint32_t magic0, magic1, abi, bytes;
     volatile unsigned int enabled, capabilities, modes;
@@ -48,6 +49,7 @@ typedef struct {
     unsigned int requested_modes;
     volatile uint32_t effect_caps, effect_reduced, effect_modes;
     uint32_t draw_intents, effect_intents, native_owned; /* draw bits 0..4; effects 8..21 */
+    mz_gs_checkpoint_t checkpoint;
 } mz_gs_shared_t;
 #ifdef MZ_GS_CLIENT
 extern mz_gs_shared_t *mzGsShared;
@@ -85,6 +87,7 @@ static inline unsigned int mzGsRuntimeShift(unsigned int feature)
 
 static inline void mzGsRuntimeReset(void)
 {
+    memset(&mzGsShared->checkpoint,0,sizeof(mzGsShared->checkpoint));
     mzGsShared->requested_modes = 0;
     mzGsShared->draw_intents=mzGsShared->effect_intents=mzGsShared->native_owned=0;
     mzGsShared->effect_caps = mzGsShared->effect_reduced = mzGsShared->effect_modes = 0;

@@ -72,7 +72,10 @@ int maizoIGR_Preflight(u32 mask)
 {
     const mz_ovl_header *h=find();
     #ifdef MAIZO_IGR_RESTORE
-    if(!mzRestoreReady())return 0;
+    if(mzRestoreTransition)return 0;
+    if(mzGsResident.checkpoint.registered){
+        if(!mzGsCheckpointReady(&mzGsResident.checkpoint))return 0;
+    }else if(!mzRestoreReady())return 0;
     #endif
     return h?((int (*)(const mz_ovl_api *,u32))h->preflight)(&api,mask):0;
 }
