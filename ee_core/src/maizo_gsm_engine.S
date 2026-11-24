@@ -47,6 +47,8 @@ Old_SetGsCrt:       .word  0
 # Menu-only GS register observer: PASS-THROUGH, never GSM mode forcing.
 .globl MaizoGsMonitorOnly
 MaizoGsMonitorOnly: .word 0
+.globl MaizoNativeFieldInvert
+MaizoNativeFieldInvert: .word 0
 # Native geometry opt-in; exact original DISPLAY match is required.
 .globl MaizoNativeMask
 MaizoNativeMask: .word 0
@@ -238,6 +240,8 @@ maizo_480i_setcrt_done:
     lw      $t4, 0($t3)
     beqz    $t4, maizo_native_setcrt_done
     nop
+    la      $t3, MaizoNativeFieldInvert
+    sw      $zero, 0($t3)
     # A new CRT mode invalidates the old geometry and recorder values.
     la      $t3, MaizoNativeMask
     sw      $zero, 0($t3)
@@ -1276,6 +1280,26 @@ have_CSR_read:                                      # Here a1=pointer to rt reg,
     slti    $t0, $k0, 2                             # Cannot process byte loads (necessary bits will be missing)
     bnez    $t0, not_wanted_reg_read
 
+    # Native parity fix uses real hardware FIELD, not a read-count timer.
+    la      $t3, MaizoGsMonitorOnly
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_legacy_field_read
+    nop
+    la      $t3, MaizoNativeFieldInvert
+    lw      $t4, 0($t3)
+    beqz    $t4, not_wanted_reg_read
+    nop
+    la      $t3, MaizoGs480iMode
+    lw      $t4, 0($t3)
+    bnez    $t4, not_wanted_reg_read
+    lbu     $t0, Source_SMODE2($s0)
+    andi    $t0, $t0, 1
+    beqz    $t0, not_wanted_reg_read
+    nop
+    ld      $v0, 0($a3)
+    b       load_new_value
+    xori    $v0, $v0, 0x2000
+maizo_legacy_field_read:
     lbu     $t0, Source_SMODE2($s0)                 # Only emulate if the game uses interlace, but a non-interlaced mode is selected.
     lbu     $t1, Target_SMODE2($s1)                 # Whereby source interlace != selected interlace, selected interlace == 0 (not interlace)
     xori    $t0, $t0, 1

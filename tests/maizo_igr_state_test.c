@@ -88,6 +88,12 @@ int main(void) {
     assert(s.width==-1&&s.changed);
     s.selected=5;s.changed=0;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.field_fix&&!s.changed);
+    s.native_field_caps=1;
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.field_fix&&s.field_changed&&!s.changed);
+    s.field_changed=0;
+    maizoIgrStep(&s,MZ_KEY_LEFT);
+    assert(!s.field_fix&&s.field_changed&&!s.changed);
     s.selected=4;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height);
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==-6&&s.height==-6);

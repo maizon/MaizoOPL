@@ -547,7 +547,11 @@ maizo_igr_poll_again:
                 " sync.p;");
         }
 
-        if (config->EnableGSMOp) {
+        if (config->EnableGSMOp
+#ifdef MAIZO_IGR_MENU
+            || config->EnableMaizoIgrMenu
+#endif
+        ) {
             if (EnableDebug) {
                 DBGCOL(0x00FF00, IGR, "Stopping GSM");
             }

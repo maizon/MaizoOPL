@@ -10,7 +10,7 @@ typedef struct { int page, selected, confirm, field_fix; int width, height, x, y
              int filter_mode, filter_caps, filter_changed;
              unsigned int draw_caps, draw_modes, draw_changed;
              unsigned int frame480i_caps, frame480i_mode, frame480i_changed;
-             unsigned int video_caps; } maizo_igr_state_t;
+             unsigned int video_caps, native_field_caps, field_changed; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
 {
     s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;s->field_fix=!!field_fix;
@@ -18,7 +18,7 @@ static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
     s->filter_mode=s->filter_caps=s->filter_changed=0;
     s->draw_caps=s->draw_modes=s->draw_changed=0;
     s->frame480i_caps=s->frame480i_mode=s->frame480i_changed=0;
-    s->video_caps=0;
+    s->video_caps=s->native_field_caps=s->field_changed=0;
 }
 static int maizoIgrPageCount(int page)
 {
@@ -48,6 +48,9 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         s->confirm=0;return MZ_ACTION_NONE;
     }
     if(s->page==MZ_PAGE_VIDEO&&(pressed&(MZ_KEY_LEFT|MZ_KEY_RIGHT))) {
+        if(s->selected==5 && s->native_field_caps){
+            s->field_fix^=1;s->field_changed=1;return MZ_ACTION_NONE;
+        }
         if(!s->video_caps)return MZ_ACTION_NONE;
         delta=pressed&MZ_KEY_RIGHT?1:-1;
         switch(s->selected) {
@@ -75,6 +78,7 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             }else s->width=s->width==0?6:0;
             s->changed=1;
         }
+        else if(s->selected==5 && s->native_field_caps){s->field_fix^=1;s->field_changed=1;}
         else if(s->selected==5 && s->video_caps==MZ_VIDEO_GSM){s->field_fix^=1;s->changed=1;}
         else if(s->selected==6){s->page=MZ_PAGE_FILTERS;s->selected=0;}
         else if(s->selected==7 && s->video_caps){s->width=s->height=s->x=s->y=0;s->changed=1;}

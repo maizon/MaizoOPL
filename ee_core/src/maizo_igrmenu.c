@@ -55,7 +55,7 @@ extern u16 GSMSourceSetGsCrt[3];
 extern u16 GSMDestSetGsCrt[3];
 extern volatile u32 MaizoNativeMask;
 extern volatile u64 MaizoNativeSource[2],MaizoNativeTarget[2];
-extern volatile u32 MaizoGsMonitorOnly;
+extern volatile u32 MaizoGsMonitorOnly,MaizoNativeFieldInvert;
 extern volatile u32 MaizoGs480iMode,MaizoGs480iArmed;
 extern u32 MaizoGs480iOriginalFix;
 extern u64 MaizoGs480iOriginalSMODE2;
@@ -151,14 +151,17 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
                 "FILTROS >","RESTAURAR: GSM OFF","VOLTAR"
             };
             for(i=0;i<9;i++)
-                mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
+                if(i==5 && s->native_field_caps)
+                    mzLine(75,11,4,s->field_fix?"FIELD INV ON":"FIELD INV OFF");
+                else mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
         }else if(s->video_caps==MZ_VIDEO_NATIVE){
             mzValue(0,"TAMANHO X",s->width,0);
             mzValue(1,"TAMANHO Y",s->height,0);
             mzValue(2,"POSICAO X",s->x,0);
             mzValue(3,"POSICAO Y",s->y,0);
             mzLine(65,11,4,"PRESET RECORTE");
-            mzLine(75,11,5,"FIELD: GSM OFF");
+            mzLine(75,11,s->native_field_caps?4:5,
+                   s->native_field_caps?(s->field_fix?"FIELD INV ON":"FIELD INV OFF"):"FIELD: N/D");
             mzLine(85,11,4,"FILTROS >");
             mzLine(95,11,4,"RESTAURAR IMAGEM");
             mzLine(105,11,4,"VOLTAR");
@@ -680,7 +683,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     if(!mzGameHasGsm){
         if(!MaizoNativeMask)
             mzState.width=mzState.height=mzState.x=mzState.y=0;
-        mzState.field_fix=0;
+        mzState.native_field_caps=MaizoGsMonitorOnly && !MaizoGs480iMode &&
+            (GSMSourceGSRegs[2]&1u) && GSMSourceSetGsCrt[0]==1 &&
+            (GSMSourceSetGsCrt[1]==2 || GSMSourceSetGsCrt[1]==3);
+        if(!mzState.native_field_caps)MaizoNativeFieldInvert=0;
+        mzState.field_fix=!!MaizoNativeFieldInvert;
     }
     mzState.filter_mode=(int)MaizoGsFilterMode; /* Another SetGsCrt cancelled the filter. */
     if(!mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
@@ -752,6 +759,10 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzState.changed=0;
                 mzState.filter_caps=mzFilterCapabilities();
             }
+        }
+        if(mzState.field_changed){
+            if(mzState.native_field_caps)MaizoNativeFieldInvert=!!mzState.field_fix;
+            mzState.field_changed=0;
         }
         if(mzState.filter_changed){
             int desired=mzState.filter_mode;
