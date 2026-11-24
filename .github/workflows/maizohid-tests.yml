@@ -69,6 +69,8 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_gs_trusted_refs_test.c -o /tmp/maizo_gs_trusted_refs
           /tmp/maizo_gs_trusted_refs
+      - name: Verify commercial ELF candidate scanner rejects unknown code
+        run: python3 tests/maizo_gs_scan_elf_test.py
       - name: Verify post-render scanline packet and full GS state restoration
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_gs_scanlines_test.c -o /tmp/maizo_gs_scanlines_test
