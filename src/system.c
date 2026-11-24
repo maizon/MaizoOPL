@@ -26,6 +26,7 @@
 #ifdef MAIZO_IGR_MENU
 #include "../ee_core/include/maizo_ee_layout.h"
 #include "../ee_core/include/maizo_igr_profile.h"
+#include "../ee_core/include/maizo_mage_modes.h"
 #endif
 #include <osd_config.h>
 #include "include/pggsm.h"
@@ -1089,6 +1090,11 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
         memcpy(config->MaizoProfileID,mzProfileID,sizeof(mzProfileID));
         config->MaizoProfile=mzProfileValue;
+        {
+            int modes=0;
+            configGetInt(configGetByType(CONFIG_OPL), "maizo_draw_modes", &modes);
+            config->MaizoDrawModes=mzMageModes((unsigned)modes);
+        }
         if(config->EnableMaizoIgrMenu &&
            (!GetCheatsEnabled() || !cheatBuildLive(&config->MaizoLiveCheats)))
             cheatBuildPreview(&config->MaizoLiveCheats);

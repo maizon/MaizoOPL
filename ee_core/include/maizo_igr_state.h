@@ -99,7 +99,7 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             unsigned int shift=2u*(s->selected-3);
             if(s->draw_caps&bit){
                 unsigned int old=(s->draw_modes>>shift)&3u;
-                unsigned int next=(old+1u)%3u; /* GAME -> ON -> OFF */
+                unsigned int next=(old+1u)%(bit==2u?4u:3u); /* Texture also supports trilinear. */
                 s->draw_modes=(s->draw_modes&~(3u<<shift))|(next<<shift);
                 s->draw_changed|=bit;
             }

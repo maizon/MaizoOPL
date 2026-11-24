@@ -85,6 +85,14 @@ int main(void)
     assert(((mzGifRead64(buf+16)>>6)&7ULL)==2ULL);
     assert(!(mzGifRead64(buf+16)&(1ULL<<5)));
 
+    init(&p,&s,&st);p.bilinear=MZ_GS_TRILINEAR;
+    one(buf,MZ_GS_TEX1_1,(2ULL<<6)|(3ULL<<2),&p,&s,&st);
+    assert(((mzGifRead64(buf+16)>>6)&7ULL)==5ULL);
+    assert(((mzGifRead64(buf+16)>>2)&7ULL)==3ULL);
+    one(buf,MZ_GS_TEX1_2,0,&p,&s,&st);
+    assert(((mzGifRead64(buf+16)>>6)&7ULL)==1ULL);
+    one(buf,MZ_GS_TEX1_2,6ULL<<6,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(6ULL<<6));
     init(&p,&s,&st);p.dither=MZ_GS_FORCE_ON;
     one(buf,MZ_GS_DTHE,0,&p,&s,&st);
     assert(mzGifRead64(buf+16)==0&&st.protected_dither==1);

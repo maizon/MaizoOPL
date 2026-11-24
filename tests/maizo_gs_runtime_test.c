@@ -110,6 +110,20 @@ int main(void)
     assert(mzGsRuntimeFailures() == 3u); /* failure telemetry survives detach */
     assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,16,&guard,0,0)
            ==MZ_GS_DMA_SKIPPED);
+    assert(!mzGsRuntimeAttach(MZ_DRAW_ALL)); /* no auto reattach after failure */
+    mzGsRuntimeReset();
+    mzGsRuntimeSeed(1u | (3u<<2) | (1u<<4) | (2u<<6));
+    assert(!mzGsRuntimeCaps() && mzGsRuntimeMode(MZ_DRAW_BILINEAR)==0);
+    assert(mzGsRuntimeAttach(MZ_DRAW_BILINEAR | MZ_DRAW_SCANLINES));
+    assert(mzGsRuntimeMode(MZ_DRAW_BILINEAR)==MZ_GS_TRILINEAR);
+    assert(mzGsRuntimeMode(MZ_DRAW_AA1)==0 && mzGsRuntimeMode(MZ_DRAW_DITHER)==0);
+    assert(mzGsRuntimeMode(MZ_DRAW_SCANLINES)==2);
+    assert(mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,MZ_GS_KEEP));
+    assert(mzGsRuntimeAttach(MZ_DRAW_BILINEAR));
+    assert(mzGsRuntimeMode(MZ_DRAW_BILINEAR)==MZ_GS_KEEP);
+    mzGsRuntimeReset();
+    assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
+    assert(mzRuntimeModes==0);
     puts("MAIZO GS runtime: opt-in PATH1/PATH2/PATH3 policy and fallback PASS");
     return 0;
 }

@@ -17,13 +17,13 @@ static inline unsigned mzMageRwFilter(unsigned original, unsigned mode,
                                       int trilinear)
 {
     if (!world_texture || original < 1 || original > 6 ||
-        mode == MZ_GS_KEEP || mode > MZ_GS_FORCE_OFF)
+        mode == MZ_GS_KEEP || mode > MZ_GS_TRILINEAR)
         return original;
     if (original >= 3 && !mipmaps_known)
         return original;
     if (mode == MZ_GS_FORCE_OFF)
         return original == 2 ? 1 : original == 4 ? 3 : original == 6 ? 5 : original;
-    if (trilinear && mipmaps_known && original >= 3)
+    if ((trilinear || mode == MZ_GS_TRILINEAR) && mipmaps_known && original >= 3)
         return 6;
     return original == 1 ? 2 : original == 3 ? 4 : original == 5 ? 6 : original;
 }

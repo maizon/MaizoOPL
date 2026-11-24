@@ -27,7 +27,8 @@ extern "C" {
 enum {
     MZ_GS_KEEP = 0,
     MZ_GS_FORCE_ON = 1,
-    MZ_GS_FORCE_OFF = 2
+    MZ_GS_FORCE_OFF = 2,
+    MZ_GS_TRILINEAR = 3 /* TEX1 only; other filters reject this mode */
 };
 
 /*
@@ -125,8 +126,9 @@ static inline uint64_t mzGifTex1(uint64_t src,
         return src;
 
     min = (unsigned int)((src >> 6) & 7ULL);
+    if (min >= 6u) return src; /* reserved MMIN: do not reinterpret */
     new_min = min;
-    if (mode == MZ_GS_FORCE_ON) {
+    if (mode == MZ_GS_FORCE_ON || mode == MZ_GS_TRILINEAR) {
         /* Preserve the selected mipmap family; change nearest -> linear.
            MMIN values 6/7 are reserved and must never be invented. */
         if (min == 0)
@@ -134,6 +136,10 @@ static inline uint64_t mzGifTex1(uint64_t src,
         else if (min == 2)
             new_min = 4;
         else if (min == 3)
+            new_min = 5;
+        /* Upgrade only an existing mipmapped sampler with nonzero MXL.
+         * Never manufacture levels or change their base pointers. */
+        if (mode == MZ_GS_TRILINEAR && min >= 2 && ((src >> 2) & 7ULL))
             new_min = 5;
     } else if (mode == MZ_GS_FORCE_OFF) {
         if (min == 1)
@@ -146,7 +152,7 @@ static inline uint64_t mzGifTex1(uint64_t src,
 
     result = (src & ~(1ULL << 5 | 7ULL << 6)) |
              ((uint64_t)new_min << 6);
-    if (mode == MZ_GS_FORCE_ON)
+    if (mode == MZ_GS_FORCE_ON || mode == MZ_GS_TRILINEAR)
         result |= 1ULL << 5;  /* MMAG linear */
     if (result != src)
         stats->texture_changes++;
@@ -303,7 +309,7 @@ static inline int mzGifApplyFilters(void *packet,
         (packet_size & 15u) || packet_size > (1u << 20))
         return -1;
     if (policy->aa1 > MZ_GS_FORCE_OFF ||
-        policy->bilinear > MZ_GS_FORCE_OFF ||
+        policy->bilinear > MZ_GS_TRILINEAR ||
         policy->dither > MZ_GS_FORCE_OFF ||
         (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY))
         return -2;

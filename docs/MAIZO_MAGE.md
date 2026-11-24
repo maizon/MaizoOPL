@@ -60,3 +60,27 @@ legally obtained GTA III/Vice City/San Andreas, BLACK and Burnout 3 ELF
 revisions; review driver Sky call sites, capture world and HUD pass behavior,
 then construct signed-off database entries and compare baseline hardware.
 No commercial compatibility percentage has been measured.
+
+## Boot preference integration (ABI 2)
+
+Experimental frontend: Settings > VIDEO > Filtros graficos automaticos.
+Requests AA1, texture bilinear/trilinear, dithering, and scanlines before
+launch. The existing In-Game switches still control attached adapters.
+Every ELF transition clears capabilities and seeds the requested modes.
+An adapter receives only the subset of requests it actually supports.
+No adapter means original graphics. Three consecutive rejected packets
+disable registration until an ELF reset. Clients compiled against ABI 1
+must be rebuilt; incompatible ABI markers fail closed.
+
+Trilinear is texture mode 3, with the existing TEX1 parser and RenderWare
+world-texture helper. For GIF, only an already mipmapped sampler with
+nonzero MXL may change to MMIN=5; no new mip levels, addresses, or K/LOD
+values are fabricated. Non-mipmapped textures fall back to bilinear;
+reserved MMIN values stay untouched. RenderWare requires the adapter's
+proof of existing mipmaps. This does not fix texture upload or filtering
+in unhooked commercial binaries.
+
+Native deflicker and sharp remain independent scanout controls. No
+commercial adapter or signature is invented. The offline database
+remains empty until real ELF evidence is supplied. No claim of 80%
+commercial compatibility is made.

@@ -9,6 +9,8 @@ int main(void)
     assert(mzMageRwFilter(5,MZ_GS_FORCE_ON,1,1,0)==6);
     assert(mzMageRwFilter(3,MZ_GS_FORCE_ON,1,0,1)==3);
     assert(mzMageRwFilter(3,MZ_GS_FORCE_ON,1,1,1)==6);
+    assert(mzMageRwFilter(3,MZ_GS_TRILINEAR,1,1,0)==6);
+    assert(mzMageRwFilter(1,MZ_GS_TRILINEAR,1,0,0)==2);
     assert(mzMageRwFilter(1,MZ_GS_FORCE_ON,0,1,1)==1);
     assert(mzMageRwFilter(6,MZ_GS_FORCE_OFF,1,1,0)==5);
     assert(mzMageDrawRoute(2,2,2,1)==MZ_MAGE_ENGINE);

@@ -9,6 +9,7 @@
 #ifndef MAIZO_GS_RUNTIME_H
 #define MAIZO_GS_RUNTIME_H
 #include "maizo_gs_vif1_mixed.h"
+#include "maizo_mage_modes.h"
 
 enum {
     MZ_DRAW_AA1 = 1,
@@ -33,13 +34,14 @@ enum {
  */
 #define MZ_GS_SHARED_MAGIC0 0x4d5a4753u
 #define MZ_GS_SHARED_MAGIC1 0x92a5b8acu
-#define MZ_GS_SHARED_ABI 1u
+#define MZ_GS_SHARED_ABI 2u
 typedef struct {
     uint32_t magic0, magic1, abi, bytes;
     volatile unsigned int enabled, capabilities, modes;
     unsigned int failures, accepted, consecutive_failures;
     mz_gs_gif_state_t state;
     mz_gs_dma_metrics_t metrics;
+    unsigned int requested_modes;
 } mz_gs_shared_t;
 #ifdef MZ_GS_CLIENT
 extern mz_gs_shared_t *mzGsShared;
@@ -76,6 +78,7 @@ static inline unsigned int mzGsRuntimeShift(unsigned int feature)
 
 static inline void mzGsRuntimeReset(void)
 {
+    mzGsShared->requested_modes = 0;
     mzRuntimeCapabilities = 0;
     mzRuntimeModes = 0;
     mzRuntimeFailures = 0;
@@ -85,10 +88,20 @@ static inline void mzGsRuntimeReset(void)
     memset(&mzRuntimeMetrics, 0, sizeof(mzRuntimeMetrics));
 }
 
+/* The frontend requests settings, not capabilities. Only a real adapter
+ * attaches; unsupported options stay unavailable. No patch work at boot. */
+static inline void mzGsRuntimeSeed(unsigned int requested)
+{
+    mzGsShared->requested_modes = mzMageModes(requested);
+}
 static inline int mzGsRuntimeAttach(unsigned int capabilities)
 {
+    unsigned int requested = mzGsShared->requested_modes;
     if (!capabilities || (capabilities & ~MZ_DRAW_ALL)) return 0;
+    if (!mzRuntimeCapabilities && mzRuntimeFailures >= 3u) return 0;
     mzGsRuntimeReset();
+    mzGsShared->requested_modes = requested;
+    mzRuntimeModes = mzMageModesForCaps(requested, capabilities);
     mzRuntimeCapabilities = capabilities;
     return 1;
 }
@@ -105,10 +118,11 @@ static inline int mzGsRuntimeSetMode(unsigned int feature, unsigned int mode)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
     unsigned int mask;
-    if (shift > 6 || mode > (feature==MZ_DRAW_SCANLINES?3u:MZ_GS_FORCE_OFF) ||
+    if (shift > 6 || mode > ((feature==MZ_DRAW_SCANLINES || feature==MZ_DRAW_BILINEAR)?3u:MZ_GS_FORCE_OFF) ||
         !(mzRuntimeCapabilities & feature)) return 0;
     mask = 3u << shift;
     mzRuntimeModes = (mzRuntimeModes & ~mask) | (mode << shift);
+    mzGsShared->requested_modes = (mzGsShared->requested_modes & ~mask) | (mode << shift);
     return 1;
 }
 

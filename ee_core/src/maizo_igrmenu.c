@@ -214,7 +214,8 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(65,11,s->draw_caps&2?4:5,
                !(s->draw_caps&2)?"BILINEAR: N/D":
                (((s->draw_modes>>2)&3)==1?"BILINEAR: ON":
-                ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":"BILINEAR: JOGO"));
+                ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":
+                ((s->draw_modes>>2)&3)==3?"TRILINEAR AUTO":"BILINEAR: JOGO"));
         mzLine(75,11,s->draw_caps&4?4:5,
                !(s->draw_caps&4)?"DITHER: N/D":
                (((s->draw_modes>>4)&3)==1?"DITHER: ON":
