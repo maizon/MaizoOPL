@@ -236,7 +236,8 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzValue(7,"GS ALTERADOS",
                 mzRuntimeMetrics.edits.primitive_changes +
                 mzRuntimeMetrics.edits.texture_changes +
-                mzRuntimeMetrics.edits.dither_changes,0);
+                mzRuntimeMetrics.edits.dither_changes +
+                mzRuntimeMetrics.edits.scanmask_changes,0);
         mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: ATIVO":"HOOK: N/D");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG.");

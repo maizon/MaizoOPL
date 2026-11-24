@@ -19,7 +19,7 @@ int main(void){
  assert(packet[34]==f.frame&&packet[35]==0x4c);
  assert(packet[54]==f.scanmsk&&packet[55]==0x22);
  assert(packet[58]==f.prim&&packet[59]==0);
- assert(packet[60]==f.prmodecont&&packet[61]==0x1a); /* corrected below */
+ assert(packet[60]==f.prmodecont&&packet[61]==0x1a);
  f.complete_frame=0;assert(!mzScanlineBuild(packet,sizeof(packet),&f,2));
  f.complete_frame=1;f.frame|=2ULL<<24;assert(!mzScanlineBuild(packet,sizeof(packet),&f,2));
  f.frame=(10ULL<<16)|500u;assert(!mzScanlineBuild(packet,sizeof(packet),&f,2));

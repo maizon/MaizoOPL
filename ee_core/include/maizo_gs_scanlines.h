@@ -43,7 +43,7 @@ static inline unsigned mzScanlineBuild(uint64_t *packet,size_t capacity,
     scissor=((uint64_t)(f->width-1u)<<16)|((uint64_t)(f->height-1u)<<48);
     xy1=(uint64_t)(f->width*16u)|((uint64_t)(f->height*16u)<<16);
     mzScanlineAD(packet,&at,frame,0x4c+c);
-    mzScanlineAD(packet,&at,f->zbuf|(1ULL<<32),0x4e+c);
+    mzScanlineAD(packet,&at,f->zbuf|(1ULL<<32),0x4e + c);
     mzScanlineAD(packet,&at,0x30000,0x47+c); /* always pass depth; no alpha test */
     mzScanlineAD(packet,&at,0x64ULL|((uint64_t)(strength*32u)<<32),0x42+c);
     mzScanlineAD(packet,&at,0,0x18+c);
@@ -61,7 +61,7 @@ static inline unsigned mzScanlineBuild(uint64_t *packet,size_t capacity,
     /* 14 touched GS state registers: restore in same command stream.
      * No primitive is kicked by restoration. */
     mzScanlineAD(packet,&at,f->frame,0x4c+c);
-    mzScanlineAD(packet,&at,f->zbuf,0x4e+c);
+    mzScanlineAD(packet,&at,f->zbuf,0x4e + c);
     mzScanlineAD(packet,&at,f->test,0x47+c);
     mzScanlineAD(packet,&at,f->alpha,0x42+c);
     mzScanlineAD(packet,&at,f->xyoffset,0x18+c);

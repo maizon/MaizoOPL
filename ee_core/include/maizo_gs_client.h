@@ -5,6 +5,7 @@
 #define MAIZO_GS_CLIENT_H
 #define MZ_GS_CLIENT 1
 #include "maizo_gs_shadow.h"
+#include "maizo_gs_scanlines.h"
 
 static inline int mzGsClientBindRange(void *base,size_t bytes)
 {
@@ -61,5 +62,28 @@ static inline int mzGsClientSend(unsigned type,const void *original,void *scratc
         mzGsClientStage(type,original,scratch,capacity,bytes,guard,eligible,&selected);
     if(selected!=original)flush(ctx,selected,bytes);
     return submit(ctx,selected,bytes);
+}
+/* A renderer may advertise scanlines ONLY when it calls this after
+ * its last drawing command, with a complete frame and known state.
+ * Do not route this packet through drawing filters. */
+static inline int mzGsClientEndFrame(uint64_t *packet,size_t capacity,
+                                     const mz_scanline_frame_t *frame,
+                                     const mz_gs_dma_guard_t *guard,
+                                     mz_gs_submit_fn submit,mz_gs_flush_fn flush,void *ctx)
+{
+    unsigned strength,qwc;
+    int result;
+    if(!mzGsShared||!mzGsShared->enabled||!submit||!flush||
+       !guard||guard->path!=MZ_GS_PATH3_GIF_DMA||!guard->caller_owns_buffer||
+       !guard->channel_idle||guard->chain_tag_transfer||guard->source_is_scratchpad)
+        return MZ_GS_DMA_SKIPPED;
+    strength=mzGsRuntimeMode(MZ_DRAW_SCANLINES);
+    if(!strength)return MZ_GS_DMA_SKIPPED;
+    qwc=mzScanlineBuild(packet,capacity,frame,strength);
+    if(!qwc)return MZ_GS_DMA_UNSUPPORTED;
+    flush(ctx,packet,qwc*16u);
+    result=submit(ctx,packet,qwc*16u);
+    if(result>=0){mzRuntimeMetrics.edits.scanmask_changes++;mzRuntimeAccepted++;}
+    return result;
 }
 #endif
