@@ -2,7 +2,9 @@
 
 This is an original homebrew disc, not a commercial title or evidence of universal support.
 It draws three copies of a colored triangle and a magnified checkerboard, left to right:
-PATH3 GIF DMA, PATH2 VIF1 DIRECT, PATH1 VU1 XGKICK. The last path actually uploads
+PATH3 GIF DMA, PATH2 VIF1 DIRECT, PATH1 VU1 XGKICK. The first two use the
+ordinary PS2SDK DMA call intercepted by a link-time wrapper (no renderer-side
+replacement of the DMA call itself). The last path actually uploads
 a complete packet to VU1 memory and starts an assembled microprogram. Every draw
 has a GS FINISH fence. The optional post-render overlay uses the existing scanline
 packet on the complete 32-bit frame. Square selects the 16-bit framebuffer to

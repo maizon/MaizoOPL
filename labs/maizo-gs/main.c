@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdint.h>
 #include "maizo_gs_client_ps2.h"
+#include "maizo_gs_autolink.h"
 
 #define W 640u
 #define H 448u
@@ -20,13 +21,13 @@
 #define VIF1STAT (*(volatile uint32_t *)0x10003c00u)
 #define VPUSTAT (*(volatile uint32_t *)0x10003800u)
 #define TEXBASE 0x2000u /* 256-byte blocks, above both 32/16-bit frames */
-#define ALIGNED __attribute__((aligned(64)))
+#define MZ_ALIGNED __attribute__((aligned(64)))
 mz_gs_shared_t *mzGsShared;
 extern unsigned char mzKickStart[],mzKickEnd[];
-static uint64_t packet[512] ALIGNED,shadow[512] ALIGNED;
-static uint64_t vif[520] ALIGNED,vscratch[520] ALIGNED;
-static uint64_t scanpacket[MZ_SCANLINE_QWC*2] ALIGNED;
-static unsigned char padbuf[256] ALIGNED;
+static uint64_t packet[512] MZ_ALIGNED,shadow[512] MZ_ALIGNED;
+static uint64_t vif[520] MZ_ALIGNED;
+static uint64_t scanpacket[MZ_SCANLINE_QWC*2] MZ_ALIGNED;
+static unsigned char padbuf[256] MZ_ALIGNED;
 static mz_scanline_frame_t frame;
 static unsigned pos,psm,phase;
 
@@ -50,7 +51,7 @@ static uint64_t xy(unsigned x,unsigned y){return (uint64_t)(x*16u)|((uint64_t)(y
 static void rgba(unsigned r,unsigned g,unsigned b){frame.rgbaq=0x3f80000080000000ULL|r|(g<<8)|(b<<16);ad(frame.rgbaq,1);}
 static void prim(unsigned p){frame.prim=p;ad(p,0);}
 static void vertex(unsigned x,unsigned y){ad(xy(x,y),5);}
-static int setup(unsigned depth)
+static int mzLabSetup(unsigned depth)
 {
     psm=depth;
     graph_set_mode(GRAPH_MODE_INTERLACED,graph_get_region(),GRAPH_MODE_FRAME,0);
@@ -99,8 +100,8 @@ static void scene(unsigned col,unsigned y)
 {
     unsigned x=col*208u+12u;
     tag();ad(frame.frame,0x4c);ad(1,0x1a);
-    ad(0x71603524ULL|0x7160352400000000ULL,0x44);ad(0,0x45);
-    prim(3|8);rgba(240,40,30);vertex(x+10,y+15);
+    prim(3|8);ad(0x71603524ULL|0x7160352400000000ULL,0x44);ad(0,0x45);
+    rgba(240,40,30);vertex(x+10,y+15);
     rgba(30,240,60);vertex(x+180,y+31);
     rgba(30,80,240);vertex(x+63,y+170);
     /* Scaled nearest texture becomes bilinear when the filter is ON. */
@@ -115,7 +116,8 @@ static int path3(void)
 {
     scene(0,30);
     if(!wait_dma(DMA_CHANNEL_GIF))return 0;
-    if(mzGsPs2Normal(DMA_CHANNEL_GIF,packet,pos,0,0,shadow,sizeof(shadow),1,1)<0)return 0;
+    mzGsAutoEligible(1);
+    if(dma_channel_send_normal(DMA_CHANNEL_GIF,packet,pos,0,0)<0)return 0;
     return wait_dma(DMA_CHANNEL_GIF)&&finish();
 }
 static int path2(void)
@@ -125,7 +127,8 @@ static int path2(void)
     v[3]=(0x50u<<24)|pos;
     memcpy(v+4,packet,pos*16u);
     if(!wait_dma(DMA_CHANNEL_VIF1))return 0;
-    if(mzGsPs2Normal(DMA_CHANNEL_VIF1,vif,pos+1u,0,0,vscratch,sizeof(vscratch),1,1)<0)return 0;
+    mzGsAutoEligible(1);
+    if(dma_channel_send_normal(DMA_CHANNEL_VIF1,vif,pos+1u,0,0)<0)return 0;
     return wait_dma(DMA_CHANNEL_VIF1)&&finish();
 }
 static int upload_vu(void)
@@ -186,14 +189,14 @@ int main(void)
     dma_channel_initialize(DMA_CHANNEL_GIF,0,0);
     dma_channel_initialize(DMA_CHANNEL_VIF1,0,0);
     if(mzGsClientBind())mzGsClientAttach(MZ_DRAW_ALL);
-    if(!setup(GS_PSM_32)||!texture()||!upload_vu())goto stop;
+    if(!mzLabSetup(GS_PSM_32)||!texture()||!upload_vu())goto stop;
     for(;;){
         unsigned now=0;
         if(has_pad&&padRead(0,0,&p))now=(~p.btns)&0xffffu;
         /* Square switches actual PSMCT32/16. Cross cycles filters when
          * the MAIZO ABI is present; IGR also controls the same ABI. */
         if((now&~prev)&PAD_SQUARE){
-            if(!setup(psm==GS_PSM_32?GS_PSM_16:GS_PSM_32))goto stop;
+            if(!mzLabSetup(psm==GS_PSM_32?GS_PSM_16:GS_PSM_32))goto stop;
         }
         if((now&~prev)&PAD_CROSS && mzGsShared){
             phase=(phase+1u)&3u;

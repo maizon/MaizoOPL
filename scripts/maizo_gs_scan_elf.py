@@ -54,10 +54,15 @@ def discover(data):
         # Track literal addresses over only a short straight-line window.
         # Clear on unknown writes and control transfers (including delay slots).
         regs = {0: (0, 0)}
+        delay = False
         for n in range(0, size, 4):
             word, = struct.unpack_from("<I", data, off+n)
             op, rs, rt, rd = word>>26, (word>>21)&31, (word>>16)&31, (word>>11)&31
             imm = word&65535
+            if delay:
+                delay = False
+                regs = {0:(0,0)}
+                continue
             regs = {r: (v,t) for r,(v,t) in regs.items() if r == 0 or n-t <= 32}
             if op in STORE and rs in regs:
                 addr = (regs[rs][0]+signed16(imm)) & 0xffffffff
@@ -87,6 +92,7 @@ def discover(data):
             # Do not infer an address from a delay-slot instruction.
             if op in BRANCH or (op==0 and (word&63) in (8,9)):
                 regs = {0:(0,0)}
+                delay = True
         # No writes, no generated patches, no guessing from ELF strings.
     return {"sha256": hashlib.sha256(data).hexdigest(),
             "status": "candidates_only", "candidates": found}
