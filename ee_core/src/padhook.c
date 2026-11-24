@@ -388,7 +388,14 @@ maizo_igr_poll_again:
         maizoIgrPauseThreads();
         choice = maizoIGR_MenuRun(maizoIgrButtons);
         maizoIgrUnhold();
-        if (choice == MAIZO_IGR_RESUME) {
+        /*
+         * Unavailable framebuffer/DMA is NOT an EXIT command.
+         * The stock IGR would reset to the PS2 Browser here, which
+         * looked like the menu shortcut exiting the game. Leave every
+         * game thread running if drawing isn't compatible. Explicit
+         * EXIT or POWEROFF are the only actions allowed to reset.
+         */
+        if (choice == MAIZO_IGR_RESUME || choice == MAIZO_IGR_UNAVAILABLE) {
             maizoIgrResumeThreads();
             Pad_Data.combo_type = 0;
             MaizoIgrWaitRelease = 1;
@@ -397,8 +404,6 @@ maizo_igr_poll_again:
         }
         if (choice == MAIZO_IGR_POWEROFF)
             Pad_Data.combo_type = IGR_COMBO_R3_L3;
-        /* EXIT or unsafe GS state: fall back to the original reset path.
-         * Suspended game threads stay suspended because reset follows. */
     }
 #endif /* MAIZO_IGR_MENU */
 
