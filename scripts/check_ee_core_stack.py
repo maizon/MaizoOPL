@@ -15,7 +15,7 @@ STACK_START = 0x84000
 
 
 def check_map(content: str, minimum: int = 8192, stack_top: int = STACK_TOP) -> tuple[int, int]:
-    if stack_top not in (STACK_TOP, 0x9B000):
+    if stack_top not in (STACK_TOP, 0x9B000, 0x9B800):
         raise ValueError("unsupported EE-core memory layout")
     match = re.search(r"0x([0-9a-fA-F]+)\s+_end_bss\s*=\s*\.", content)
     if not match:
@@ -31,7 +31,7 @@ def main() -> int:
     p.add_argument("map", type=pathlib.Path)
     p.add_argument("minimum", type=int, nargs="?", default=8192)
     p.add_argument("--stack-top", type=lambda value: int(value, 0),
-                   default=STACK_TOP, choices=(STACK_TOP, 0x9B000))
+                   default=STACK_TOP, choices=(STACK_TOP, 0x9B000, 0x9B800))
     p.add_argument("--warn-only", action="store_true",
                    help="Legacy IGS/debug build; report without rejecting")
     args = p.parse_args()

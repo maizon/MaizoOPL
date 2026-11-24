@@ -27,7 +27,7 @@ static inline int mzGsClientBindRange(void *base,size_t bytes)
 #ifdef __mips__
 static inline int mzGsClientBind(void)
 {
-    return mzGsClientBindRange((void *)0x84000u,0x9b000u-0x84000u);
+    return mzGsClientBindRange((void *)0x84000u,0x9b800u-0x84000u);
 }
 #endif
 static inline int mzGsClientAttach(unsigned int caps)

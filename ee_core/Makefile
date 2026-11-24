@@ -64,7 +64,7 @@ EE_CFLAGS += -DMAIZO_IGR_MENU -ffunction-sections -fdata-sections -flto $(MAIZO_
 # Correction B release core, PadEmu IOP drivers, or the frontend.
 EE_EXTRA_GC := -Wl,--gc-sections -flto
 EE_LINKFILE = linkfile.maizo
-EE_STACK_TOP = 0x9b000
+EE_STACK_TOP = 0x9b800
 endif
 endif
 endif

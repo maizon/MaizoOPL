@@ -469,7 +469,7 @@ int cheatBuildLive(mz_live_cheats_t *out)
             unsigned n=0,j;
             while(n<MAX_CHEATLIST&&e->codes[n].addr)n++;
             for(j=0;j<n;j++){
-                u32 addr=e->codes[j].addr,value=e->codes[j].val;
+                uint32_t addr=e->codes[j].addr,value=e->codes[j].val;
                 mzLiveNormalize(&addr,&value);
                 int span=mzLiveLineSpan(addr,value);
                 if(span<0||(unsigned)span>=n-j)break;
@@ -491,7 +491,7 @@ int cheatBuildLive(mz_live_cheats_t *out)
             if(e->enabled)p.mask|=1u<<group;
             for(unsigned j=0;j<n;j++){
                 p.owner[p.lines++]=group;
-                u32 addr=e->codes[j].addr,value=e->codes[j].val;
+                uint32_t addr=e->codes[j].addr,value=e->codes[j].val;
                 mzLiveNormalize(&addr,&value);
                 list[words++]=addr;list[words++]=value;
             }
