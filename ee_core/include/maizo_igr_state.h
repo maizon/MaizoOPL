@@ -29,7 +29,7 @@ static int maizoIgrPageCount(int page)
     case MZ_PAGE_GAME: return 3;
     case MZ_PAGE_SYSTEM: return 5;
     case MZ_PAGE_FILTERS: return 9;
-    case MZ_PAGE_GS_STATUS: return 1;
+    case MZ_PAGE_GS_STATUS: return 2;
     default: return 1;
     }
 }
@@ -120,7 +120,12 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
             s->filter_changed=1;
         }
     }else if(s->page==MZ_PAGE_GS_STATUS){
-        s->page=MZ_PAGE_FILTERS;s->selected=6;
+        if(s->selected==1){
+            if(s->draw_caps&8u){
+                s->draw_modes=(s->draw_modes&~(3u<<6))|((((s->draw_modes>>6)+1u)&3u)<<6);
+                s->draw_changed|=8u;
+            }
+        }else{s->page=MZ_PAGE_FILTERS;s->selected=6;}
     }else if(s->page==MZ_PAGE_PADS){
         if(s->selected==1){s->page=MZ_PAGE_MAIN;s->selected=2;}
     }else if(s->page==MZ_PAGE_GAME){

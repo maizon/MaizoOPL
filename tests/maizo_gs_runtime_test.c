@@ -28,9 +28,13 @@ int main(void)
            ==MZ_GS_DMA_SKIPPED);
     assert(mzGifRead64(buf+16)==tri);
     assert(!mzGsRuntimeAttach(0));
-    assert(!mzGsRuntimeAttach(8));
-    assert(mzGsRuntimeAttach(MZ_DRAW_AA1|MZ_DRAW_BILINEAR|MZ_DRAW_DITHER));
-    assert(!mzGsRuntimeSetMode(8,MZ_GS_FORCE_ON));
+    assert(!mzGsRuntimeAttach(16));
+    assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
+    assert(!mzGsRuntimeSetMode(16,MZ_GS_FORCE_ON));
+    assert(mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,3));
+    assert(mzGsRuntimeMode(MZ_DRAW_SCANLINES)==3);
+    assert(!mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,4));
+    assert(mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,0));
     assert(!mzGsRuntimeSetMode(MZ_DRAW_AA1,3));
     assert(mzGsRuntimeSetMode(MZ_DRAW_AA1,MZ_GS_FORCE_ON));
     assert(mzGsRuntimeMode(MZ_DRAW_AA1)==MZ_GS_FORCE_ON);

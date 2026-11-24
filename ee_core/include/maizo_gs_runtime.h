@@ -14,7 +14,8 @@ enum {
     MZ_DRAW_AA1 = 1,
     MZ_DRAW_BILINEAR = 2,
     MZ_DRAW_DITHER = 4,
-    MZ_DRAW_ALL = 7
+    MZ_DRAW_SCANLINES = 8,
+    MZ_DRAW_ALL = 15
 };
 
 enum {
@@ -69,7 +70,8 @@ static inline unsigned int mzGsRuntimeShift(unsigned int feature)
 {
     return feature == MZ_DRAW_AA1 ? 0u :
            feature == MZ_DRAW_BILINEAR ? 2u :
-           feature == MZ_DRAW_DITHER ? 4u : 8u;
+           feature == MZ_DRAW_DITHER ? 4u :
+           feature == MZ_DRAW_SCANLINES ? 6u : 8u;
 }
 
 static inline void mzGsRuntimeReset(void)
@@ -94,7 +96,7 @@ static inline int mzGsRuntimeAttach(unsigned int capabilities)
 static inline unsigned int mzGsRuntimeMode(unsigned int feature)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
-    if (shift > 4 || !(mzRuntimeCapabilities & feature))
+    if (shift > 6 || !(mzRuntimeCapabilities & feature))
         return MZ_GS_KEEP;
     return (mzRuntimeModes >> shift) & 3u;
 }
@@ -103,7 +105,7 @@ static inline int mzGsRuntimeSetMode(unsigned int feature, unsigned int mode)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
     unsigned int mask;
-    if (shift > 4 || mode > MZ_GS_FORCE_OFF ||
+    if (shift > 6 || mode > (feature==MZ_DRAW_SCANLINES?3u:MZ_GS_FORCE_OFF) ||
         !(mzRuntimeCapabilities & feature)) return 0;
     mask = 3u << shift;
     mzRuntimeModes = (mzRuntimeModes & ~mask) | (mode << shift);

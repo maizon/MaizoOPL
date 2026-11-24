@@ -223,11 +223,13 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(105,11,4,"VOLTAR");
     }else if(s->page==MZ_PAGE_GS_STATUS){
         mzLine(25,11,4,"VOLTAR");
-        mzValue(1,"AMOSTRAS",mzGsProbe.samples,0);
-        mzValue(2,"PATH1",mzGsProbe.path1_active,0);
-        mzValue(3,"PATH2",mzGsProbe.path2_active,0);
-        mzValue(4,"PATH3",mzGsProbe.path3_active,0);
-        mzValue(5,"VIF1 DMA",mzGsProbe.vif1_dma_active,0);
+        if(s->draw_caps&MZ_DRAW_SCANLINES)
+            mzValue(1,"SCANLINES",((s->draw_modes>>6)&3u)*25,1);
+        else mzLine(35,11,5,"SCANLINES: N/D");
+        mzValue(2,"AMOSTRAS",mzGsProbe.samples,0);
+        mzValue(3,"PATH1",mzGsProbe.path1_active,0);
+        mzValue(4,"PATH2",mzGsProbe.path2_active,0);
+        mzValue(5,"PATH3",mzGsProbe.path3_active,0);
         mzValue(6,"GIF DMA",mzGsProbe.gif_dma_active,0);
         /* Visibility is evidence-based: count only actual GS writes
          * changed by a verified pre-DMA adapter, NOT mere hook presence. */
@@ -694,7 +696,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.draw_caps=mzGsRuntimeCaps();
     mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
         (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2) |
-        (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4);
+        (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4) |
+        (mzGsRuntimeMode(MZ_DRAW_SCANLINES)<<6);
     mzState.draw_changed=0;
     mzState.frame480i_caps=mzFrame480iCaps();
     mzState.frame480i_mode=!!MaizoGs480iArmed;
@@ -833,6 +836,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,(mzState.draw_modes>>2)&3u);
             if(features&MZ_DRAW_DITHER)
                 mzGsRuntimeSetMode(MZ_DRAW_DITHER,(mzState.draw_modes>>4)&3u);
+            if(features&MZ_DRAW_SCANLINES)
+                mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,(mzState.draw_modes>>6)&3u);
             mzState.draw_changed=0;
             mzState.draw_caps=mzGsRuntimeCaps();
         }
