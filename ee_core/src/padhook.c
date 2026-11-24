@@ -380,23 +380,27 @@ maizo_igr_poll_again:
 
 #ifdef MAIZO_IGR_MENU
     if (Pad_Data.combo_type == IGR_COMBO_START_SELECT &&
-        config->EnableMaizoIgrMenu &&
         !Power_Button.press) {
-        int choice;
-        ChangeThreadPriority(TH_SELF, 0);
-        maizoIgrHold();
-        maizoIgrPauseThreads();
-        choice = maizoIGR_MenuRun(maizoIgrButtons);
-        maizoIgrUnhold();
+        int choice = MAIZO_IGR_UNAVAILABLE;
         /*
-         * Unavailable framebuffer/DMA is NOT an EXIT command.
-         * The stock IGR would reset to the PS2 Browser here, which
-         * looked like the menu shortcut exiting the game. Leave every
-         * game thread running if drawing isn't compatible. Explicit
-         * EXIT or POWEROFF are the only actions allowed to reset.
+         * The six-button command is ALSO stock OPL's Browser-reset.
+         * In this experimental ELF it belongs to the MAIZO menu.
+         * If a saved/missing setting disables the overlay, or if GS
+         * cannot render it, NEVER fall through to the stock IGR.
+         * Only an explicit EXIT selected inside a visible menu can
+         * trigger the destructive legacy reset path.
          */
-        if (choice == MAIZO_IGR_RESUME || choice == MAIZO_IGR_UNAVAILABLE) {
-            maizoIgrResumeThreads();
+        ChangeThreadPriority(TH_SELF, 0);
+        if (config->EnableMaizoIgrMenu) {
+            maizoIgrHold();
+            maizoIgrPauseThreads();
+            choice = maizoIGR_MenuRun(maizoIgrButtons);
+            maizoIgrUnhold();
+        }
+        choice = maizoIgrSafeChoice(config->EnableMaizoIgrMenu, choice);
+        if (choice == MAIZO_IGR_RESUME) {
+            if (config->EnableMaizoIgrMenu)
+                maizoIgrResumeThreads();
             Pad_Data.combo_type = 0;
             MaizoIgrWaitRelease = 1;
             ChangeThreadPriority(TH_SELF, 127);

@@ -21,6 +21,7 @@
 #include "maizo_gs_probe.h"
 #include "maizo_gs_480i_bridge.h"
 #include "maizo_igr_monitor.h"
+#include "maizo_igr_gsm_layout.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -391,17 +392,17 @@ static int mzFrame480iApply(int enabled)
         if(!mzFrame480iCaps())return 0;
         if(MaizoGs480iMode)return 1;
         MaizoGs480iOriginalSMODE2=GSMDestGSRegs[2];
-        MaizoGs480iOriginalFix=(u32)GSMFlags[10];
+        MaizoGs480iOriginalFix=(u32)GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET];
         value=mzGs480iFrameSMODE2(GSMDestGSRegs[2]);
         GSMDestGSRegs[2]=value;
-        GSMFlags[10]=1;
+        GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]=1;
         MaizoGs480iMode=1;
     }else{
         if(!MaizoGs480iMode)return 1;
         /* Stop enforcing the scanout override before restoring. */
         MaizoGs480iMode=0;
         GSMDestGSRegs[2]=MaizoGs480iOriginalSMODE2;
-        GSMFlags[10]=(u8)MaizoGs480iOriginalFix;
+        GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]=(u8)MaizoGs480iOriginalFix;
         value=MaizoGs480iOriginalSMODE2;
     }
     *(vu64 *)0x12000020=value; /* GS SMODE2: 480i FRAME when ON */
@@ -411,7 +412,7 @@ static int mzFrame480iApply(int enabled)
 static int mzFilterCapabilities(void)
 {
     u64 pmode=mzOutputSource(0,GSMFlags[9]);
-    u64 smode=mzOutputSource(2,GSMFlags[10]);
+    u64 smode=mzOutputSource(2,GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]);
     u64 fb1=mzOutputSource(7,GSMFlags[15]);
     u64 fb2=mzOutputSource(9,GSMFlags[15]);
     u64 d1=mzOutputSource(8,GSMFlags[16]);
@@ -422,7 +423,7 @@ static int mzFilterCapabilities(void)
 static int mzFilterApply(int mode)
 {
     u64 pmode=mzOutputSource(0,GSMFlags[9]);
-    u64 smode=mzOutputSource(2,GSMFlags[10]);
+    u64 smode=mzOutputSource(2,GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]);
     u64 fb1=mzOutputSource(7,GSMFlags[15]);
     u64 fb2=mzOutputSource(9,GSMFlags[15]);
     u64 d1=mzOutputSource(8,GSMFlags[16]);

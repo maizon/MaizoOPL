@@ -2,6 +2,6 @@
 #ifndef MAIZO_IGRMENU_H
 #define MAIZO_IGRMENU_H
 #include <tamtypes.h>
-enum { MAIZO_IGR_RESUME=0, MAIZO_IGR_EXIT=1, MAIZO_IGR_POWEROFF=2, MAIZO_IGR_UNAVAILABLE=3 };
+#include "maizo_igr_route.h"
 int maizoIGR_MenuRun(u16 (*buttons)(void));
 #endif

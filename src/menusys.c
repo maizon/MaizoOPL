@@ -612,7 +612,7 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Preferências dos jogos", MENU_GAME_PREFERENCES, -1);
 #ifdef MAIZO_IGR_MENU
         {
-            int igrEnabled = 0;
+            int igrEnabled = 1;
             configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &igrEnabled);
             submenuAppendItem(&mainMenu, -1,
                               igrEnabled ? "MAIZO In-Game PRO [Ligado]" :
@@ -1786,7 +1786,7 @@ void menuHandleInputMenu()
         } else if (id == MENU_INGAME_PRO) {
 #ifdef MAIZO_IGR_MENU
             if (menuCheckParentalLock() == 0) {
-                int enabled = 0;
+                int enabled = 1;
                 config_set_t *cfg = configGetByType(CONFIG_OPL);
                 configGetInt(cfg, "maizo_igr_menu", &enabled);
                 if (!enabled &&

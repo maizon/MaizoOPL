@@ -99,6 +99,16 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_monitor_test.c -o /tmp/maizo_igr_monitor_test
           /tmp/maizo_igr_monitor_test
+      - name: Ensure In-Game shortcut never falls through to Browser reset
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_igr_route_test.c -o /tmp/maizo_igr_route
+          /tmp/maizo_igr_route
+      - name: Verify GSM flags offsets shared with EE ASM
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_igr_gsm_layout_test.c -o /tmp/maizo_igr_layout
+          /tmp/maizo_igr_layout
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract

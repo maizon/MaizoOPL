@@ -947,9 +947,11 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     // GSM now.
 #ifdef MAIZO_IGR_MENU
     /* Field is compiled into both EE config producer and consumer. */
-    config->EnableMaizoIgrMenu=0;
+    /* The dedicated In-Game ELF starts with the menu ON. A missing
+     * saved key can no longer silently select stock IGR reset. */
+    config->EnableMaizoIgrMenu=1;
     configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &config->EnableMaizoIgrMenu);
-    config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu==1);
+    config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
 #endif
     config->EnableGSMOp = GetGSMEnabled();
     if (config->EnableGSMOp) {
