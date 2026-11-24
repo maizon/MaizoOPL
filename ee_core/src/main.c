@@ -17,6 +17,7 @@
 #ifdef MAIZO_IGR_MENU
 #include "maizo_gs_runtime.h"
 #include "maizo_gs_probe.h"
+#include "maizo_igrmenu.h"
 #endif
 
 int isInit = 0;
@@ -117,6 +118,9 @@ static int eecoreInit(int argc, char **argv)
             config->GsmConfig.k576P_fix,
             config->GsmConfig.kGsDxDyOffsetSupported,
             config->GsmConfig.FIELD_fix);
+#ifdef MAIZO_IGR_MENU
+        maizoIGR_BootProfile();
+#endif
         EnableGSM();
     }
 #ifdef MAIZO_IGR_MENU

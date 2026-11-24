@@ -106,9 +106,9 @@ static void maizoIgrUnhold(void)
         if (MaizoIgrIntcMask & (1u << i)) EnableIntc(i);
     }
 }
-static void maizoIgrPauseThreads(void)
+static int maizoIgrPauseThreads(void)
 {
-    int i;
+    int i,ok=1;
     for (i = 0; i < 8; i++) MaizoIgrSuspended[i] = 0;
     for (i = 1; i < 256; i++) {
         ee_thread_status_t info;
@@ -120,7 +120,9 @@ static void maizoIgrPauseThreads(void)
             continue;
         if (SuspendThread(i) >= 0)
             MaizoIgrSuspended[i >> 5] |= (1u << (i & 31));
+        else ok=0;
     }
+    return ok;
 }
 static void maizoIgrResumeThreads(void)
 {
@@ -465,11 +467,11 @@ maizo_igr_poll_again:
                  * DMA idleness while the game is producing commands. */
                 if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE)){
                     maizoIgrHold();
-                    maizoIgrPauseThreads();
+                    int suspended=maizoIgrPauseThreads();
                     /* Stop new EE submissions, then give already queued
                      * hardware work a bounded opportunity to drain.
                      * If it needs an EE worker/IRQ, release and retry. */
-                    for(retries=0;retries<4;retries++){
+                    for(retries=suspended?0:4;retries<4;retries++){
                         if(maizoIGR_Preflight(MaizoIgrDmacMask))break;
                         maizoIgrYield();
                     }

@@ -426,7 +426,9 @@ static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t 
         mzRenderLine((u8 *)(packet+28),y);
         if(!mzSendLine(packet,y))return 0;
     }
-    return 1;
+    /* Do not change CRTC, cheats or menu state while the last
+     * overlay IMAGE packet is still queued. */
+    return mzWait(MZ_GIF_STAT,GIF_BUSY);
 }
 /* Writable GS DISPLAY parameters are not free-form resampling. Keep small
  * offsets, clamp fields, and preserve the original MAGH/MAGV / mode bits. */
@@ -484,7 +486,7 @@ static int __attribute__((noinline)) mzNativeApply(const maizo_igr_state_t *s)
     if(s->width||s->height||s->x||s->y)MaizoNativeMask=en;
     return 1;
 }
-static void mzApply(const maizo_igr_state_t *s)
+static void mzApply(const maizo_igr_state_t *s,int hardware)
 {
     u64 display1,display2;
     if(!mzGameHasGsm)return;
@@ -493,10 +495,32 @@ static void mzApply(const maizo_igr_state_t *s)
     GSMDestGSRegs[8]=display1;
     GSMDestGSRegs[10]=display2;
     GSMFlags[17]=s->field_fix?4:0;
-    /* GS privileged regs: write only while GSM's breakpoint is disabled. */
-    *(vu64 *)0x12000080=display1;
-    *(vu64 *)0x120000a0=display2;
-    asm volatile("sync.l");
+    /* During boot only the GSM target shadow is changed; the normal
+     * SetGsCrt hook owns the first actual GS write. */
+    if(hardware){
+        *(vu64 *)0x12000080=display1;
+        *(vu64 *)0x120000a0=display2;
+        asm volatile("sync.l");
+    }
+}
+static void mzDecodeGeometry(maizo_igr_state_t *s,u32 v)
+{
+    s->width=(int)(v&63u)-32;s->height=(int)((v>>6)&63u)-32;
+    s->x=(int)((v>>12)&63u)-32;s->y=(int)((v>>18)&63u)-32;
+    s->field_fix=!!(v&(1u<<24));
+}
+void maizoIGR_BootProfile(void)
+{
+    USE_LOCAL_EECORE_CONFIG;
+    u32 v=config->MaizoProfile;
+    if(!config->EnableMaizoIgrMenu||!config->EnableGSMOp||
+       !(v&(1u<<28))||(v&0xe0000000u)!=MZ_PROFILE_V2||!mzProfileValid(v))return;
+    mzGameHasGsm=1;
+    maizoIgrStateInit(&mzState,config->GsmConfig.FIELD_fix);
+    mzOriginalDisp[0]=GSMDestGSRegs[8];mzOriginalDisp[1]=GSMDestGSRegs[10];
+    mzDecodeGeometry(&mzState,v);
+    mzApply(&mzState,0);
+    mzStateReady=1;mzProfilePending=1;
 }
 
 /* This function is called ONLY in the paused IGR thread after GSM's GS
@@ -774,11 +798,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         mzProfilePending=0;
         if((v&0xe0000000u)==MZ_PROFILE_V2&&mzProfileValid(v)&&!!(v&(1u<<28))==mzGameHasGsm){
             maizo_igr_state_t desired=mzState;
-            desired.width=(int)(v&63u)-32;desired.height=(int)((v>>6)&63u)-32;
-            desired.x=(int)((v>>12)&63u)-32;desired.y=(int)((v>>18)&63u)-32;
-            desired.field_fix=!!(v&(1u<<24));
+            mzDecodeGeometry(&desired,v);
             if(mzGameHasGsm||mzNativeApply(&desired)){
-                if(mzGameHasGsm)mzApply(&desired);
+                if(mzGameHasGsm)mzApply(&desired,1);
                 mzState.width=desired.width;mzState.height=desired.height;
                 mzState.x=desired.x;mzState.y=desired.y;
             }
@@ -834,7 +856,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             int oldX=mzState.x,oldY=mzState.y;
             action=maizoIgrStep(&mzState,pressed|(now&0x0800u));
             if(mzState.changed){
-                if(mzGameHasGsm)mzApply(&mzState);
+                if(mzGameHasGsm)mzApply(&mzState,1);
                 else if(!mzNativeApply(&mzState)){
                     mzState.width=oldW;mzState.height=oldH;
                     mzState.x=oldX;mzState.y=oldY;

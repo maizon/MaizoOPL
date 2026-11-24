@@ -8,4 +8,5 @@ int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame),void (*yield)(void),u
 #define MZ_IGR_CAPTURE_PROBE 0x80000000u
 int maizoIGR_Preflight(u32 heldDmac);
 char *maizoIGR_ProfileArg(void);
+void maizoIGR_BootProfile(void);
 #endif
