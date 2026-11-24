@@ -24,7 +24,7 @@ static void dbError(const char *stage,uint32_t offset,int expected,int actual)
 {
     snprintf(dbDiagnostic,sizeof(dbDiagnostic),"%s off=%lu req=%d ret=%d",
              stage,(unsigned long)offset,expected,actual);
-    LOG("CHEATDB: %s\n",dbDiagnostic);
+    printf("CHEATDB: %s\n",dbDiagnostic);
 }
 
 static int mcResult(int result)

@@ -356,11 +356,11 @@ static int mzFrame(void)
  * and that VIF1/PATH2 can accept a fresh DIRECT command. */
 int maizoIGR_Preflight(void)
 {
+    USE_LOCAL_EECORE_CONFIG;
+    mzGameHasGsm=!!config->EnableGSMOp;
     return !(*MZ_D_CTRL&0xcu) &&
-           mzIgrSelectPath(*MZ_D_STAT,*MZ_GIF_STAT) &&
-           mzFrame() &&
-           mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
-                             *MZ_VIF1_STAT,*MZ_GIF_STAT);
+           mzIgrReadyPath(*MZ_D1_CHCR,*MZ_D2_CHCR,*MZ_VIF1_STAT,
+                          *MZ_GIF_STAT,*MZ_D_STAT) && mzFrame();
 }
 static int mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
 {
@@ -734,11 +734,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     }
     mzState.save_caps=mzProfileIdOK(config->MaizoProfileID)&&mzProfileExitOK(config->ExitPath);
     mzState.filter_mode=(int)MaizoGsFilterMode; /* Another SetGsCrt cancelled the filter. */
-    if(!mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
-                           *MZ_VIF1_STAT,*MZ_GIF_STAT))
-        return MAIZO_IGR_UNAVAILABLE;
     if(*MZ_D_CTRL&0xcu)return MAIZO_IGR_UNAVAILABLE;
-    mzOverlayPath=mzIgrSelectPath(*MZ_D_STAT,*MZ_GIF_STAT);
+    mzOverlayPath=mzIgrReadyPath(*MZ_D1_CHCR,*MZ_D2_CHCR,*MZ_VIF1_STAT,
+                                *MZ_GIF_STAT,*MZ_D_STAT);
     if(!mzOverlayPath)return MAIZO_IGR_UNAVAILABLE;
     mzDmaRegs=mzOverlayPath==3?MZ_D2_CHCR:MZ_D1_CHCR;
     statBit=mzOverlayPath==3?4u:2u;
@@ -786,7 +784,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     for(;;){
         int action;
         yield();
-        if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame)){
+        if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame && now==prev)){
             /* A dead pad stream must not strand the game in suspended
              * state. A stationary but live controller keeps advancing
              * its DMA frame counter and does not trigger this guard. */
@@ -893,8 +891,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
 cleanup:
     /* Never treat failed drain as success. Always leave the polling
      * route alive; do not jump to destructive stock IGR on failure. */
-    if(!mzWait(MZ_VIF1_STAT,VIF_FQC,0,0) ||
-       !mzWait(MZ_GIF_STAT,GIF_BUSY,0,0))
+    if(!mzWait(MZ_GIF_STAT,GIF_BUSY,0,0) |
+       (mzOverlayPath==2 && !mzWait(MZ_VIF1_STAT,VIF_FQC,0,0)))
         result=MAIZO_IGR_UNAVAILABLE;
     mzDmaRegs[4]=madr;mzDmaRegs[8]=qwc;mzDmaRegs[12]=tadr;
     mzDmaRegs[0]=chcr;

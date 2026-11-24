@@ -67,31 +67,24 @@ static int MaizoIgrWaitRelease;
 static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons, u32 *frame)
 {
     const volatile u8 *b;
-    u32 before;
-    u8 state, lo, hi;
-    if (Pad_Data.pad_buf == NULL)
-        return 0;
-    b = (const volatile u8 *)UNCACHED_SEG(Pad_Data.pad_buf);
-    before = *(const volatile u32 *)(b + Pad_Data.pos_frame);
-    if (Pad_Data.libpad == IGR_LIBPAD) {
-        const volatile u8 *other = b + (Pad_Data.libversion >= 0x0160 ? 128 : 64);
-        u32 otherFrame = *(const volatile u32 *)(other + Pad_Data.pos_frame);
-        if ((s32)(otherFrame - before) > 0) {
-            b = other;
-            before = otherFrame;
+    u32 best=0;
+    unsigned count=1,i,valid=0;
+    if(!Pad_Data.pad_buf)return 0;
+    b=(const volatile u8 *)UNCACHED_SEG(Pad_Data.pad_buf);
+    if(Pad_Data.libpad==IGR_LIBPAD)count=2;
+    for(i=0;i<count;i++){
+        u32 f=*(const volatile u32 *)(b+Pad_Data.pos_frame);
+        u8 state=b[Pad_Data.pos_state];
+        u8 lo=b[Pad_Data.pos_combo2],hi=b[Pad_Data.pos_combo1];
+        if(f==*(const volatile u32 *)(b+Pad_Data.pos_frame) &&
+           state==(Pad_Data.libpad==IGR_LIBPAD?IGR_PAD_STABLE_V1:IGR_PAD_STABLE_V2) &&
+           (!valid||(s32)(f-best)>0)){
+            best=f;*buttons=(u16)~(lo|hi<<8);valid=1;
         }
+        b+=Pad_Data.libversion>=0x0160?128:64;
     }
-    state = b[Pad_Data.pos_state];
-    lo = b[Pad_Data.pos_combo2];
-    hi = b[Pad_Data.pos_combo1];
-    if (before != *(const volatile u32 *)(b + Pad_Data.pos_frame))
-        return 0; /* DMA changed banks while sampling; retry. */
-    if (!((Pad_Data.libpad == IGR_LIBPAD && state == IGR_PAD_STABLE_V1) ||
-          (Pad_Data.libpad == IGR_LIBPAD2 && state == IGR_PAD_STABLE_V2)))
-        return 0;
-    *frame = before;
-    *buttons = ~(lo | hi << 8) & 0xffff;
-    return 1;
+    *frame=best;
+    return valid;
 }
 static void maizoIgrHold(void)
 {
@@ -247,22 +240,23 @@ static void IGR_Poll_Alarm(s32 alarm_id, u16 time, void *common)
 #ifdef MAIZO_IGR_MENU
 static void maizoIgrYield(void)
 {
-    int alarm=SetAlarm(64,IGR_Poll_Alarm,&IGR_Thread_ID);
-    if(alarm>=0)SleepThread();
-    else nopdelay();
+    /* Bounded polling during suspension: kernel alarm callbacks can
+     * depend on services that a title has disabled. Do not SleepThread
+     * with the game suspended. IRQs remain enabled for SIF pad DMA. */
+    delay(1);
 }
 /* Some pad libraries require a live EE worker to advance their pad
  * buffer. Check for real progress after suspension, before modifying
  * VRAM. A dead controller stream must not strand a paused game. */
 static int maizoIgrPadReady(void)
 {
-    u16 keys;
+    u16 keys,firstKeys=0;
     u32 frame,first=0;
     int got=0,i;
     for(i=0;i<24;i++){
         if(maizoIgrButtons(&keys,&frame)){
-            if(got && frame!=first)return 1;
-            first=frame;got=1;
+            if(got && (frame!=first || keys!=firstKeys))return 1;
+            first=frame;firstKeys=keys;got=1;
         }
         maizoIgrYield();
     }
@@ -470,23 +464,33 @@ maizo_igr_poll_again:
             /* Yield to live game threads until the GS/VIF1 pipeline
              * reaches an idle point; pausing first can freeze a
              * half-consumed VIF packet forever. Up to 64 alarms. */
-            int retries;
-            int ready = 0;
-            ChangeThreadPriority(TH_SELF, 127);
-            for(retries=0;retries<64;retries++){
-                if(maizoIGR_Preflight()){ready=1;break;}
-                alarm_id=SetAlarm(256,IGR_Poll_Alarm,&IGR_Thread_ID);
-                if(alarm_id>=0)SleepThread();else nopdelay();
-            }
-            ChangeThreadPriority(TH_SELF, 0);
-            if(ready){
+            int retries,attempt;
+            for(attempt=0;attempt<3;attempt++){
+                ChangeThreadPriority(TH_SELF,127);
+                for(retries=0;retries<64;retries++){
+                    if(maizoIGR_Preflight())break;
+                    alarm_id=SetAlarm(97,IGR_Poll_Alarm,&IGR_Thread_ID);
+                    if(alarm_id>=0)SleepThread();else nopdelay();
+                }
+                ChangeThreadPriority(TH_SELF,0);
+                if(retries==64)break;
                 maizoIgrHold();
                 maizoIgrPauseThreads();
-                if(maizoIgrPadReady() && maizoIGR_Preflight())
-                    choice = maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield);
-                /* Restore IRQs only after the menu has relinquished DMA.
-                 * Resume suspended threads on every non-destructive exit. */
+                if(maizoIgrPadReady()){
+                    /* An already submitted transfer may finish without
+                     * EE workers. Never reset or truncate game DMA. */
+                    for(retries=0;retries<8;retries++){
+                        if(maizoIGR_Preflight())break;
+                        maizoIgrYield();
+                    }
+                    if(retries<8){
+                        choice=maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield);
+                        maizoIgrUnhold();
+                        break; /* never retry after touching the framebuffer */
+                    }
+                }
                 maizoIgrUnhold();
+                maizoIgrResumeThreads();
             }
         }
         choice = maizoIgrSafeChoice(config->EnableMaizoIgrMenu, choice);
@@ -865,7 +869,7 @@ static void Set_libpad_Params(void *addr)
 // Do not register anything on VBLANK_END.
 void Install_IGR(void)
 {
-    ee_thread_t thread_param;
+    ee_thread_t thread_param = {0};
 
     // Reset power-button state.
     Power_Button.press = 0;
@@ -878,6 +882,9 @@ void Install_IGR(void)
     Pad_Data.vb_count = 0;
     Pad_Data.combo_type = 0x00;
     Pad_Data.prev_frame = 0x00;
+#ifdef MAIZO_IGR_MENU
+    MaizoIgrWaitRelease=0;
+#endif
 
     // Do not create the polling thread more than once.
     if (IGR_Thread_ID < 0) {
