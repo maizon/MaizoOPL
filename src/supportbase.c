@@ -852,20 +852,35 @@ void sbCreateFolders(const char *path, int createDiscImgFolders)
 
 int sbLoadCheats(const char *path, const char *file, const char *title, config_set_t *configSet)
 {
-    if (!GetCheatsEnabled())
-        return 0;
+    int requested=GetCheatsEnabled();
+#ifdef MAIZO_IGR_MENU
+    int menu=1;
+    configGetInt(configGetByType(CONFIG_OPL),"maizo_igr_menu",&menu);
+    if(!requested&&!menu){cheatDisableLaunch();return 0;}
+#else
+    if(!requested)return 0;
+#endif
     int result = load_game_cheats(path, file, title);
     if (result < 0) {
         cheatDisableLaunch();
-        return result;
+        return requested?result:0;
     }
+#ifdef MAIZO_IGR_MENU
+    /* Preload names even when cheats were not enabled in the frontend.
+     * Never install a master hook without the user's existing approval. */
+    if(!requested){cheatDisableEngine();return 0;}
+#endif
     if (cheatDatabaseMatch() > 0) {
         char saved[16] = {0};
         /* Even exact serial databases must respect manual selection. If the
          * content changed after approval, do not apply new codes silently. */
         if (!configGetStrCopy(configSet, "$CheatDBCRC", saved, sizeof(saved)) ||
             strcmp(saved, cheatDatabaseFingerprint())) {
+#ifdef MAIZO_IGR_MENU
+            cheatDisableEngine();
+#else
             cheatDisableLaunch();
+#endif
             return 0;
         }
         cheatConfigLoadSelections(configSet);
@@ -874,7 +889,11 @@ int sbLoadCheats(const char *path, const char *file, const char *title, config_s
             && !cheatBuildLive(NULL)
 #endif
         )
+#ifdef MAIZO_IGR_MENU
+            cheatDisableEngine();
+#else
             cheatDisableLaunch();
+#endif
     } else if (result == 1) {
         cheatConfigLoadSelections(configSet);
         if (!cheatHasOptionalSelection()
@@ -882,10 +901,18 @@ int sbLoadCheats(const char *path, const char *file, const char *title, config_s
             && !cheatBuildLive(NULL)
 #endif
         )
+#ifdef MAIZO_IGR_MENU
+            cheatDisableEngine();
+#else
             cheatDisableLaunch();
+#endif
     }
     if (GetCheatsEnabled() && !cheatSelectionFits()) {
+#ifdef MAIZO_IGR_MENU
+        cheatDisableEngine();
+#else
         cheatDisableLaunch();
+#endif
         return -EINVAL;
     }
     return 0;

@@ -88,6 +88,8 @@ void cheatToggleSelection(int index);
 #ifdef MAIZO_IGR_MENU
 #include "../ee_core/include/maizo_cheat_live.h"
 int cheatBuildLive(mz_live_cheats_t *out);
+void cheatDisableEngine(void);
+void cheatBuildPreview(mz_live_cheats_t *out);
 #endif
 
 #endif /* _CHEATMAN_H_ */

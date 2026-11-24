@@ -442,6 +442,19 @@ void set_cheats_list(void)
 }
 
 #ifdef MAIZO_IGR_MENU
+void cheatDisableEngine(void)
+{
+    gEnableCheat=0;
+    memset(gCheatList,0,sizeof(gCheatList));
+}
+void cheatBuildPreview(mz_live_cheats_t *out)
+{
+    memset(out,0,sizeof(*out));
+    for(int i=0;i<MAX_CODES&&gCheats[i].name[0]&&out->count<MZ_LIVE_GROUPS;i++){
+        if(cheatConfigIsMasterCode(gCheats[i].name))continue;
+        snprintf(out->name[out->count++],MZ_LIVE_NAME,"%.21s",gCheats[i].name);
+    }
+}
 /* Build a catalog without modifying the old list until every enabled
  * group fits. Master hooks are immutable and installed by PS2RD.
  * NULL is a dry run used by the frontend before accepting an empty

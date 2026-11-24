@@ -128,7 +128,7 @@ void EnableCheats(void)
             MaizoLiveMask=p->mask&((1u<<p->count)-1u);
             MaizoLiveCount=p->count;
         }else numcodes=0; /* never execute a rejected live catalog */
-    }else if(p->count)numcodes=0;
+    }else if(p->lines)numcodes=0; /* names-only preview never disables legacy engine */
 #endif
     // Install Hook SetupThread
     Install_HookSetupThread();
