@@ -83,8 +83,9 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
     maizoIgrStateInit(&s,0);
     s.page=MZ_PAGE_VIDEO;s.video_caps=MZ_VIDEO_NATIVE;
-    maizoIgrStep(&s,MZ_KEY_RIGHT);assert(!s.width&&!s.changed);
-    maizoIgrStep(&s,MZ_KEY_LEFT);assert(s.width==-1&&s.changed);
+    maizoIgrStep(&s,MZ_KEY_RIGHT);assert(s.width==1&&s.changed);
+    maizoIgrStep(&s,MZ_KEY_LEFT);maizoIgrStep(&s,MZ_KEY_LEFT);
+    assert(s.width==-1&&s.changed);
     s.selected=5;s.changed=0;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.field_fix&&!s.changed);
     s.selected=4;

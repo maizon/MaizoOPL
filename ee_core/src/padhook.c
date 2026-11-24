@@ -64,7 +64,7 @@ static int MaizoIgrWaitRelease;
 
 /* Padman updates this area asynchronously via SIF DMA, not EE code.
  * UNCACHED alone does not stop LTO from caching ordinary C loads. */
-static int maizoIgrButtons(u16 *buttons, u32 *frame)
+static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons, u32 *frame)
 {
     const volatile u8 *b;
     u32 before;

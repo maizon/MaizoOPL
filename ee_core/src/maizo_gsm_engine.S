@@ -578,11 +578,30 @@ maizo_native_check:
     la      $t3, MaizoNativeSource
     addu    $t3, $t3, $t2
     ld      $t4, 0($t3)
-    bne     $a1, $t4, maizo_monitor_forward
+    bne     $a1, $t4, maizo_native_cancel
     nop
     la      $t3, MaizoNativeTarget
     addu    $t3, $t3, $t2
     ld      $a1, 0($t3)
+    b       maizo_monitor_forward
+    nop
+maizo_native_cancel:
+    # The current raw DISPLAY has already been captured. Restore both
+    # old circuit outputs and stop reapplying stale geometry.
+    la      $t3, MaizoNativeMask
+    lw      $t4, 0($t3)
+    sw      $zero, 0($t3)
+    andi    $t0, $t4, 1
+    beqz    $t0, maizo_native_cancel_second
+    nop
+    ld      $t0, Source_DISPLAY1($s0)
+    sd      $t0, GS_DISPLAY1($s4)
+maizo_native_cancel_second:
+    andi    $t0, $t4, 2
+    beqz    $t0, maizo_monitor_forward
+    nop
+    ld      $t0, Source_DISPLAY2($s0)
+    sd      $t0, GS_DISPLAY2($s4)
 maizo_monitor_forward:
     b       exit_GSHandler
     sd      $a1, 0($a3)

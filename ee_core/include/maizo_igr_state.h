@@ -51,8 +51,8 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         if(!s->video_caps)return MZ_ACTION_NONE;
         delta=pressed&MZ_KEY_RIGHT?1:-1;
         switch(s->selected) {
-        case 0:v=&s->width;min=-8;max=s->video_caps==MZ_VIDEO_NATIVE?0:8;break;
-        case 1:v=&s->height;min=-8;max=s->video_caps==MZ_VIDEO_NATIVE?0:8;break;
+        case 0:v=&s->width;min=-8;max=s->video_caps==MZ_VIDEO_NATIVE?2:8;break;
+        case 1:v=&s->height;min=-8;max=s->video_caps==MZ_VIDEO_NATIVE?2:8;break;
         case 2:v=&s->x;min=-24;max=24;break;
         case 3:v=&s->y;min=-24;max=24;break;
         case 5:if(s->video_caps==MZ_VIDEO_GSM){s->field_fix^=1;s->changed=1;}return MZ_ACTION_NONE;

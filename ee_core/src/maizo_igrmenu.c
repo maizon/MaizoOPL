@@ -90,7 +90,7 @@ static const u8 mzColors[6][3] = {
     {252, 182, 101}   /* warning */
 };
 
-static void mzLine(int y, int x, int color, const char *s)
+static void __attribute__((noinline)) mzLine(int y, int x, int color, const char *s)
 {
     mz_line_t *l;
     int i;
@@ -118,7 +118,7 @@ static char *mzNumber(char *dst, int n)
     while(len)*dst++=temp[--len];
     *dst=0;return dst;
 }
-static void mzValue(int row,const char *name,int number,int suffix)
+static void __attribute__((noinline)) mzValue(int row,const char *name,int number,int suffix)
 {
     char temp[CHARS + 1],*p=mzCopy(temp,name);
     p=mzCopy(p," ");
@@ -126,7 +126,7 @@ static void mzValue(int row,const char *name,int number,int suffix)
     if(suffix)p=mzCopy(p,"%");
     mzLine(25+row*10,11,4,temp);
 }
-static void mzPage(const maizo_igr_state_t *s)
+static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
 {
     int i, count=maizoIgrPageCount(s->page);
     static const char *const mainNames[6] = {
@@ -153,8 +153,8 @@ static void mzPage(const maizo_igr_state_t *s)
             for(i=0;i<9;i++)
                 mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
         }else if(s->video_caps==MZ_VIDEO_NATIVE){
-            mzValue(0,"RECORTE X",-s->width*2,0);
-            mzValue(1,"RECORTE Y",-s->height*2,0);
+            mzValue(0,"TAMANHO X",s->width,0);
+            mzValue(1,"TAMANHO Y",s->height,0);
             mzValue(2,"POSICAO X",s->x,0);
             mzValue(3,"POSICAO Y",s->y,0);
             mzLine(65,11,4,"PRESET RECORTE");
@@ -250,7 +250,7 @@ static void mzPut(u8 *dest,int color)
         if(mzBpp==4)dest[3]=0x80;
     }
 }
-static void mzRenderLine(u8 *dest,int y)
+static void __attribute__((noinline)) mzRenderLine(u8 *dest,int y)
 {
     const mz_line_t *active[4];int n=0,i,x;
     int uy=y/mzSy;
@@ -283,7 +283,7 @@ static void mzRenderLine(u8 *dest,int y)
  * do not reject the entire menu for this common layout. Resolve one
  * actually enabled, VRAM-bounded circuit, preferring read circuit 1.
  */
-static int mzFrame(void)
+static int __attribute__((noinline)) mzFrame(void)
 {
     const u64 *r=GSMSourceGSRegs;
     mz_igr_frame_t f;
@@ -316,7 +316,7 @@ int maizoIGR_Preflight(void)
            mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                              *MZ_VIF1_STAT,*MZ_GIF_STAT);
 }
-static int mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
+static int __attribute__((noinline)) mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
 {
     int i;
     for(i=0;i<2000000;i++)
@@ -351,7 +351,7 @@ static int mzSendLine(u32 *p,int line)
     FlushCache(0);
     return mzDma(p,7+qw,0x101);
 }
-static int mzDraw(u32 *packet,const maizo_igr_state_t *s)
+static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t *s)
 {
     int y;
     mzPage(s);
@@ -378,7 +378,7 @@ static u64 mzDisplayEdit(u64 base,const maizo_igr_state_t *s)
 }
 /* Only recorder-backed layouts; never use guessed MMIO readbacks
  * for native edits. Both active circuits must independently validate. */
-static unsigned int mzNativeCaps(void)
+static unsigned int __attribute__((noinline)) mzNativeCaps(void)
 {
     const u64 *r=GSMSourceGSRegs;
     mz_igr_frame_t f;
@@ -396,7 +396,7 @@ static unsigned int mzNativeCaps(void)
 /* Called only with game threads suspended and the GS breakpoint off.
  * Prepare ALL outputs first; an invalid request must not partially write
  * the hardware. The passive observer reapplies only exact source matches. */
-static int mzNativeApply(const maizo_igr_state_t *s)
+static int __attribute__((noinline)) mzNativeApply(const maizo_igr_state_t *s)
 {
     unsigned int en=mzNativeCaps(),i;
     u64 target[2],source[2];
@@ -450,7 +450,7 @@ static u64 mzOutputSource(int index, int fix)
 /* The game must NATIVELY render progressive 480p into a full-height
  * frame buffer while GSM produces NTSC 480i. A field-mode renderer
  * cannot be converted to a 480p renderer by changing SMODE2 alone. */
-static int mzFrame480iCaps(void)
+static int __attribute__((noinline)) mzFrame480iCaps(void)
 {
     const u64 *r=GSMSourceGSRegs;
     return mzGs480iBridgeCaps(
@@ -463,7 +463,7 @@ static int mzFrame480iCaps(void)
  * GS scanout mode and its GSM shadow; never touch per-game primitives,
  * frame buffer layout, DISPLAY/DISPFB or GS timing mode (NTSC stays
  * NTSC). Hook_SetGsCrt rolls back this opt-in on CRT mode changes. */
-static int mzFrame480iApply(int enabled)
+static int __attribute__((noinline)) mzFrame480iApply(int enabled)
 {
     u64 value;
     if(enabled){
@@ -487,7 +487,7 @@ static int mzFrame480iApply(int enabled)
     asm volatile("sync.l");
     return 1;
 }
-static int mzFilterCapabilities(void)
+static int __attribute__((noinline)) mzFilterCapabilities(void)
 {
     u64 pmode=mzOutputSource(0,GSMFlags[9]);
     u64 smode=mzOutputSource(2,GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]);
@@ -498,7 +498,7 @@ static int mzFilterCapabilities(void)
     if(!pmode || !smode)return 0;
     return mzFilterCaps(pmode,smode,fb1,fb2,d1,d2);
 }
-static int mzFilterApply(int mode)
+static int __attribute__((noinline)) mzFilterApply(int mode)
 {
     u64 pmode=mzOutputSource(0,GSMFlags[9]);
     u64 smode=mzOutputSource(2,GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]);
@@ -582,7 +582,7 @@ static void mzBpcRestore(u32 old)
 /* Keep polling independent of sleeping game threads and masked game
  * IRQs. COP0 Count is read via the existing kernel syscall; the finite
  * iteration bound also protects against a title resetting the counter. */
-static void mzPollDelay(void)
+static void __attribute__((noinline)) mzPollDelay(void)
 {
     u32 start=GetCop0(9);
     unsigned int i;
@@ -590,7 +590,7 @@ static void mzPollDelay(void)
         if((u32)(GetCop0(9)-start)>=1500000u)break;
     }
 }
-int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
+__attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
 {
     USE_LOCAL_EECORE_CONFIG;
     /* One VIF1 packet and a line's pixels: no full-screen framebuffer. */
