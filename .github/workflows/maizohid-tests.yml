@@ -69,6 +69,10 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_gs_trusted_refs_test.c -o /tmp/maizo_gs_trusted_refs
           /tmp/maizo_gs_trusted_refs
+      - name: Verify shared renderer adapter actual submit callbacks for PATH1 staging, PATH2 and PATH3
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_gs_client_test.c -o /tmp/maizo_gs_client_test
+          /tmp/maizo_gs_client_test
       - name: Validate MAIZO GS opt-in runtime and fail-closed menu controls
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \

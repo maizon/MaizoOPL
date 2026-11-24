@@ -92,6 +92,7 @@ static int eecoreInit(int argc, char **argv)
     /* Every game launch starts with zero draw capabilities. Only a later,
      * verified renderer-specific adapter may advertise supported paths. */
     mzGsRuntimeReset();
+    mzGsRuntimePublish(config->EnableMaizoIgrMenu);
     mzGsProbeReset(&mzGsProbe);
 #endif
 

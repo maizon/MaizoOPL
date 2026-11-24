@@ -26,17 +26,39 @@ enum {
 };
 
 /*
- * No out-of-line policy functions: EE core RAM ends at 0x96e00.
- * The GS parsing implementation is instantiated ONLY in an explicitly
- * compiled game adapter. The default resident core remains compact.
+ * A versioned shared mailbox lives in the protected EE-core region.
+ * The parser is instantiated in a cooperating game/renderer, not the
+ * resident EE core. Games without a verified integration never attach.
  */
-extern volatile unsigned int mzRuntimeCapabilities;
-extern volatile unsigned int mzRuntimeModes;
-extern unsigned int mzRuntimeFailures;
-extern unsigned int mzRuntimeAccepted;
-extern unsigned int mzRuntimeConsecutiveFailures;
-extern mz_gs_gif_state_t mzRuntimeState;
-extern mz_gs_dma_metrics_t mzRuntimeMetrics;
+#define MZ_GS_SHARED_MAGIC0 0x4d5a4753u
+#define MZ_GS_SHARED_MAGIC1 0x92a5b8acu
+#define MZ_GS_SHARED_ABI 1u
+typedef struct {
+    uint32_t magic0, magic1, abi, bytes;
+    volatile unsigned int enabled, capabilities, modes;
+    unsigned int failures, accepted, consecutive_failures;
+    mz_gs_gif_state_t state;
+    mz_gs_dma_metrics_t metrics;
+} mz_gs_shared_t;
+#ifdef MZ_GS_CLIENT
+extern mz_gs_shared_t *mzGsShared;
+#else
+extern mz_gs_shared_t mzGsResident;
+#define mzGsShared (&mzGsResident)
+#endif
+#define mzRuntimeCapabilities (mzGsShared->capabilities)
+#define mzRuntimeModes (mzGsShared->modes)
+#define mzRuntimeFailures (mzGsShared->failures)
+#define mzRuntimeAccepted (mzGsShared->accepted)
+#define mzRuntimeConsecutiveFailures (mzGsShared->consecutive_failures)
+#define mzRuntimeState (mzGsShared->state)
+#define mzRuntimeMetrics (mzGsShared->metrics)
+#ifndef MZ_GS_CLIENT
+static inline void mzGsRuntimePublish(int enabled)
+{
+    mzGsResident.enabled=!!enabled;
+}
+#endif
 
 static inline unsigned int mzGsRuntimeCaps(void)
 {

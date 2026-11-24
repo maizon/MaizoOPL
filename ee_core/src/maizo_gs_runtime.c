@@ -6,13 +6,10 @@
 #include "maizo_gs_runtime.h"
 #include "maizo_gs_probe.h"
 
-volatile unsigned int mzRuntimeCapabilities;
-volatile unsigned int mzRuntimeModes;
-unsigned int mzRuntimeFailures;
-unsigned int mzRuntimeAccepted;
-unsigned int mzRuntimeConsecutiveFailures;
-mz_gs_gif_state_t mzRuntimeState;
-mz_gs_dma_metrics_t mzRuntimeMetrics;
+mz_gs_shared_t mzGsResident __attribute__((aligned(16),used)) = {
+    .magic0=MZ_GS_SHARED_MAGIC0,.magic1=MZ_GS_SHARED_MAGIC1,
+    .abi=MZ_GS_SHARED_ABI,.bytes=sizeof(mz_gs_shared_t)
+};
 
 /* Read-only live activity sampling shared with the paused IGR screen. */
 mz_gs_probe_t mzGsProbe;

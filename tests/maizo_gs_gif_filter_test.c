@@ -101,7 +101,7 @@ int main(void)
 
     init(&p,&s,&st);p.scanmask=MZ_GS_SCAN_EVEN_ONLY;
     one(buf,MZ_GS_SCANMSK,0,&p,&s,&st);
-    assert(mzGifRead64(buf+16)==2);
+    assert(mzGifRead64(buf+16)==3);
     init(&p,&s,&st);p.aa1=MZ_GS_FORCE_ON;
     memset(buf,0,sizeof(buf));
     mzGifWrite64(buf,tag(1,1,0,0,1,1));

@@ -38,7 +38,7 @@ static inline int mzGsDmaPatchVif1Mixed(
     if (policy->aa1 > MZ_GS_FORCE_OFF ||
         policy->bilinear > MZ_GS_FORCE_OFF ||
         policy->dither > MZ_GS_FORCE_OFF ||
-        policy->scanmask > MZ_GS_SCAN_EVEN_ONLY) {
+        (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY)) {
         mzGsDmaRecord(metrics, MZ_GS_DMA_UNSUPPORTED, NULL);
         return MZ_GS_DMA_UNSUPPORTED;
     }

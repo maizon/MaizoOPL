@@ -37,8 +37,8 @@ enum {
  */
 enum {
     MZ_GS_SCAN_UNCHANGED = 0,
-    MZ_GS_SCAN_ODD_ONLY = 1,
-    MZ_GS_SCAN_EVEN_ONLY = 2
+    MZ_GS_SCAN_ODD_ONLY = 2, /* prohibit even rows */
+    MZ_GS_SCAN_EVEN_ONLY = 3 /* prohibit odd rows; 1 is reserved */
 };
 
 typedef struct {
@@ -305,7 +305,7 @@ static inline int mzGifApplyFilters(void *packet,
     if (policy->aa1 > MZ_GS_FORCE_OFF ||
         policy->bilinear > MZ_GS_FORCE_OFF ||
         policy->dither > MZ_GS_FORCE_OFF ||
-        policy->scanmask > MZ_GS_SCAN_EVEN_ONLY)
+        (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY))
         return -2;
 
     snapshot = *state;

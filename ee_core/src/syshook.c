@@ -16,6 +16,9 @@
 #include "padhook.h"
 #include "syshook.h"
 #include "coreconfig.h"
+#ifdef MAIZO_IGR_MENU
+#include "maizo_gs_runtime.h"
+#endif
 
 #include <syscallnr.h>
 #include <ee_regs.h>
@@ -108,6 +111,10 @@ void sysLoadElf(char *filename, int argc, char **argv)
 
         DPRINTF("t_loadElf: trying to apply patches...\n");
         // applying needed patches
+#ifdef MAIZO_IGR_MENU
+        mzGsRuntimeReset(); /* No stale adapter survives an ELF transition. */
+        mzGsRuntimePublish(config->EnableMaizoIgrMenu);
+#endif
         apply_patches(filename);
 
         FlushCache(0);
