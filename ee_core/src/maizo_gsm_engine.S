@@ -248,6 +248,35 @@ maizo_480i_setcrt_done:
     sd      $zero, Source_DISPLAY1($t3)
     sd      $zero, Source_DISPFB2($t3)
     sd      $zero, Source_DISPLAY2($t3)
+    la      $t3, GSMFlags
+    sb      $zero, ADAPTATION_fix($t3)
+    # In native mode, only an explicitly armed 480p request uses
+    # the captured NTSC template. All other CRT requests remain native.
+    la      $t3, MaizoGs480iArmed
+    lw      $t4, 0($t3)
+    beqz    $t4, Call_SetGsCrt
+    li      $t4, 0x50
+    bnez    $a0, maizo_native_480i_return
+    nop
+    bne     $a1, $t4, maizo_native_480i_disarm
+    nop
+    la      $t3, GSMFlags
+    li      $t4, 1
+    sb      $t4, ADAPTATION_fix($t3)
+    # Do not trap the BIOS's genuine NTSC timing setup. The handler
+    # resumes only after the original SetGsCrt has programmed 480i.
+    li      $t4, 0x8000
+    mtbpc   $t4
+    sync.p
+    b       maizo_native_setcrt_done
+    nop
+maizo_native_480i_return:
+    li      $t4, 2
+    beq     $a1, $t4, Call_SetGsCrt
+    nop
+maizo_native_480i_disarm:
+    la      $t3, MaizoGs480iArmed
+    sw      $zero, 0($t3)
     b       Call_SetGsCrt
     nop
 maizo_native_setcrt_done:
@@ -620,6 +649,10 @@ maizo_monitor_write:
     addu    $t0, $t0, $s0
     ld      $t6, 0($t0)
     sd      $a1, 0($t0)
+    la      $t3, MaizoGs480iMode
+    lw      $t4, 0($t3)
+    bnez    $t4, maizo_native_bridge_write
+    nop
     la      $t3, MaizoGsFilterMode
     lw      $t5, 0($t3)
     bnez    $t5, maizo_native_filter_write
@@ -672,6 +705,55 @@ maizo_native_cancel_second:
 maizo_monitor_forward:
     b       exit_GSHandler
     sd      $a1, 0($a3)
+
+# Active native 480p renderer -> 480i output. Only scanout timing
+# is held; game PMODE and framebuffer flips pass unchanged. Reuse
+# GSM's tested DISPLAY adaptation with the captured NTSC template.
+maizo_native_bridge_write:
+    beqz    $v0, maizo_monitor_forward
+    addiu   $t0, $v0, -GS_SMODE2
+    beqz    $t0, maizo_native_bridge_smode
+    sltiu   $t0, $v0, GS_DISPFB1
+    bnez    $t0, ignore
+    addiu   $t0, $v0, -GS_DISPLAY1
+    beqz    $t0, maizo_native_bridge_display
+    addiu   $t0, $v0, -GS_DISPLAY2
+    bnez    $t0, maizo_monitor_forward
+    nop
+maizo_native_bridge_display:
+    # Require known full-height progressive layouts before adapting.
+    # Unexpected geometry is passed raw, but never changes CRT timing.
+    dsrl32  $t0, $a1, 12
+    andi    $t0, $t0, 2047
+    sltiu   $t1, $t0, 439
+    bnez    $t1, maizo_monitor_forward
+    sltiu   $t1, $t0, 480
+    beqz    $t1, maizo_monitor_forward
+    dsrl    $t0, $a1, 27
+    andi    $t0, $t0, 3
+    bnez    $t0, maizo_monitor_forward
+    dsrl    $t0, $a1, 23
+    andi    $t0, $t0, 15
+    addiu   $t0, $t0, 1
+    dsrl32  $t1, $a1, 0
+    andi    $t1, $t1, 4095
+    addiu   $t1, $t1, 1
+    divu    $t1, $t0
+    mflo    $t1
+    sltiu   $t0, $t1, 512
+    bnez    $t0, maizo_monitor_forward
+    sltiu   $t0, $t1, 705
+    beqz    $t0, maizo_monitor_forward
+    addiu   $t0, $v0, -GS_DISPLAY1
+    beqz    $t0, have_DISPLAY1_write
+    nop
+    b       have_DISPLAY2_write
+    nop
+maizo_native_bridge_smode:
+    daddiu  $t0, $zero, -4
+    and     $a1, $a1, $t0
+    b       maizo_monitor_forward
+    ori     $a1, $a1, 3
 
 # Native filter path. Record every original write above, including
 # the inactive circuit. Exact layout changes cancel the override.

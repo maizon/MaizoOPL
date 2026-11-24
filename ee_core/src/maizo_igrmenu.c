@@ -384,7 +384,7 @@ static unsigned int __attribute__((noinline)) mzNativeCaps(void)
     mz_igr_frame_t f;
     unsigned int en=r[0]&3u,i;
     u64 unchanged;
-    if(!MaizoGsMonitorOnly || !en)return 0;
+    if(!MaizoGsMonitorOnly || MaizoGs480iMode || !en)return 0;
     for(i=0;i<2;i++){
         unsigned int bit=1u<<i;
         if(!(en&bit))continue;
@@ -463,8 +463,17 @@ static int __attribute__((noinline)) mzFrame480iSourceOK(void)
  * GS scanout mode and its GSM shadow; never touch per-game primitives,
  * frame buffer layout, DISPLAY/DISPFB or GS timing mode (NTSC stays
  * NTSC). Hook_SetGsCrt rolls back this opt-in on CRT mode changes. */
+static u64 mzNative480iTemplate(void)
+{
+    const u64 *r=GSMSourceGSRegs;
+    unsigned int en=r[0]&3u;
+    u64 d=en&1u?r[8]:r[10];
+    if(!mzNativeCaps()||MaizoNativeMask||MaizoGsFilterMode)return 0;
+    return mzGs480iNativeTemplate(GSMSourceSetGsCrt[0],GSMSourceSetGsCrt[1],r[2],d)?d:0;
+}
 static int mzFrame480iCaps(void)
 {
+    if(!mzGameHasGsm)return MaizoGs480iArmed||mzNative480iTemplate()!=0;
     return MaizoGs480iArmed ||
         mzGs480iArmCaps(GSMSourceSetGsCrt[0],GSMSourceSetGsCrt[1],
                        GSMDestSetGsCrt[0],GSMDestSetGsCrt[1]);
@@ -472,6 +481,23 @@ static int mzFrame480iCaps(void)
 static int __attribute__((noinline)) mzFrame480iApply(int enabled)
 {
     u64 value;
+    if(!mzGameHasGsm){
+        if(enabled){
+            if(MaizoGs480iArmed)return 1;
+            value=mzNative480iTemplate();
+            if(!value)return 0;
+            GSMDestSetGsCrt[0]=1;GSMDestSetGsCrt[1]=2;GSMDestSetGsCrt[2]=1;
+            GSMDestGSRegs[8]=GSMDestGSRegs[10]=value;
+            GSMDestGSRegs[2]=GSMSourceGSRegs[2];
+            MaizoGs480iArmed=1;
+        }else{
+            /* Do not expose 31 kHz while a CRT is receiving 15 kHz.
+             * Turn off progressive scan in the title first. */
+            if(MaizoGs480iMode)return 0;
+            MaizoGs480iArmed=0;
+        }
+        return 1;
+    }
     if(enabled){
         if(!mzFrame480iCaps())return 0;
         if(MaizoGs480iMode)return 1;
@@ -648,7 +674,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2) |
         (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4);
     mzState.draw_changed=0;
-    mzState.frame480i_caps=mzGameHasGsm?mzFrame480iCaps():0;
+    mzState.frame480i_caps=mzFrame480iCaps();
     mzState.frame480i_mode=!!MaizoGs480iArmed;
     mzState.frame480i_changed=0;
     if(!mzGameHasGsm){
@@ -669,7 +695,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     /* If a game changed its readout layout without SetGsCrt, restore
      * before touching more VRAM. Fail closed instead of pretending
      * a 224-line title has a native 480-line render buffer. */
-    if(MaizoGs480iMode && !mzFrame480iSourceOK()){
+    if(mzGameHasGsm && MaizoGs480iMode && !mzFrame480iSourceOK()){
         mzFrame480iApply(0);
         mzState.frame480i_mode=0;
     }
@@ -734,7 +760,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzState.filter_mode=(int)MaizoGsFilterMode;
             mzState.filter_caps=mzFilterCapabilities();
         }
-        if(mzState.frame480i_changed && mzGameHasGsm){
+        if(mzState.frame480i_changed){
             int desired=(int)mzState.frame480i_mode;
             mzState.frame480i_changed=0;
             if(!mzFrame480iApply(desired))

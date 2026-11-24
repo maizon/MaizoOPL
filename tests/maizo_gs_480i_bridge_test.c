@@ -13,6 +13,10 @@ int main(void)
 {
     uint64_t pmode=1,fb=((uint64_t)10u<<9)|(2u<<15);
     uint64_t d=display(480,0);
+    assert(mzGs480iNativeTemplate(1,2,3,((uint64_t)2559<<32)|((uint64_t)3<<23)|((uint64_t)479<<44)));
+    assert(!mzGs480iNativeTemplate(0,0x50,0,d));
+    assert(!mzGs480iNativeTemplate(1,3,3,d));
+    assert(!mzGs480iNativeTemplate(1,2,3,display(224,0)));
     assert(mzGs480iArmCaps(1,2,1,2)); /* Arm in ordinary NTSC 480i. */
     assert(mzGs480iArmCaps(0,0x50,1,2));
     assert(!mzGs480iArmCaps(1,3,1,2));

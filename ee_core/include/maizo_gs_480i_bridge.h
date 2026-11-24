@@ -31,6 +31,19 @@ static inline int mzGs480iArmCaps(unsigned int game_interlace,
         ((game_interlace == 1u && game_mode == MZ_480I_NATIVE_NTSC) ||
          (game_interlace == 0u && game_mode == MZ_480I_SOURCE_480P));
 }
+/* Native mode can arm only while an actual NTSC 480i scanout has
+ * been observed. Its DISPLAY is the reference for the 15 kHz output.
+ * Do not synthesize PAL, progressive or 240p timing templates. */
+static inline int mzGs480iNativeTemplate(unsigned int interlace,unsigned int mode,
+                                          uint64_t smode2,uint64_t display)
+{
+    unsigned int w=((display>>32)&4095u)+1u;
+    unsigned int height=((display>>44)&2047u)+1u;
+    unsigned int mag=((display>>23)&15u)+1u;
+    return interlace==1u && mode==MZ_480I_NATIVE_NTSC &&
+           (smode2&1u) && w>=2048u && w/mag>=512u && w/mag<=704u &&
+           height>=440u && height<=480u;
+}
 static inline uint64_t mzGs480iFrameSMODE2(uint64_t original)
 {
     /* Modify ONLY INT / FFMD. Keep the DPMS and other register bits. */
