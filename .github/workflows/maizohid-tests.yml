@@ -153,6 +153,8 @@ jobs:
           /tmp/maizo_igr_pipeline
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
+      - name: Test exact-revision release evidence gate (synthetic fixtures only)
+        run: python3 tests/maizo_release_gate_test.py
       - name: Check Supreme integration contract
         run: python3 tests/supreme_contract_test.py
       - name: Test dashboard library and hotplug selection
