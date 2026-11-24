@@ -27,7 +27,7 @@
 #define PW 160
 #define PH 126
 #define MAX_LINES 12
-#define CHARS 25
+#define CHARS 23
 #define MZ_D1_CHCR    ((vu32 *)0x10009000)
 #define MZ_D1_MADR    ((vu32 *)0x10009010)
 #define MZ_D1_QWC     ((vu32 *)0x10009020)
@@ -62,12 +62,14 @@ extern volatile u64 MaizoGsFilterBaseFB;
 extern volatile u64 MaizoGsFilterBaseDisplay;
 
 typedef struct {
-    short x, y, len;
-    u8 color;
+    u8 x, y, len, color;
     u8 glyph[CHARS];
 } mz_line_t;
 static mz_line_t mzLines[MAX_LINES];  /* ~600 bytes, no heap */
-static int mzLineCount, mzSelectedY, mzBpp, mzX, mzY, mzBw, mzSx, mzSy, mzPsm;
+/* All these counters/GS mode flags are bounded to 0..255. Compact
+ * them without truncating the 16-bit coordinates (mzX/mzY/mzBw). */
+static u8 mzLineCount, mzSelectedY, mzBpp, mzSx, mzSy, mzPsm;
+static int mzX, mzY, mzBw;
 static u32 mzBp;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
