@@ -179,6 +179,11 @@ int _start(int argc, char *argv[])
         ds34usb_set_profiles((const u8 *)argv[1] + 31);
 #endif
     pademu_setup(pad_enable, pad_vibration);
+#ifdef USB
+    /* The experimental IGR opts Sony USB pads into the existing
+     * background input worker. Legacy Correction B retains sync I/O. */
+    if(mzInputAddress)pad_options|=2;
+#endif
     if(mzInputAddress){
         iop_thread_t th;
         th.attr=TH_C;th.thread=mzInputWorker;th.priority=43;th.stacksize=0x800;th.option=0;

@@ -96,6 +96,11 @@ static volatile unsigned int hid_stream_generation[MAX_PADS];
 static u16 hid_pending[MAX_PADS];
 static unsigned char maizoProfiles[MAIZO_PROFILE_SIZE];
 static int maizoProfilesLoaded;
+static int maizoIgrStreamSony;
+static int mzSonyStream(int type)
+{
+    return maizoIgrStreamSony&&(type==DS3||type==DS4);
+}
 void ds34usb_set_profiles(const unsigned char *profiles)
 {
     mips_memcpy(maizoProfiles, profiles, MAIZO_PROFILE_SIZE);
@@ -711,7 +716,7 @@ static void hid_stream_thread(void *arg)
             if (!device->enabled || device->devId < 0 ||
                 device->interruptEndp < 0 ||
                 !(device->status & DS34USB_STATE_RUNNING) ||
-                (device->type != MAIZOHID && device->type != TWINHID && device->type != MAIZOX360 && device->type != MAIZO_KEYBOARD) ||
+                (device->type != MAIZOHID && device->type != TWINHID && device->type != MAIZOX360 && device->type != MAIZO_KEYBOARD && !mzSonyStream(device->type)) ||
                 (device->type == TWINHID && pad != twin_root))
                 continue;
 
@@ -720,9 +725,14 @@ static void hid_stream_thread(void *arg)
                 /* Decode the completed report before submitting another one,
                  * so its input buffer is never overwritten concurrently. */
                 if (hid_stream_result[pad] == USB_RC_OK &&
-                    bytes > 0 && bytes <= MAX_BUFFER_SIZE) {
+                    bytes > 0 && bytes <= MAX_BUFFER_SIZE &&
+                    (device->type!=DS3||bytes>=(int)sizeof(struct ds3report)+2) &&
+                    (device->type!=DS4||bytes>=(int)sizeof(struct ds4report))) {
                     CpuSuspendIntr(&oldstate);
+                    u16 oldButtons=device->ds2.nButtonState;
                     readReport(hid_stream_buffers[pad], bytes, pad);
+                    if(mzSonyStream(device->type))
+                        hid_pending[pad]|=maizohid_press_edges(oldButtons,device->ds2.nButtonState);
                     CpuResumeIntr(oldstate);
                 }
                 hid_stream_state[pad] = 0;
@@ -736,7 +746,7 @@ static void hid_stream_thread(void *arg)
             hid_stream_state[pad] = 1;
             ret = UsbInterruptTransfer(device->interruptEndp,
                                        hid_stream_buffers[pad],
-                                       device->hid_packet_size,
+                                       mzSonyStream(device->type)?MAX_BUFFER_SIZE:device->hid_packet_size,
                                        hid_stream_callback, (void *)token);
             if (ret != USB_RC_OK)
                 hid_stream_state[pad] = 0;
@@ -796,7 +806,9 @@ int ds34usb_igr_snapshot(int port,u16 *keys)
 {
     int old,ok;
     CpuSuspendIntr(&old);
-    ok=ds34pad[port].enabled&&(ds34pad[port].status&DS34USB_STATE_RUNNING);
+    ok=hid_stream_thread_id>0&&ds34pad[port].enabled&&(ds34pad[port].status&DS34USB_STATE_RUNNING)&&
+       (ds34pad[port].type==MAIZOHID||ds34pad[port].type==TWINHID||
+        ds34pad[port].type==MAIZOX360||ds34pad[port].type==MAIZO_KEYBOARD||mzSonyStream(ds34pad[port].type));
     if(ok)*keys=(u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8);
     CpuResumeIntr(old);
     return ok;
@@ -819,7 +831,7 @@ int ds34usb_get_data(u8 *dst, int size, int port)
     if (hid_stream_thread_id > 0 &&
         (ds34pad[port].type == MAIZOHID ||
          ds34pad[port].type == TWINHID ||
-         ds34pad[port].type == MAIZOX360 || ds34pad[port].type == MAIZO_KEYBOARD)) {
+         ds34pad[port].type == MAIZOX360 || ds34pad[port].type == MAIZO_KEYBOARD || mzSonyStream(ds34pad[port].type))) {
         int oldstate;
         if (!(ds34pad[port].status & DS34USB_STATE_RUNNING))
             return 0;
@@ -827,6 +839,15 @@ int ds34usb_get_data(u8 *dst, int size, int port)
         hid_copy_snapshot(dst, size, port);
         ret = ds34pad[port].analog_btn & 1;
         CpuResumeIntr(oldstate);
+        /* Keep the established output path, independent of the input
+         * URB. No additional input transfer from the SIO2 caller. */
+        if(mzSonyStream(ds34pad[port].type)&&ds34pad[port].update_rum){
+            WaitSema(ds34pad[port].sema);
+            cmdret=LEDRumble(ds34pad[port].oldled,ds34pad[port].lrum,ds34pad[port].rrum,port);
+            if(cmdret==USB_RC_OK)TransferWait(ds34pad[port].cmd_sema);
+            ds34pad[port].update_rum=0;
+            SignalSema(ds34pad[port].sema);
+        }
         return ret;
     }
 
@@ -932,6 +953,7 @@ int ds34usb_get_model(int port)
 int ds34usb_init(u8 pads, u8 options)
 {
     int pad;
+    maizoIgrStreamSony=!!(options&2);
 
     if (!maizoProfilesLoaded)
         maizoDefaultProfiles(maizoProfiles);

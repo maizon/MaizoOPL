@@ -75,7 +75,9 @@ static int mzPadSample(const u8 *addr,u16 *buttons,u32 *frame)
     const volatile u8 *b=(const volatile u8 *)UNCACHED_SEG(addr);
     u32 best=0;
     unsigned count=Pad_Data.libpad==IGR_LIBPAD?2:1,i,valid=0;
-    if(!addr)return 0;
+    if(!addr||((u32)addr&3u)||((u32)addr&0x1fffffffu)<0x100000u||
+       ((u32)addr&0x1fffffffu)>0x02000000u-256u||
+       (Pad_Data.libpad!=IGR_LIBPAD&&Pad_Data.libpad!=IGR_LIBPAD2))return 0;
     for(i=0;i<count;i++){
         u32 f=*(const volatile u32 *)(b+Pad_Data.pos_frame);
         u8 state=b[Pad_Data.pos_state];

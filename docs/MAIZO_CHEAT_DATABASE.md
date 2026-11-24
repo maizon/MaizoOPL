@@ -25,3 +25,5 @@ SMB: arquivos ZIP compactados de até 4 MiB usam leitura sequencial em blocos de
 Live catalog: RAW 7 boolean operations and D/E conditionals are accepted only when aligned, within game RAM and wholly contained in one group. E is normalized to D before launch. Types with continuation words, dynamic pointers and global conditions remain on the legacy path; no universal live compatibility claim.
 
 The experimental loader also preloads a bounded names-only preview for games without an approved live catalog. This is read-only and does not execute master hooks or apply cheats. It uses the existing ZIP/SMB reader before boot, not file I/O while the game is paused. Approved compatible groups retain individual toggles. A failed live catalog does not disable the legacy selected codes.
+
+Input transport (experimental): 16-byte validated PadEmu snapshots through SIF DMA, plus captured game pad areas for both ports. USB DS3/DS4 use the existing background worker only when the new EE menu transport is requested; the legacy synchronous route remains available. This is not evidence of physical console compatibility.
