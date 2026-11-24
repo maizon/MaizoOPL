@@ -336,7 +336,9 @@ static int mzFrame(void)
  * and that VIF1/PATH2 can accept a fresh DIRECT command. */
 int maizoIGR_Preflight(void)
 {
-    return mzFrame() &&
+    return !(*MZ_D_CTRL&0xcu) &&
+           !(*MZ_D_STAT&0x4002u) &&
+           mzFrame() &&
            mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                              *MZ_VIF1_STAT,*MZ_GIF_STAT);
 }
@@ -372,7 +374,7 @@ static int mzSendLine(u32 *p,int line)
     q[8]=0;q[9]=0x53;
     q[10]=(u64)qw|((u64)1<<15)|((u64)2<<58);
     q[11]=0;
-    FlushCache(0);
+    SyncDCache(p,(u8 *)p+(7+qw)*16u);
     return mzDma(p,7+qw,0x101);
 }
 static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t *s)
@@ -653,18 +655,9 @@ static void mzBpcRestore(u32 old)
     asm volatile("sync.l\n\tmtbpc %0\n\tsync.p"::"r"(old));
     ee_kmode_exit();
 }
-/* Keep polling independent of sleeping game threads and masked game
- * IRQs. COP0 Count is read via the existing kernel syscall; the finite
- * iteration bound also protects against a title resetting the counter. */
-static void mzPollDelay(void)
-{
-    u32 start=GetCop0(9);
-    unsigned int i;
-    for(i=0;i<100000u;i++){
-        if((u32)(GetCop0(9)-start)>=1500000u)break;
-    }
-}
-__attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
+/* Controller polling sleeps on the preserved kernel alarm instead
+ * of monopolizing priority zero with repeated COP0 syscalls. */
+__attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame),void (*yield)(void))
 {
     USE_LOCAL_EECORE_CONFIG;
     /* One VIF1 packet and a line's pixels: no full-screen framebuffer. */
@@ -719,6 +712,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         return MAIZO_IGR_UNAVAILABLE;
     ctrl=*MZ_D_CTRL;
     mfifo=(ctrl>>2)&3;
+    if(mfifo || (*MZ_D_STAT&0x4002u))return MAIZO_IGR_UNAVAILABLE;
     if(!mzWait(MZ_D1_CHCR,CHCR_STR,0,mfifo==2) ||
        !mzWait(MZ_D2_CHCR,CHCR_STR,0,mfifo==3) ||
        (*MZ_VIF1_STAT & VIF_STALLED))return MAIZO_IGR_UNAVAILABLE;
@@ -775,7 +769,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
     for(;;){
         int action;
-        mzPollDelay();
+        yield();
         if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame)){
             /* A dead pad stream must not strand the game in suspended
              * state. A stationary but live controller keeps advancing
@@ -859,12 +853,15 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         unsigned int t;
         for(t=0;t<60u;t++){
             if(buttons(&now,&frame) && !now)break;
-            mzPollDelay();
+            yield();
         }
     }
 cleanup:
-    mzWait(MZ_VIF1_STAT,VIF_FQC,0,0);
-    mzWait(MZ_GIF_STAT,GIF_BUSY,0,0);
+    /* Never treat failed drain as success. Always leave the polling
+     * route alive; do not jump to destructive stock IGR on failure. */
+    if(!mzWait(MZ_VIF1_STAT,VIF_FQC,0,0) ||
+       !mzWait(MZ_GIF_STAT,GIF_BUSY,0,0))
+        result=MAIZO_IGR_UNAVAILABLE;
     *MZ_D1_MADR=madr;*MZ_D1_QWC=qwc;*MZ_D1_TADR=tadr;
     *MZ_D_CTRL=ctrl;*MZ_D1_CHCR=chcr;
     asm volatile("sync.l");

@@ -13,7 +13,11 @@ int main(void)
     assert(!mzIgrPipelineIdle(0,0,0,0x400)); /* APATH */
     assert(!mzIgrPipelineIdle(0,0,0,0x80)); /* PATH2 queued */
     assert(!mzIgrPipelineIdle(0,0,0,0x40)); /* PATH3 queued */
-    assert(mzIgrPipelineIdle(0,0,0x1000000,0x1000000));
+    assert(!mzIgrPipelineIdle(0,0,0x1000000,0));
+    assert(!mzIgrPipelineIdle(0,0,0,0x1000000));
+    assert(!mzIgrPipelineIdle(0,0,0x800000,0));
+    assert(!mzIgrPipelineIdle(0,0,0,0x200));
+    assert(mzIgrPipelineIdle(0,0,0x1000,0));
     puts("MAIZO In-Game VIF1/GIF pipeline preflight PASS");
     return 0;
 }

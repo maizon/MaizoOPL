@@ -8,7 +8,7 @@ static inline int mzIgrPipelineIdle(uint32_t ch1,uint32_t ch2,
                                     uint32_t vif,uint32_t gif)
 {
     return ((ch1|ch2)&0x100u)==0u &&
-           (vif&0x00000f0fu)==0u &&
-           (gif&0x00000dc0u)==0u;
+           (vif&0x1f800f0fu)==0u &&
+           (gif&0x1f000fc0u)==0u;
 }
 #endif

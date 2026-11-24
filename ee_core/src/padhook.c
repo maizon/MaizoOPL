@@ -96,8 +96,10 @@ static __attribute__((noinline)) int maizoIgrButtons(u16 *buttons, u32 *frame)
 static void maizoIgrHold(void)
 {
     int i;
-    MaizoIgrIntcMask = *(vu32 *)0x1000f010 & 0x6ffd; /* keep SIF SBUS and kernel alarm timer 3 */
-    MaizoIgrDmacMask = (*R_EE_D_STAT >> 16) & 0x431f; /* exclude SIF channels */
+    /* Keep kernel timers, SIF, CDVD, IPU and other service IRQs alive.
+     * GS/VBLANK/VIF1/GIF handlers may submit graphics while paused. */
+    MaizoIgrIntcMask = *(vu32 *)0x1000f010 & 0x003du;
+    MaizoIgrDmacMask = (*R_EE_D_STAT >> 16) & 0x0006u;
     for (i = 0; i < 15; i++) {
         if (MaizoIgrIntcMask & (1u << i)) DisableIntc(i);
         if (MaizoIgrDmacMask & (1u << i)) DisableDmac(i);
@@ -115,16 +117,26 @@ static void maizoIgrPauseThreads(void)
 {
     int i;
     for (i = 0; i < 8; i++) MaizoIgrSuspended[i] = 0;
-    for (i = 1; i < 256; i++)
-        if (i != IGR_Thread_ID && SuspendThread(i) >= 0)
+    for (i = 1; i < 256; i++) {
+        ee_thread_status_t info;
+        if (i == IGR_Thread_ID || ReferThreadStatus(i,&info)<0)
+            continue;
+        /* Never resume a thread the game had already suspended. */
+        if (info.status != THS_READY && info.status != THS_WAIT &&
+            info.status != THS_RUN)
+            continue;
+        if (SuspendThread(i) >= 0)
             MaizoIgrSuspended[i >> 5] |= (1u << (i & 31));
+    }
 }
 static void maizoIgrResumeThreads(void)
 {
     int i;
     for (i = 1; i < 256; i++)
-        if (MaizoIgrSuspended[i >> 5] & (1u << (i & 31)))
+        if (MaizoIgrSuspended[i >> 5] & (1u << (i & 31))) {
+            MaizoIgrSuspended[i >> 5] &= ~(1u << (i & 31));
             ResumeThread(i);
+        }
 }
 
 #endif /* MAIZO_IGR_MENU */
@@ -231,6 +243,15 @@ static void IGR_Poll_Alarm(s32 alarm_id, u16 time, void *common)
 
     iWakeupThread(*(int *)common);
 }
+
+#ifdef MAIZO_IGR_MENU
+static void maizoIgrYield(void)
+{
+    int alarm=SetAlarm(64,IGR_Poll_Alarm,&IGR_Thread_ID);
+    if(alarm>=0)SleepThread();
+    else nopdelay();
+}
+#endif
 
 // In Game Reset Thread
 static void IGR_Thread(void *arg)
@@ -427,7 +448,10 @@ maizo_igr_poll_again:
             if(ready){
                 maizoIgrHold();
                 maizoIgrPauseThreads();
-                choice = maizoIGR_MenuRun(maizoIgrButtons);
+                if(maizoIGR_Preflight())
+                    choice = maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield);
+                /* Restore IRQs only after the menu has relinquished DMA.
+                 * Resume suspended threads on every non-destructive exit. */
                 maizoIgrUnhold();
             }
         }
