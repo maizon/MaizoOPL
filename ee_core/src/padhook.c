@@ -50,6 +50,9 @@ static paddata_t Pad_Data;
 
 /* Monitored power button data */
 static powerbuttondata_t Power_Button;
+#ifdef MAIZO_IGR_MENU
+static int mzPowerLatched;
+#endif
 
 /* IGR Thread ID and interrupt handler */
 static int IGR_Thread_ID = -1;
@@ -113,6 +116,9 @@ static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,in
     const volatile u32 *mb=(const volatile u32 *)UNCACHED_SEG(MaizoPadMailbox);
     uint32_t p[4];
     unsigned k,valid=0,keys=0;
+    /* A game thread may reopen padman between pointer/layout reads.
+     * Keep the short snapshot coherent; SIF DMA can still update it. */
+    int intr=DI();
     /* Prefer independent live PadEmu input, then all opened game slots.
      * A stale/disconnected slot cannot monopolize navigation. */
     for(k=0;k<4;k++)p[k]=mb[k];
@@ -131,6 +137,7 @@ static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,in
         }
     }
     *buttons=(u16)keys;*frame=mzPadEpoch;
+    if(intr)EI();
     return valid;
 }
 static int maizoIgrButtons(u16 *buttons,u32 *frame)
@@ -155,16 +162,16 @@ static void maizoIgrHold(void)
 }
 static void maizoIgrUnhold(void)
 {
-    int i;
+    int i,intr;
     /* Restore exact previous masks once, with IRQ dispatch disabled.
      * The menu never acknowledges a game's pending DMA/INTC event. */
-    DI();
+    intr=DI();
     for (i = 0; i < 15; i++) {
         if (MaizoIgrDmacMask & (1u << i)) EnableDmac(i);
         if (MaizoIgrIntcMask & (1u << i)) EnableIntc(i);
     }
     MaizoIgrDmacMask=MaizoIgrIntcMask=0;
-    EI();
+    if(intr)EI();
 }
 static int maizoIgrPauseThreads(void)
 {
@@ -472,16 +479,27 @@ maizo_igr_poll_again:
          * Preserve the original power-button monitoring.
          * These registers require kernel mode.
          */
+        /* Like RiptOPL, never dispatch an IRQ on a user stack while
+         * CP0 KSU is temporarily kernel. Restore the previous IE state. */
+        int powerIntr=DI();
         ee_kmode_enter();
 
+#ifdef MAIZO_IGR_MENU
+        int pending=(*CDVD_R_NDIN & 0x20) && (*CDVD_R_POFF & 0x04);
+        if(pending && !mzPowerLatched) {
+            if(Power_Button.press<2)Power_Button.press++;
+            *CDVD_R_SDIN=0;
+            *CDVD_R_SCMD=0x1B;
+        }
+        mzPowerLatched=pending;
+#else
         if ((*CDVD_R_NDIN & 0x20) &&
             (*CDVD_R_POFF & 0x04)) {
             Power_Button.press++;
-
-            // Cancel immediate poweroff to allow double-press detection.
             *CDVD_R_SDIN = 0x00;
             *CDVD_R_SCMD = 0x1B;
         }
+#endif
 
         if (Power_Button.press) {
             if (Power_Button.vb_count++ >= 50) {
@@ -494,6 +512,7 @@ maizo_igr_poll_again:
         }
 
         ee_kmode_exit();
+        if(powerIntr)EI();
 
         if (Pad_Data.combo_type != 0x00) {
             break;
@@ -996,6 +1015,7 @@ void Install_IGR(void)
     Pad_Data.prev_frame = 0x00;
 #ifdef MAIZO_IGR_MENU
     MaizoIgrWaitRelease=0;
+    mzPowerLatched=0;
 #endif
 
     // Do not create the polling thread more than once.

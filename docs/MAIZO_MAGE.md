@@ -466,3 +466,26 @@ no universal restoration is claimed. Complete CRTC capture,
 pipeline boundary, and suspended title input remain required.
 Host tests do not establish commercial-game compatibility.
 References: https://psi-rockin.github.io/ps2tek/ and PS2SDK VIF1_FIFO.
+
+## IRQ and first-draw isolation audit
+
+Compared RiptOPL's IGR_CheckInputs, upstream OPL's polling worker,
+PS2SDK kernel mode helpers and GS readback sequence, gsKit registers,
+PS2tek VIF/GIF documentation, and RIPPS2/NULD menu design. Keep the
+existing sleeping worker (no new VBLANK handler). Briefly disable EE
+interrupts across the pad snapshot and temporary kernel-mode power
+and comparator access; preserve prior IE. Edge-latch power status so
+an uncleared CDVD condition is not counted twice. PATH3 rejects VIF
+stall/interrupt conditions just as PATH2 does. Restore profiles only
+after a successful first draw. No DMA borrowing, new permanent GS
+trap, or MFIFO override. The previous OFF/Mode 6 legacy-core selection
+is covered by a source-linked regression check.
+
+References: https://github.com/NathanNeurotic/RiptOPL/blob/rebuild/main/ee_core/src/padhook.c
+https://github.com/ps2dev/ps2sdk/blob/master/ee/kernel/include/kernel.h
+https://github.com/ps2dev/ps2sdk/blob/master/ee/debug/src/screenshot.c
+https://psi-rockin.github.io/ps2tek/
+
+Framebuffer backup, exact internal GS transfer-state restoration and
+MFIFO-safe overlay are not solved by these changes. Do not claim a
+hardware compatibility fix until the reported titles pass on console.

@@ -218,12 +218,14 @@ int EnableMaizoGsMonitor(void)
     u32 bpc;
     volatile u8 *flags=(volatile u8 *)&GSMFlags;
     if(gsInstalled)return MaizoGsMonitorOnly!=0;
+    int intr=DI();
     ee_kmode_enter();
     asm volatile("mfbpc %0\n\tsync.p":"=r"(bpc));
-    if(bpc&0xe0000000u){ee_kmode_exit();return 0;}
+    if(bpc&0xe0000000u){ee_kmode_exit();if(intr)EI();return 0;}
     mzSavedBpc=bpc;
     asm volatile("mfdab %0\n\tmfdabm %1\n\tsync.p":"=r"(mzSavedDab),"=r"(mzSavedDabm));
     ee_kmode_exit();
+    if(intr)EI();
     MaizoGsSeen=0;
     for(i=0;i<11;i++)GSMSourceGSRegs[i]=0;
     for(i=0;i<19;i++)flags[i]=0;
@@ -240,10 +242,12 @@ void MaizoGsMonitorEnd(int force)
         MaizoGsFilterMode||MaizoGs480iMode||MaizoGs480iArmed))return;
     DisableGSM();
     /* Restore the idle debug comparator state borrowed for capture. */
+    int intr=DI();
     ee_kmode_enter();
     asm volatile("mtdab %0\n\tmtdabm %1\n\tsync.p\n\tmtbpc %2\n\tsync.p"::
         "r"(mzSavedDab),"r"(mzSavedDabm),"r"(mzSavedBpc):"memory");
     ee_kmode_exit();
+    if(intr)EI();
     MaizoGsSeen=0;
     if(force){
         MaizoNativeMask=MaizoNativeFieldInvert=MaizoGsFilterMode=0;

@@ -38,6 +38,9 @@ int main(void)
     assert(mzIgrReadyPath(0,0,0,0,mzIgrOriginalDstat(4,4))==3);
     assert(!mzIgrReadyPath(0,0,0,1,mzIgrOriginalDstat(2,2)));
     assert(mzIgrSafePath(0,0,0,0,0)==3);
+    /* PATH3 must also reject VIF STOP/FORCE/IRQ stall or pending INT. */
+    for(unsigned bit=8;bit<=11;bit++)
+        assert(!mzIgrSafePath(0,0,1u<<bit,0,0));
     assert(mzIgrSafePath(0,0,0,1,0)==2);
     assert(mzIgrSafePath(0,0,0,2,0)==2);
     assert(mzIgrSafePath(0,0,0,3,0x20002)==2);

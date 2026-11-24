@@ -773,14 +773,17 @@ static int __attribute__((noinline)) mzFilterApply(int mode)
 static u32 mzBpcOff(void)
 {
     u32 old;
+    int intr=DI();
     ee_kmode_enter();
     asm volatile("sync.l\n\tmfbpc %0\n\tsync.p":"=r"(old));
     asm volatile("mtbpc %0\n\tsync.p"::"r"(0x8000));
     ee_kmode_exit();
+    if(intr)EI();
     return old;
 }
 static void mzBpcRestore(u32 old)
 {
+    int intr=DI();
     ee_kmode_enter();
     /* A live FIELD toggle changes both DABM and BPC, not just BPC.
      * If the game had disabled the recorder, preserve that decision. */
@@ -789,6 +792,7 @@ static void mzBpcRestore(u32 old)
     else
         asm volatile("sync.l\n\tmtbpc %0\n\tsync.p"::"r"(old));
     ee_kmode_exit();
+    if(intr)EI();
 }
 /* Controller polling sleeps on the preserved kernel alarm instead
  * of monopolizing priority zero with repeated COP0 syscalls. */
@@ -867,8 +871,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         mzFrame480iApply(0);
         mzState.frame480i_mode=0;
     }
-    /* Apply a saved profile once, at a verified idle/menu boundary,
-     * never during boot or an active game DMA. Invalid parts stay off. */
+    mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
+    first=mzDraw(p,&mzState);
+    if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    /* Restore saved settings only AFTER the first complete draw. A
+     * failed opening must not activate a saved native override. */
     if(mzProfilePending){
         u32 v=config->MaizoProfile;
         mzProfilePending=0;
@@ -894,9 +901,6 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         }
     }
 
-    mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
-    first=mzDraw(p,&mzState);
-    if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
     maizoSkyPrepare(); /* Only after visible menu and verified idle DMA. */
 #endif

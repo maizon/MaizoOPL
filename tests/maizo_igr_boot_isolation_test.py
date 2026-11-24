@@ -79,3 +79,17 @@ drain=menu.split("static int mzOverlayDrain(void)",1)[1].split("static int mzSen
 assert drain.index("mzWait(MZ_VIF1_STAT") < drain.index("mzWait(MZ_GIF_STAT")
 assert "mzDmaRegs" not in menu
 print("Dual FIFO route: full DIRECT submission and ordered drain PASS")
+
+# No IRQ dispatch on a user-mode stack during temporary kernel MMIO.
+power = pad.split("int powerIntr=DI();",1)[1].split("if(powerIntr)EI();",1)[0]
+assert power.index("ee_kmode_enter();") < power.index("ee_kmode_exit();")
+assert "pending && !mzPowerLatched" in power
+sample = pad.split("static __attribute__((noinline)) int mzIgrReadButtons",1)[1].split("static int maizoIgrButtons",1)[0]
+assert sample.index("int intr=DI();") < sample.index("p[k]=mb[k]")
+assert sample.index("mzPadSample(") < sample.index("if(intr)EI();")
+run = menu.split("int maizoIGR_MenuRun(",1)[1]
+assert run.index("if(!first)") < run.index("if(mzProfilePending)")
+system = read("src/system.c").split("void sysLaunchLoaderElf(",1)[1]
+assert system.index("fallbackCore = !proEnabled;") < system.index("ModuleStorageSize = sendIrxKernelRAM")
+assert system.index("ModuleStorage = (void *)MZ_EE_LEGACY_TOP;") < system.index("ModuleStorageSize = sendIrxKernelRAM")
+print("IRQ-safe pad snapshot and kernel MMIO, deferred profiles and OFF isolation PASS")

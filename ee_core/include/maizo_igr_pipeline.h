@@ -33,7 +33,7 @@ static inline int mzIgrReadyPath(uint32_t ch1,uint32_t ch2,uint32_t vif,
 {
     int path=mzIgrSelectPath(stat,gif);
     if(path==3 && !((ch1|ch2)&0x100u) && !(gif&0x1f001fe0u) &&
-       !(vif&0x1f80300fu))return 3;
+       !(vif&0x1f803f0fu))return 3;
     return path==2&&mzIgrPipelineIdle(ch1,ch2,vif,gif)?2:0;
 }
 /* Both routes use CPU FIFO stores only; no borrowed DMA channel.
