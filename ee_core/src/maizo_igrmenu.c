@@ -1231,6 +1231,11 @@ cleanup:
     }
     if(full){
         if(!mzRestoreTransferRegs())retain=1;
+    }
+    /* A late FIFO failure is also a rollback failure. Do not release
+     * the last good image until final drain has been checked. */
+    if(!mzOverlayDrain()){retain=1;result=MAIZO_IGR_UNAVAILABLE;}
+    if(full){
         if(retain){mzGsShared->checkpoint.fault=1;result=MAIZO_IGR_UNAVAILABLE;}
     }else mzRestoreEnd(retain);
 #endif

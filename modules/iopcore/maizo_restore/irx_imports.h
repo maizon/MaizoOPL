@@ -2,6 +2,7 @@
 #define IOP_IRX_IMPORTS_H
 #include "irx.h"
 #include <intrman.h>
+#include <cdvdman.h>
 #include <loadcore.h>
 #include <sifman.h>
 #include <sysclib.h>

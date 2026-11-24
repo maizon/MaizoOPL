@@ -8,6 +8,7 @@ int mzRestoreRead(u32 offset,void *line,u32 bytes);
 int mzRestoreHush(void);
 int mzRestoreKeep(void);
 int mzRestoreReady(void);
+int mzRestoreDiscIdle(void);
 extern volatile u32 mzRestoreTransition; /* bit 0 IOP reset, bit 1 ELF load */
 void mzRestoreEnd(int retain);
 #endif

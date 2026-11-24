@@ -582,6 +582,16 @@ int sceCdSC(int code, int *param)
 
             result = *param; // EE N-command code.
             break;
+        case CDSC_MAIZO_IO_STATE: {
+            /* Read-only snapshot of the high-level I/O semaphore and
+             * low-level read flag; never wait on or acquire the semaphore.
+             * A tagged result distinguishes this from older dummy SC. */
+            iop_sema_info_t info;
+            result=CDSC_MAIZO_IO_STATE+2;
+            if(cdrom_io_sema>0 && ReferSemaStatus(cdrom_io_sema,&info)>=0)
+                result=CDSC_MAIZO_IO_STATE+(sync_flag || info.current<=0 || info.numWaitThreads>0);
+            break;
+        }
         case CDSC_GET_VERSION:
             result = CDVDMAN_MODULE_VERSION;
             break;

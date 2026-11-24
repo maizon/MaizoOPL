@@ -20,6 +20,8 @@ jobs:
           /tmp/mzr-integrity
           cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_guard_test.c -o /tmp/mzr-guard
           /tmp/mzr-guard
+          cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_sync_test.c -o /tmp/mzr-sync
+          /tmp/mzr-sync
           cc -std=gnu99 -Wall -Wextra -Iee_core/include tests/maizo_gs_client_test.c -o /tmp/mzr-checkpoint
           /tmp/mzr-checkpoint
           python3 tests/maizo_igr_boot_isolation_test.py

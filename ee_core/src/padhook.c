@@ -36,6 +36,7 @@
 #ifdef MAIZO_IGR_RESTORE
 #include "maizo_gs_runtime.h"
 #include "maizo_restore.h"
+#include "maizo_restore_sync.h"
 #endif
 #endif
 #ifdef IGS
@@ -67,6 +68,14 @@ static int IGR_Thread_ID = -1;
  * Technique credited to RiptOPL / RIPPS2 / ORBIT (AFL-3.0).
  */
 static u32 MaizoIgrSuspended[8];
+#ifdef MAIZO_IGR_RESTORE
+static mzr_thread_identity mzHeldIdentity[256];
+static mzr_thread_identity mzThreadIdentity(const ee_thread_status_t *info)
+{
+    mzr_thread_identity x={(uintptr_t)info->func,(uintptr_t)info->stack,(unsigned)info->stack_size};
+    return x;
+}
+#endif
 static u32 MaizoIgrIntcMask, MaizoIgrDmacMask;
 static int MaizoIgrWaitRelease;
 /* Restore the background scheduler used by Beta-39 and the first
@@ -190,9 +199,12 @@ static int maizoIgrPauseThreads(void)
         if (info.status != THS_READY && info.status != THS_WAIT &&
             info.status != THS_RUN)
             continue;
-        if (SuspendThread(i) >= 0)
+        if (SuspendThread(i) >= 0){
             MaizoIgrSuspended[i >> 5] |= (1u << (i & 31));
-        else {
+#ifdef MAIZO_IGR_RESTORE
+            mzHeldIdentity[i]=mzThreadIdentity(&info);
+#endif
+        }else {
             ok=0;
 #ifdef MAIZO_IGR_RESTORE
             break; /* do not acquire any more threads after failure */
@@ -208,6 +220,12 @@ static void maizoIgrResumeThreads(void)
     for (i = 255; i > 0; i--)
         if (MaizoIgrSuspended[i >> 5] & (1u << (i & 31))) {
             MaizoIgrSuspended[i >> 5] &= ~(1u << (i & 31));
+#ifdef MAIZO_IGR_RESTORE
+            ee_thread_status_t info;
+            if(ReferThreadStatus(i,&info)<0 || !mzrCanResume(info.status))continue;
+            mzr_thread_identity x=mzThreadIdentity(&info);
+            if(!mzrSameThread(&x,&mzHeldIdentity[i]))continue;
+#endif
             ResumeThread(i);
         }
 }
@@ -630,11 +648,23 @@ maizo_igr_poll_again:
                  * Do not hold the title on a single lucky idle sample. */
                 quiet=ready?quiet+1:0;
                 ready=quiet>=2;
+                /* Cooperative checkpoint is a renderer-owned safe point.
+                 * Commercial titles additionally need an actual idle
+                 * CDVD/NCMD sample. No new blocking CDVD RPC is issued. */
+                if(ready && !mzGsResident.checkpoint.registered){
+                    if(!mzRestoreDiscIdle())ready=quiet=0;
+                    else if(!maizoIGR_Preflight(0))ready=quiet=0;
+                }
                 #endif
                 if(ready){
                     int suspended=maizoIgrPauseThreads();
 #ifdef MAIZO_IGR_RESTORE
                     if(!suspended){maizoIgrResumeThreads();break;}
+                    /* Catch NCMD/sector read that started between the
+                     * first sample and suspension; resume immediately. */
+                    if(!mzGsResident.checkpoint.registered && !mzRestoreDiscIdle()){
+                        maizoIgrResumeThreads();suspended=0;
+                    }
 #endif
                     for(retries=0;suspended&&retries<8;retries++){
                         if(maizoIGR_Preflight(0)){

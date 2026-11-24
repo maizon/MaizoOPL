@@ -7,7 +7,7 @@
 #include "maizo_restore_integrity.h"
 #define MZR_MAX (320u*252u*4u)
 #define MZR_LINE 1280u
-enum { MZR_BEGIN=1, MZR_READ, MZR_END, MZR_HUSH, MZR_WAKE, MZR_KEEP, MZR_WRITE, MZR_PING, MZR_UNHUSH };
+enum { MZR_BEGIN=1, MZR_READ, MZR_END, MZR_HUSH, MZR_WAKE, MZR_KEEP, MZR_WRITE, MZR_PING, MZR_UNHUSH, MZR_PROBE };
 typedef struct { u32 op,off,len,ee; u32 pad[3],seq; } __attribute__((aligned(16))) mzr_req;
 typedef struct { u32 buf, pad; s32 result; u32 seq; } __attribute__((aligned(16))) mzr_ack;
 static inline int mzrRange(u32 off,u32 len,u32 size)

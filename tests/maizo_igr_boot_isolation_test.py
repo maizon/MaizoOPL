@@ -153,3 +153,10 @@ assert "if(mzRestoreTransition)break;" in pad
 assert "mzRestoreTransition|=1u;" in read("ee_core/src/iopmgr.c")
 assert "mzRestoreTransition|=2u;" in read("ee_core/src/syshook.c")
 print("Cooperative full VRAM checkpoint and observed ELF/IOP transition gates PASS")
+
+assert "mzRestoreDiscIdle()" in pad and "MZR_PROBE" in service
+assert "ReferSemaStatus(cdrom_io_sema,&info)" in read("modules/iopcore/cdvdman/cdvdman.c")
+assert "pendingAck && seq==seen" in service and "++ackRetries>2u" in service
+assert "mzrSameThread(&x,&mzHeldIdentity[i])" in pad
+assert run.index("if(!mzOverlayDrain()){retain=1;") < run.index("mzRestoreEnd(retain)")
+print("Restore: actual CDVD/NCMD idle probe, bounded ACK retry, thread identity and final drain retention PASS")

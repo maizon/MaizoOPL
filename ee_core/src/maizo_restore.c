@@ -5,6 +5,7 @@
 #include "modules.h"
 #include "modmgr.h"
 #include "maizo_restore.h"
+#include "maizo_restore_sync.h"
 #include "../../modules/iopcore/common/maizo_restore.h"
 static mzr_req req __attribute__((aligned(64)));
 static u8 ackLine[64] __attribute__((aligned(64)));
@@ -22,7 +23,9 @@ static int dma(void *src,u32 dst,u32 len)
     d.src=src;d.dest=(void *)dst;d.size=len;d.attr=0;
     FlushCache(0);
     do{id=SifSetDma(&d,1);if(ticks()-t>MZR_TIMEOUT){request=0;return 0;}}while(!id);
-    while(SifDmaStat(id)>=0)if(ticks()-t>MZR_TIMEOUT){request=0;return 0;}
+    /* A queued transfer can complete late. Keep the backing storage
+     * untouched, allow a second bounded window, and never submit it twice. */
+    while(SifDmaStat(id)>=0)if(ticks()-t>2u*MZR_TIMEOUT){request=0;return 0;}
     return 1;
 }
 static int post(u32 op,u32 off,u32 n)
@@ -36,7 +39,7 @@ static int post(u32 op,u32 off,u32 n)
     req.seq=seq;
     if(!dma(&req,request,sizeof(req)))return -1;
     t=ticks();
-    while(ACK->seq!=seq)if(ticks()-t>MZR_TIMEOUT){request=0;return -1;}
+    while(ACK->seq!=seq)if(ticks()-t>3u*MZR_TIMEOUT){request=0;return -1;}
     last=ticks();
     return ACK->result;
 }
@@ -69,6 +72,10 @@ int mzRestoreReady(void)
 {
     return request && upload && !active && !mzRestoreTransition;
 }
+int mzRestoreDiscIdle(void)
+{
+    return mzRestoreReady() && mzrDiscQuiet((u32)post(MZR_PROBE,0,0));
+}
 int mzRestoreBegin(u32 n)
 {
     if(!mzRestoreReady() || !n || n>MZR_MAX || (n&15u))return 0;
@@ -93,7 +100,7 @@ int mzRestoreRead(u32 off,void *dst,u32 n)
        !mzrRange(off,n,bytes))return 0;
     /* Retry a corrupt line once, never retry a poisoned DMA transport. */
     for(unsigned i=0;i<2;i++){
-        if(post(MZR_READ,off,n)!=(int)n)return 0;
+        if(post(MZR_READ,off,n)!=(int)n){if(!request)return 0;continue;}
         memcpy(dst,(const void *)UNCACHED_SEG(line),n);
         if(mzrHash(dst,n)==lineHash[off/n])return 1;
     }

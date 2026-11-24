@@ -4,6 +4,7 @@
  * even if the EE stops sending commands. */
 #include "irx_imports.h"
 #include "maizo_restore.h"
+#include "cdvdman_opl.h"
 #include <spu2regs.h>
 IRX_ID("maizo_restore",1,0);
 static volatile mzr_req req;
@@ -95,6 +96,10 @@ static int execute(const mzr_req *r)
     case MZR_WAKE: wake();release();return 0;
     case MZR_KEEP: return buf?0:-1;
     case MZR_PING: return 0x4d5a5253;
+    case MZR_PROBE: {
+        int param=0;
+        return sceCdSC(CDSC_MAIZO_IO_STATE,&param);
+    }
     case MZR_UNHUSH: wake();return sealed?0:-1;
     default:return -1;
     }
@@ -102,18 +107,25 @@ static int execute(const mzr_req *r)
 static void worker(void *arg)
 {
     u32 seen=0,idle=0;
+    int pendingAck=0;
+    unsigned ackRetries=0;
     (void)arg;
     for(;;){
         u32 seq=req.seq;
         if(dmaBusy){
             wake();
-            if(sceSifDmaStat(dmaBusy)<0){dmaBusy=0;if(!sealed)release();}
+            if(sceSifDmaStat(dmaBusy)<0)dmaBusy=0;
+        }else if(pendingAck && seq==seen){
+            /* Retry acknowledgement only; never execute an operation
+             * twice. If EE advanced, the previous ACK was received. */
+            if(++ackRetries>2u || send(&ack,eeAck,sizeof(ack)))pendingAck=0;
         }else if(seq && seq!=seen){
+            pendingAck=0;ackRetries=0;
             mzr_req r=req;
             if(seq==r.seq && seq==req.seq){
                 seen=seq;idle=0;
                 ack.result=execute(&r);ack.seq=seen;
-                if(!send(&ack,eeAck,sizeof(ack)))wake();
+                if(!send(&ack,eeAck,sizeof(ack))){pendingAck=1;wake();}
             }
         }else if((buf || hush) && ++idle>=20000u){
             /* A sealed backup is the only copy of overwritten pixels.

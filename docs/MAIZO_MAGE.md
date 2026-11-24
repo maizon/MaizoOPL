@@ -697,3 +697,23 @@ no universal safe thread classification, complete hidden GS/SPU2 state,
 AutoDMA checkpoint, or guaranteed hardware-fault recovery exists here.
 No LIVE or FreezeAnalyzer. Tests cover buffer ownership contract,
 checkpoint state and source-level integration, not real PS2 hardware.
+
+### Restoration synchronization hardening (commercial titles)
+The IOP service now queries an explicitly tagged, read-only CDVDMAN SC
+status: high-level I/O semaphore count/waiters and low-level sync flag.
+No semaphore acquisition, blocking game RPC, stop/read cancellation, or
+storage reset. Check before pause and again after suspension; if not
+idle, immediately release threads and retry in the existing bounded
+window. This improves the Ben 10 loading boundary but cannot identify
+arbitrary game logic or all streaming I/O; continuously busy titles may
+not open the menu. Cooperative clients use their declared safe point.
+The EE remembers each suspended thread entry/stack/size and will not
+resume a reused ID with a different identity or non-suspended state.
+This is not universal thread role discovery. SIF permits a bounded late
+completion window; IOP may resend the same ACK twice without replaying
+its operation. No DMA buffer reuse until completion. Failed line reads
+may retry while the transport is still usable. Final graphics drain
+must pass before releasing backup, including cooperative full VRAM.
+No changes to LIVE, no FreezeAnalyzer. Hidden GS/SPU2 state, active
+MFIFO checkpoint, universal 4 MiB storage, universal input isolation and
+hardware failure recovery remain open. Hardware tests still required.
