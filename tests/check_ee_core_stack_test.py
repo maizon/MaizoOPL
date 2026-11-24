@@ -11,7 +11,7 @@ old = "                0x00093900                        _end_bss = ."
 new = "                0x00096d40                        _end_bss = ."
 assert module.check_map(old, 8192) == (0x93900, 14080)
 assert module.check_map(new, 8192) == (0x96D40, 704)
-assert module.check_map("0x00095670 _end_bss = .",8192,0x9B000)==(0x95670,0x5970)
+assert module.check_map("0x00095670 _end_bss = .",8192,0x9B000)==(0x95670,0x5990)
 try:
     module.check_map("0x0009B004 _end_bss = .",8192,0x9B000)
 except ValueError:

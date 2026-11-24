@@ -50,6 +50,7 @@ jobs:
           path: |
             build-igr-experimental.log
             ee_core/ee_core.map
+            ee_core/ee_core_fallback.map
           if-no-files-found: warn
       - name: Upload optional In-Game ELF, only if memory guard passes
         if: success()

@@ -110,4 +110,6 @@ SECTIONS {
 
 	_end = _stack + _stack_size ;
 	PROVIDE(end = _end);
+	ASSERT(_stack_size >= 8192, "MAIZO: resident EE stack below 8 KiB")
+	ASSERT(_end == 0x0009B000, "MAIZO: module boundary mismatch")
 }

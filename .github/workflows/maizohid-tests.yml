@@ -94,6 +94,11 @@ jobs:
           /tmp/maizo_gs_480i_bridge
       - name: Check stack budget rejects Beta-82 704-byte runtime
         run: python3 tests/check_ee_core_stack_test.py
+      - name: Verify expanded module arena and legacy fallback bounds
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_ee_layout_test.c -o /tmp/maizo_ee_layout_test
+          /tmp/maizo_ee_layout_test
       - name: Check passive GS scanout capture safety (GSM OFF)
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
