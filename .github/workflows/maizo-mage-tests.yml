@@ -1,0 +1,18 @@
+name: MAGE resolver tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  mage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate independent reviewed patch selection
+        run: python3 tests/maizo_mage_test.py
+      - name: Validate RenderWare policy and existing In-Game mode bridge
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_mage_rw_test.c -o /tmp/mage-rw
+          /tmp/mage-rw
+      - name: Existing exact-revision installer
+        run: python3 tests/maizo_gs_install_elf_test.py
