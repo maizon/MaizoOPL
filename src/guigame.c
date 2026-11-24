@@ -1296,6 +1296,14 @@ static int guiGameSavePadMacroGameConfig(config_set_t *configSet, int result)
     return result;
 }
 
+void guiGameSyncPadEmuGlobalConfig(void)
+{
+    int previous=forceGlobalPadEmu;
+    forceGlobalPadEmu=1;
+    guiGameLoadPadEmuConfig(NULL,configGetByType(CONFIG_GAME));
+    forceGlobalPadEmu=previous;
+}
+
 void guiGameSavePadEmuGlobalConfig(config_set_t *configGame)
 {
     if (gPadEmuSource == SETTINGS_GLOBAL) {

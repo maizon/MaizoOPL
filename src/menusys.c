@@ -65,7 +65,8 @@ enum MENU_IDs {
     MENU_PAD_HELP,
     MENU_HOMEBREW_STORE,
     MENU_INGAME_PRO,
-    MENU_PROMPT_STYLE
+    MENU_PROMPT_STYLE,
+    MENU_SETUP_DASH_NEXT
 };
 
 enum GAME_MENU_IDs {
@@ -558,6 +559,8 @@ static int settingsItemCategory(int id)
         case MENU_VIEW_LAYOUT:
         case MENU_RESET_APPEARANCE:
         case MENU_PROMPT_STYLE:
+        case MENU_QUICK_SETUP:
+        case MENU_SETUP_DASH_NEXT:
             return 0;
         case MENU_LIBRARY_SORT:
         case MENU_LIBRARY_REFRESH:
@@ -615,7 +618,7 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Visualização da biblioteca", MENU_VIEW_LAYOUT, -1);
         submenuAppendItem(&mainMenu, -1, "Estilo dos botões", MENU_PROMPT_STYLE, -1);
         submenuAppendItem(&mainMenu, -1, "Restaurar aparência", MENU_RESET_APPEARANCE, -1);
-        submenuAppendItem(&mainMenu, -1, "Assistente de configuração", MENU_QUICK_SETUP, -1);
+        submenuAppendItem(&mainMenu, -1, "Abrir Setup Dash", MENU_QUICK_SETUP, -1);
         submenuAppendItem(&mainMenu, -1, "Estado da conexão SMB", MENU_SMB_STATUS, -1);
         submenuAppendItem(&mainMenu, -1, "MAIZO Store - homebrews", MENU_HOMEBREW_STORE, -1);
         submenuAppendItem(&mainMenu, -1, "Informacoes tecnicas", MENU_DIAG_SYSTEM, -1);
@@ -638,6 +641,7 @@ static void menuInitMainMenu(void)
                       "MAIZO In-Game PRO [Modo seguro]",
                       MENU_INGAME_PRO, -1);
 #endif
+    submenuAppendItem(&mainMenu, -1, "Abrir Setup Dash no proximo build", MENU_SETUP_DASH_NEXT, -1);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_GFX_SETTINGS, _STR_GFX_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_CONTROLLER_SETTINGS, _STR_CONTROLLER_SETTINGS);
@@ -1675,33 +1679,11 @@ void menuHandleInputMenu()
                 saveConfig(CONFIG_OPL, 0);
             }
         } else if (id == MENU_QUICK_SETUP) {
-            if (menuCheckParentalLock() == 0) {
-                struct UIItem setup[] = {
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Bem-vindo ao MAIZO", -1}}},
-                    {UI_SPLITTER},
-                    {UI_BUTTON, 9020, 1, 1, -1, 0, 0, {.label = {"1. Escolher fontes de jogos", -1}}},
-                    {UI_BREAK},
-                    {UI_BUTTON, 9021, 1, 1, -1, 0, 0, {.label = {"2. Ajustar vídeo e margens", -1}}},
-                    {UI_BREAK},
-                    {UI_BUTTON, 9022, 1, 1, -1, 0, 0, {.label = {"3. Configurar rede SMB", -1}}},
-                    {UI_BREAK},
-                    {UI_BUTTON, 9023, 1, 1, -1, 0, 0, {.label = {"4. Configurar controles", -1}}},
-                    {UI_BREAK},
-                    {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Concluir", -1}}},
-                    {UI_TERMINATOR}};
-                int result = -1;
-                do {
-                    result = diaExecuteDialog(setup, result, 1, NULL);
-                    if (result == 9020)
-                        guiShowStorageConfig();
-                    else if (result == 9021)
-                        guiShowVideoConfig();
-                    else if (result == 9022)
-                        guiShowNetConfig();
-                    else if (result == 9023)
-                        guiShowControllerConfig();
-                } while (result >= 9020 && result <= 9023);
-            }
+            if (menuCheckParentalLock() == 0)
+                guiShowSetupDash(0);
+        } else if (id == MENU_SETUP_DASH_NEXT) {
+            if (menuCheckParentalLock() == 0)
+                guiScheduleSetupDash();
         } else if (id == MENU_SMB_STATUS) {
             char status[192];
             int connected = menuMaizoSourceAvailable(MAIZO_SOURCE_SMB);

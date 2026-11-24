@@ -2257,13 +2257,316 @@ void guiShowPromptStyle(void)
     guiSelectPromptStyle(0);
 }
 
+
+/* Setup Dash: a small transactional wizard. No extra textures or heap.
+ * All choices are held locally until the final confirmation. */
+enum { SD_PROMPT, SD_LAYOUT, SD_HOME, SD_ANIMATION, SD_ANIM_LEGACY,
+       SD_COVERS, SD_SEEN, SD_COUNT };
+static const char *const sdKeys[SD_COUNT] = {
+    "maizo_prompt_style", "maizo_layout", "maizo_home_tab",
+    "maizo_animation_mode", "maizo_animations", "maizo_cover_mode",
+    "maizo_welcome_seen"
+};
+static const char *const sdStyles[] = {"PlayStation", "Xbox", "Nintendo Switch"};
+static const char *const sdLayouts[] = {"Carrossel", "Grade", "Lista"};
+static const char *const sdHomes[] = {"Todos", "PS2", "PS1", "Aplicativos", "Favoritos"};
+static const char *const sdAnimations[] = {"Desligadas", "Suaves", "Completas"};
+static const char *const sdToggle[] = {"Desligado", "Ligado"};
+#ifdef PADEMU
+static const char *const sdPads[] = {"Manter atual", "USB P1 + P2", "USB P1", "USB P2", "Desligar"};
+#endif
+typedef struct {
+    int v[SD_COUNT];
+    int pads, sound, notices;
+} setup_dash_t;
+static int sdRead(config_set_t *cfg, const char *key, int def, int max)
+{
+    int value=def;
+    configGetInt(cfg,key,&value);
+    return value>=0 && value<max ? value : def;
+}
+static void sdRecommended(setup_dash_t *s)
+{
+    s->v[SD_PROMPT]=0; s->v[SD_LAYOUT]=0; s->v[SD_HOME]=0;
+    s->v[SD_ANIMATION]=1; s->v[SD_ANIM_LEGACY]=1;
+    s->v[SD_COVERS]=1; s->v[SD_SEEN]=1;
+    s->pads=1; s->sound=0; s->notices=1;
+}
+static void sdRestore(config_set_t *cfg,const char *key,int exists,int val)
+{
+    if(exists) configSetInt(cfg,key,val);
+    else configRemoveKey(cfg,key);
+}
+static int sdSave(const setup_dash_t *s)
+{
+    config_set_t *cfg=configGetByType(CONFIG_OPL);
+    int old[SD_COUNT]={0}, exists[SD_COUNT], oldSound=gEnableBootSND;
+    int oldNotices=gEnableNotifications;
+#ifdef PADEMU
+    config_set_t *game=configGetByType(CONFIG_GAME);
+    int oldEnable=0, oldBits=0;
+    int hadEnable=configGetInt(game,CONFIG_ITEM_ENABLEPADEMU,&oldEnable);
+    int hadBits=configGetInt(game,CONFIG_ITEM_PADEMUSETTINGS,&oldBits);
+    if(s->pads) {
+        /* Same persisted bit layout used by the global PadEmu dialog.
+         * USB transport, no multitap, preserve unrelated reserved bits.
+         * Both ports and vibration enabled for the recommended profile. */
+        unsigned mask=s->pads==1?3u:s->pads==2?1u:s->pads==3?2u:0u;
+        unsigned bits=((unsigned)oldBits & ~0x070f0fffu) | (mask<<8) | (mask<<16);
+        configSetInt(game,CONFIG_ITEM_ENABLEPADEMU,mask!=0);
+        configSetInt(game,CONFIG_ITEM_PADEMUSETTINGS,(int)bits);
+        if(!saveConfig(CONFIG_GAME,0)) {
+            sdRestore(game,CONFIG_ITEM_ENABLEPADEMU,hadEnable,oldEnable);
+            sdRestore(game,CONFIG_ITEM_PADEMUSETTINGS,hadBits,oldBits);
+            guiMsgBox("Falha ao salvar PadEmu. Verifique o armazenamento.",0,NULL);
+            return 0;
+        }
+    }
+#endif
+    for(int i=0;i<SD_COUNT;i++) {
+        exists[i]=configGetInt(cfg,sdKeys[i],&old[i]);
+        configSetInt(cfg,sdKeys[i],s->v[i]);
+    }
+    gEnableBootSND=s->sound;
+    gEnableNotifications=s->notices;
+    if(!saveConfig(CONFIG_OPL,0)) {
+        for(int i=0;i<SD_COUNT;i++) sdRestore(cfg,sdKeys[i],exists[i],old[i]);
+        gEnableBootSND=oldSound; gEnableNotifications=oldNotices;
+#ifdef PADEMU
+        if(s->pads) {
+            sdRestore(game,CONFIG_ITEM_ENABLEPADEMU,hadEnable,oldEnable);
+            sdRestore(game,CONFIG_ITEM_PADEMUSETTINGS,hadBits,oldBits);
+            if(!saveConfig(CONFIG_GAME,0))
+                guiMsgBox("Falha ao restaurar PadEmu no disco. Confira as configuracoes.",0,NULL);
+        }
+#endif
+        guiMsgBox("Nao foi possivel salvar. Tente novamente.",0,NULL);
+        return 0;
+    }
+#ifdef PADEMU
+    if(s->pads) guiGameSyncPadEmuGlobalConfig();
+#endif
+    menuDashboardInvalidate();
+    return 1;
+}
+void guiScheduleSetupDash(void)
+{
+    config_set_t *cfg=configGetByType(CONFIG_OPL);
+    int old=0,exists=configGetInt(cfg,sdKeys[SD_SEEN],&old);
+    if(!guiMsgBox("Abrir Setup Dash na proxima inicializacao do MAIZO? Suas preferencias serao mantidas.",1,NULL))return;
+    configRemoveKey(cfg,sdKeys[SD_SEEN]);
+    if(!saveConfig(CONFIG_OPL,0)) {
+        sdRestore(cfg,sdKeys[SD_SEEN],exists,old);
+        guiMsgBox("Nao foi possivel salvar o marcador.",0,NULL);
+    } else guiMsgBox("Setup Dash agendado para a proxima abertura.",0,NULL);
+}
+static void sdText(int x,int y,int w,const char *s,u64 color)
+{
+    fntRenderString(gTheme->fonts[0],x,y,ALIGN_NONE,w,25,s,color);
+}
+static void sdCard(int x,int y,int w,int icon,const char *title,const char *detail)
+{
+    maizoDrawPanel(x,y,w,62,0);
+    maizoDrawIcon(icon,x+12,y+17,28,MAIZO_BRIGHT);
+    sdText(x+51,y+7,w-61,title,MAIZO_TEXT);
+    sdText(x+51,y+32,w-61,detail,MAIZO_MUTED);
+}
+static void sdChoice(int y,const char *label,const char *value)
+{
+    sdText(36,y-31,screenWidth-72,label,MAIZO_MUTED);
+    maizoDrawPanel(36,y,screenWidth-72,62,1);
+    sdText(54,y+18,28,"<",MAIZO_BRIGHT);
+    fntRenderString(gTheme->fonts[0],screenWidth/2,y+16,ALIGN_CENTER,screenWidth-150,32,value,MAIZO_TEXT);
+    sdText(screenWidth-74,y+18,28,">",MAIZO_BRIGHT);
+}
+void guiShowSetupDash(int firstRun)
+{
+    config_set_t *cfg=configGetByType(CONFIG_OPL);
+    setup_dash_t s;
+    int page=0, armed=0, row=0;
+    const int last=10;
+    const int back=gSelectButton==KEY_CIRCLE?KEY_CROSS:KEY_CIRCLE;
+    const int confirmIcon=gSelectButton==KEY_CIRCLE?CIRCLE_ICON:CROSS_ICON;
+    const int backIcon=gSelectButton==KEY_CIRCLE?CROSS_ICON:CIRCLE_ICON;
+    static const char *const titles[]={
+        "Bem-vindo ao MAIZO", "Tudo em um so lugar", "Jogue do seu jeito",
+        "Seus jogos, onde estiverem", "Muito alem de um launcher",
+        "Estilo dos botoes", "Sua biblioteca", "Tela inicial",
+        "Seu ritmo", "Preferencias", "Tudo pronto"
+    };
+    sdRecommended(&s);
+    s.v[SD_PROMPT]=maizoPromptStyle();
+    s.v[SD_LAYOUT]=sdRead(cfg,sdKeys[SD_LAYOUT],0,3);
+    s.v[SD_HOME]=sdRead(cfg,sdKeys[SD_HOME],0,5);
+    s.v[SD_ANIMATION]=maizoAnimationMode();
+    s.v[SD_COVERS]=sdRead(cfg,sdKeys[SD_COVERS],1,2);
+    s.pads=0; s.sound=!!gEnableBootSND; s.notices=!!gEnableNotifications;
+    for(;;) {
+        int h=gTheme->usedHeight, w=screenWidth, cw=(w-82)/2;
+        int base=118, step=(h-190)/3;
+        char progress[32];
+        if(step>73)step=73;
+        guiStartFrame(); guiReadPads();
+        rmDrawRect(0,0,w,h,MAIZO_BLACK);
+        maizoDrawBrand();
+        snprintf(progress,sizeof(progress),"SETUP DASH  %02d/%02d",page+1,last+1);
+        fntRenderString(gTheme->fonts[0],w-32,20,ALIGN_RIGHT,255,25,progress,MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0],32,65,ALIGN_NONE,w-64,42,titles[page],MAIZO_TEXT);
+        if(page==0) {
+            maizoDrawIcon(MAIZO_ICON_HOME,w/2-32,base+5,64,MAIZO_BRIGHT);
+            fntRenderString(gTheme->fonts[0],w/2,base+85,ALIGN_CENTER,w-64,30,"Seu console, suas escolhas.",MAIZO_TEXT);
+            fntRenderString(gTheme->fonts[0],w/2,base+117,ALIGN_CENTER,w-64,25,"Conheca os recursos e personalize em poucos passos.",MAIZO_MUTED);
+        } else if(page==1) {
+            sdCard(32,base,cw,MAIZO_ICON_PS2,"PS2","Jogos e capas");
+            sdCard(50+cw,base,cw,MAIZO_ICON_PS1,"PS1","Via POPStarter");
+            sdCard(32,base+step,cw,MAIZO_ICON_APPS,"Aplicativos","Homebrews e ELF");
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_STAR,"Favoritos","Acesso rapido");
+        } else if(page==2) {
+#ifdef PADEMU
+            sdCard(32,base,cw,MAIZO_ICON_KEYBOARD,"Teclado USB + HID","P1 teclado / P2 controle");
+            sdCard(50+cw,base,cw,MAIZO_ICON_PAD,"Xbox 360 + HID","P1 Xbox / P2 USB");
+            sdCard(32,base+step,cw,MAIZO_ICON_USB,"Misture os USB","Inverta P1 e P2");
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_BLUETOOTH,"DS3 e DS4","USB ou modo Bluetooth");
+            sdText(32,base+2*step,w-64,"Conecte os dispositivos; use PadEmu USB P1 + P2.",MAIZO_TEXT);
+            sdText(32,base+2*step+25,w-64,"Bluetooth usa outro modo. Jogos e dispositivos compativeis.",MAIZO_MUTED);
+#else
+            sdCard(32,base,w-64,MAIZO_ICON_PAD,"Controle original","PadEmu ausente nesta build");
+#endif
+        } else if(page==3) {
+            sdCard(32,base,cw,MAIZO_ICON_USB,"USB","Dispositivos compativeis");
+            sdCard(50+cw,base,cw,MAIZO_ICON_NETWORK,"Rede SMB","Biblioteca em rede");
+            sdCard(32,base+step,cw,MAIZO_ICON_HDD,"HDD","Armazenamento interno");
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_CARD,"MX4SIO","Fontes nas configuracoes");
+        } else if(page==4) {
+            sdCard(32,base,cw,MAIZO_ICON_CHEATS,"Cheats","Codigos por jogo");
+            sdCard(50+cw,base,cw,MAIZO_ICON_VIDEO,"GSM","Modos de video");
+            sdCard(32,base+step,cw,MAIZO_ICON_CARD,"VMC","Memory card virtual");
+#ifdef MAIZO_IGR_MENU
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_SETTINGS,"In-Game PRO","Experimental");
+#else
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_SETTINGS,"Por jogo","Preferencias individuais");
+#endif
+        } else if(page==5) {
+            for(int i=0;i<3;i++) {
+                int x=32+i*((w-64)/3), cardW=(w-64)/3-8;
+                maizoDrawPanel(x,base+22,cardW,106,i==s.v[SD_PROMPT]);
+                sdText(x+10,base+32,cardW-20,sdStyles[i],MAIZO_TEXT);
+                for(int k=0;k<4;k++) {
+                    const int icons[]={CROSS_ICON,CIRCLE_ICON,SQUARE_ICON,TRIANGLE_ICON};
+                    maizoDrawPrompt(icons[k],i,x+8+k*(cardW-16)/4,base+70,24);
+                }
+            }
+            sdText(32,base+147,w-64,"Apenas visual: nao altera o mapeamento dos controles.",MAIZO_MUTED);
+        } else if(page==6) {
+            int layout=s.v[SD_LAYOUT];
+            sdChoice(base+45,"Visualizacao",sdLayouts[layout]);
+            for(int i=0;i<(layout==1?6:3);i++){
+                int x=layout==2? w/2-110 : w/2-120+(i%3)*82;
+                int y=base+122+(layout==2?i*22:(i/3)*35);
+                maizoDrawPanel(x,y,layout==2?220:70,layout==2?18:30,i==1);
+            }
+        } else if(page==7) {
+            sdChoice(base+58,"Aba inicial (na proxima abertura)",sdHomes[s.v[SD_HOME]]);
+            maizoDrawIcon(MAIZO_ICON_LIBRARY,w/2-24,base+139,48,MAIZO_BRIGHT);
+        } else if(page==8) {
+            sdChoice(base+58,"Animacoes da biblioteca",sdAnimations[s.v[SD_ANIMATION]]);
+            sdText(36,base+140,w-72,"Desligue para uma interface mais direta.",MAIZO_MUTED);
+        } else if(page==9) {
+            const char *labels[]={"Capas dos jogos","Som de abertura","Notificacoes","PadEmu nos jogos"};
+            const char *vals[]={sdToggle[s.v[SD_COVERS]],sdToggle[s.sound],sdToggle[s.notices],
+#ifdef PADEMU
+                sdPads[s.pads]
+#else
+                "Indisponivel"
+#endif
+            };
+#ifdef PADEMU
+            const int n=4;
+#else
+            const int n=3;
+#endif
+            int dy=(h-base-75)/n; if(dy>49)dy=49;
+            for(int i=0;i<n;i++){
+                int y=base+i*dy;
+                maizoDrawPanel(32,y,w-64,dy-4,row==i);
+                sdText(45,y+5,w/2-50,labels[i],MAIZO_TEXT);
+                fntRenderString(gTheme->fonts[0],w-48,y+5,ALIGN_RIGHT,w/2-25,25,vals[i],MAIZO_BRIGHT);
+            }
+        } else {
+            sdCard(32,base,cw,MAIZO_ICON_PAD,"Botoes",sdStyles[s.v[SD_PROMPT]]);
+            sdCard(50+cw,base,cw,MAIZO_ICON_LIBRARY,"Biblioteca",sdLayouts[s.v[SD_LAYOUT]]);
+            sdCard(32,base+step,cw,MAIZO_ICON_HOME,"Aba inicial",sdHomes[s.v[SD_HOME]]);
+#ifdef PADEMU
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_USB,"PadEmu",sdPads[s.pads]);
+#else
+            sdCard(50+cw,base+step,cw,MAIZO_ICON_CHECK,"Animacoes",sdAnimations[s.v[SD_ANIMATION]]);
+#endif
+            sdText(32,base+2*step,w-64,"Confirme para salvar. Volte para ajustar.",MAIZO_MUTED);
+        }
+        for(int i=0;i<=last;i++)
+            rmDrawRect(w/2-((last+1)*15)/2+i*15,h-63,10,4,i<=page?MAIZO_BRIGHT:MAIZO_DIVIDER);
+        maizoDrawPrompt(confirmIcon,s.v[SD_PROMPT],32,h-40,23);
+        sdText(62,h-38,112,page==last?"Concluir":"Avancar",MAIZO_TEXT);
+        maizoDrawPrompt(backIcon,s.v[SD_PROMPT],177,h-40,23);
+        sdText(207,h-38,105,page?"Voltar":firstRun?"Inicio":"Cancelar",MAIZO_MUTED);
+        fntRenderString(gTheme->fonts[0],w-30,h-38,ALIGN_RIGHT,w-320,25,"START: Pular tudo / recomendado",MAIZO_BRIGHT);
+        guiHandleDeferredOps(); guiEndFrame();
+        if(!getKeyPressed(gSelectButton)&&!getKeyPressed(KEY_START)&&!getKeyPressed(back))armed=1;
+        if(armed&&getKeyOn(KEY_START)) {
+            if(guiMsgBox("Usar recomendado? PadEmu USB P1 + P2 nas builds compativeis. Preferencias por jogo mantidas.",1,NULL)){
+                setup_dash_t recommended;
+                sdRecommended(&recommended);
+                if(sdSave(&recommended))return;
+            }
+            armed=0;
+        } else if(armed&&getKeyOn(gSelectButton)) {
+            sfxPlay(SFX_CONFIRM);
+            if(page==last){
+                s.v[SD_ANIM_LEGACY]=s.v[SD_ANIMATION]!=0;
+                s.v[SD_SEEN]=1;
+                if(sdSave(&s))return;
+            } else {page++;row=0;}
+            armed=0;
+        } else if(armed&&getKeyOn(back)) {
+            if(page){page--;row=0;}else if(!firstRun)return;
+            armed=0;
+        } else if(page==9&&(getKeyOn(KEY_UP)||getKeyOn(KEY_DOWN))) {
+#ifdef PADEMU
+            int n=4;
+#else
+            int n=3;
+#endif
+            row=(row+(getKeyOn(KEY_UP)?n-1:1))%n;
+            sfxPlay(SFX_CURSOR);
+        } else if(getKeyOn(KEY_LEFT)||getKeyOn(KEY_RIGHT)) {
+            int d=getKeyOn(KEY_LEFT)?-1:1;
+            int *value=NULL,n=0;
+            if(page==5){value=&s.v[SD_PROMPT];n=3;}
+            else if(page==6){value=&s.v[SD_LAYOUT];n=3;}
+            else if(page==7){value=&s.v[SD_HOME];n=5;}
+            else if(page==8){value=&s.v[SD_ANIMATION];n=3;}
+            else if(page==9){
+                n=2;
+                if(row==0)value=&s.v[SD_COVERS];
+                else if(row==1)value=&s.sound;
+                else if(row==2)value=&s.notices;
+#ifdef PADEMU
+                else {value=&s.pads;n=5;}
+#endif
+            }
+            if(value){*value=(*value+d+n)%n;sfxPlay(SFX_CURSOR);}
+        }
+        if(gFrameHook)gFrameHook();
+    }
+}
+
 void guiMainLoop(void)
 {
     int welcomeSeen = 0;
     guiResetNotifications();
     configGetInt(configGetByType(CONFIG_OPL), "maizo_welcome_seen", &welcomeSeen);
     if (!welcomeSeen)
-        guiSelectPromptStyle(1);
+        guiShowSetupDash(1);
     guiCheckNotifications(1, 1);
 
     if (gOPLPart[0] != '\0')

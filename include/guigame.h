@@ -21,6 +21,7 @@ void guiGameShowBluetoothManager(void);
 void guiGameShowUsbDiagnostics(void);
 void guiGameShowPadMacroConfig(int forceGlobal);
 void guiGameSavePadEmuGlobalConfig(config_set_t *configGame);
+void guiGameSyncPadEmuGlobalConfig(void);
 void guiGameSavePadMacroGlobalConfig(config_set_t *configGame);
 #endif
 
