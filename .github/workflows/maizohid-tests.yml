@@ -45,6 +45,10 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_state_test.c -o /tmp/maizo_igr_state_test
           /tmp/maizo_igr_state_test
+      - name: Verify CheatDevice selectable value map grammar
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/maizo_cheat_map_test.c -o /tmp/maizo_map
+          /tmp/maizo_map
       - name: Verify game profile validation and corruption detection
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_profile_test.c -o /tmp/maizo_igr_profile_test

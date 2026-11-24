@@ -26,7 +26,7 @@ void configRemoveKey(config_set_t *, const char *);
 #define MAX_CODES 250
 #define MAX_CHEATLIST 510
 typedef struct { unsigned int addr, val; } code_t;
-typedef struct { char name[129]; code_t codes[MAX_CHEATLIST]; int enabled; } cheat_entry_t;
+typedef struct { char name[129]; code_t codes[MAX_CHEATLIST]; int enabled; unsigned int variant_group; } cheat_entry_t;
 extern cheat_entry_t gCheats[MAX_CODES];
 int cheatConfigIsMasterCode(const char *);
 void cheatConfigLoadSelections(config_set_t *);

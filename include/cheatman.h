@@ -65,6 +65,7 @@ typedef struct
     char name[CHEAT_NAME_MAX + 1];
     code_t codes[MAX_CHEATLIST];
     int enabled;
+    unsigned int variant_group; /* mutually exclusive value-map alternatives */
 } cheat_entry_t;
 
 extern cheat_entry_t gCheats[MAX_CODES];
@@ -83,5 +84,6 @@ int cheatHasOptionalSelection(void);
 int cheatSelectionFits(void);
 void cheatDisableLaunch(void);
 void set_cheats_list(void);
+void cheatToggleSelection(int index);
 
 #endif /* _CHEATMAN_H_ */

@@ -15,3 +15,5 @@ Seleções novas identificam também o conteúdo RAW de cada grupo, evitando esc
 O leitor agora informa separadamente erro de leitura, estrutura ZIP, compactação, CRC, memória ou limite. O limite de leitura do arquivo é 512 MiB, com orçamento de 256 MiB de TXT descompactado e 256 KiB por seção de jogo; a leitura continua em fluxo. ZIP64 completo ainda não é aceito.
 
 No In-Game PRO experimental, Jogo e Cheats permite pausar/retomar os códigos RAW previamente carregados, somente após confirmar que o hook PS2RD foi instalado. Pausar não desfaz valores já escritos e não carrega novos grupos do ZIP durante a partida.
+
+Mapas `[nome]` e referências `$nome` com prefixo hexadecimal par agora geram opções nomeadas mutuamente exclusivas no frontend. Suporta uma referência por grupo; mapas inválidos, acima do limite ou desconhecidos não são executados. As escolhas são vinculadas aos códigos RAW resolvidos. A seleção individual ao vivo ainda é independente dessa expansão.

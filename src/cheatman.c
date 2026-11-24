@@ -28,6 +28,7 @@
 #include "include/ioman.h"
 #include "include/maizo_cheatdb.h"
 #include "include/cheatdb_storage.h"
+#include "include/maizo_cheat_map.h"
 #include <zlib.h>
 
 static int gEnableCheat; // Enables PS2RD Cheat Engine - 0 for Off, 1 for On
@@ -70,6 +71,7 @@ const u32 *GetCheatsList(void)
 static char cheatDbSource[80], cheatDbHeading[256], cheatDbFingerprint[16];
 static int cheatDbMatch;
 static int cheatSkipped;
+static unsigned variantGroup;
 
 const char *cheatDatabaseSource(void) { return cheatDbSource; }
 const char *cheatDatabaseHeading(void) { return cheatDbHeading; }
@@ -129,14 +131,48 @@ static void finishCheat(char name[CHEAT_NAME_MAX + 1], code_t *codes, int count,
     }
 }
 
+static void finishMapped(char *name,code_t *codes,int count,int bad,int *total,
+                         const mz_map_t *map,int line,uint32_t prefix,uint32_t mask)
+{
+    if(!map){finishCheat(name,codes,count,bad,total);return;}
+    if(bad||line<0||line>=count||cheatConfigIsMasterCode(name)){cheatSkipped++;return;}
+    unsigned group=++variantGroup;
+    for(unsigned i=0;i<map->count;i++){
+        if(map->values[i].value&~mask){cheatSkipped++;continue;}
+        if(*total>=MAX_CODES){cheatSkipped++;break;}
+        char label[CHEAT_NAME_MAX+1];
+        snprintf(label,sizeof(label),"%.90s: %.31s",name,map->values[i].label);
+        codes[line].val=prefix|map->values[i].value;
+        int before=*total;
+        finishCheat(label,codes,count,0,total);
+        if(*total>before){
+            gCheats[before].variant_group=group;
+            gCheats[before].enabled=0;
+        }
+    }
+}
+void cheatToggleSelection(int index)
+{
+    if(index<0||index>=MAX_CODES||!gCheats[index].name[0]||
+       cheatConfigIsMasterCode(gCheats[index].name))return;
+    if(!gCheats[index].enabled&&gCheats[index].variant_group)
+        for(int i=0;i<MAX_CODES&&gCheats[i].name[0];i++)
+            if(gCheats[i].variant_group==gCheats[index].variant_group)gCheats[i].enabled=0;
+    gCheats[index].enabled=!gCheats[index].enabled;
+}
+
 /* Handles CRLF, EOF without newline, and bounded group sizes. */
 static int parse_buf(const char *buf)
 {
     char line[512], name[CHEAT_NAME_MAX + 1] = {0};
     code_t *codes = malloc(MAX_CHEATLIST * sizeof(*codes));
-    int total = 0, count = 0, bad = 0, inMap = 0;
-    if (!buf || !codes) {
-        free(codes);
+    mz_map_t *maps=calloc(MZ_MAP_MAX,sizeof(*maps));
+    int total=0,count=0,bad=0,inMap=-1,mapped=-1,mapLine=-1;
+    unsigned mapCount=0;
+    uint32_t prefix=0,mask=0;
+    variantGroup=0;
+    if (!buf || !codes || !maps) {
+        free(codes);free(maps);
         return -1;
     }
     while (*buf) {
@@ -164,20 +200,23 @@ static int parse_buf(const char *buf)
         if (!length)
             continue;
         if (*p == '[') {
-            finishCheat(name, codes, count, bad, &total);
-            name[0] = 0;
-            count = bad = 0;
-            inMap = 1;
+            finishMapped(name,codes,count,bad,&total,mapped<0?NULL:&maps[mapped],mapLine,prefix,mask);
+            name[0]=0;count=bad=0;mapped=mapLine=-1;inMap=-1;
+            char mapName[16];
+            if(mzMapName(p+1,mapName)){
+                for(unsigned i=0;i<mapCount;i++)
+                    if(!strcmp(maps[i].name,mapName))inMap=i;
+                if(inMap<0&&mapCount<MZ_MAP_MAX){
+                    inMap=mapCount++;strcpy(maps[inMap].name,mapName);
+                }
+            }
+            if(inMap<0)cheatSkipped++;
             continue;
         }
-        if (inMap) {
-            size_t digits = strspn(p, "0123456789abcdefABCDEF");
-            const char *sep = p + digits;
-            while (isspace((unsigned char)*sep))
-                sep++;
-            if (digits >= 1 && digits <= 8 && (*sep == ':' || *sep == '=' || *sep == '-'))
-                continue;
-            inMap = 0;
+        if(inMap>=0){
+            int entry=mzMapEntry(&maps[inMap],p);
+            if(entry)continue;
+            inMap=-1;
         }
         code_t code;
         if (rawLine(p, &code)) {
@@ -189,10 +228,17 @@ static int parse_buf(const char *buf)
                 codes[count++] = code;
         } else if (length >= 9 && isspace((unsigned char)p[8]) &&
                    strspn(p, "0123456789abcdefABCDEF") == 8) {
-            bad = 1; /* invalid / parameterized code */
+            uint32_t addr,v,m;
+            int index=mzMapReference(p,maps,mapCount,&addr,&v,&m);
+            if(index<0||mapped>=0||!name[0]||count>=MAX_CHEATLIST-1)
+                bad=1;
+            else{
+                mapped=index;mapLine=count;prefix=v;mask=m;
+                codes[count++]=(code_t){addr,v};
+            }
         } else {
-            finishCheat(name, codes, count, bad, &total);
-            count = bad = 0;
+            finishMapped(name,codes,count,bad,&total,mapped<0?NULL:&maps[mapped],mapLine,prefix,mask);
+            count=bad=0;mapped=mapLine=-1;
             if (*p == '"') {
                 name[0] = 0;
                 continue;
@@ -200,8 +246,8 @@ static int parse_buf(const char *buf)
             snprintf(name, sizeof(name), "%.*s", CHEAT_NAME_MAX, p);
         }
     }
-    finishCheat(name, codes, count, bad, &total);
-    free(codes);
+    finishMapped(name,codes,count,bad,&total,mapped<0?NULL:&maps[mapped],mapLine,prefix,mask);
+    free(codes);free(maps);
     return total ? 0 : -1;
 }
 
@@ -334,6 +380,10 @@ void cheatDisableLaunch(void)
 int cheatSelectionFits(void)
 {
     int count = 0, hooks = 0, nextHook = 1;
+    for(int i=0;i<MAX_CODES&&gCheats[i].name[0];i++)
+        if(gCheats[i].enabled&&gCheats[i].variant_group)
+            for(int j=0;j<i;j++)
+                if(gCheats[j].enabled&&gCheats[j].variant_group==gCheats[i].variant_group)return 0;
     for (int pass = 0; pass < 2; pass++)
         for (int i = 0; i < MAX_CODES && gCheats[i].name[0]; i++) {
             if (!gCheats[i].enabled || !!cheatConfigIsMasterCode(gCheats[i].name) != (pass == 0))

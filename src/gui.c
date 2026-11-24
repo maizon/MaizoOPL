@@ -2680,8 +2680,7 @@ int guiManageCheats(config_set_t *configSet)
         }
 
         if (getKeyOn(gSelectButton) && cheatCount > 0) {
-            if (!cheatConfigIsMasterCode(gCheats[selectedCheat].name))
-                gCheats[selectedCheat].enabled = !gCheats[selectedCheat].enabled;
+            cheatToggleSelection(selectedCheat);
         }
 
         if (getKeyOn(KEY_START) && cheatSelectionFits())

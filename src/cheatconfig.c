@@ -120,8 +120,13 @@ void cheatConfigLoadSelections(config_set_t *configSet)
         }
         /* Fail closed on ambiguous legacy labels instead of activating the
          * first unrelated group bearing the same name. */
-        if (matches == 1)
+        if (matches == 1) {
+            unsigned group=gCheats[candidate].variant_group;
+            if(group)
+                for(int i=0;i<MAX_CODES&&gCheats[i].name[0];i++)
+                    if(gCheats[i].variant_group==group)gCheats[i].enabled=0;
             gCheats[candidate].enabled = 1;
+        }
     }
 
     /* Database changes must never leave the required code disabled. */
