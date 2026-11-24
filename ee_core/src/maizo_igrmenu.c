@@ -32,6 +32,7 @@
 #include "maizo_igr_input.h"
 #ifdef MAIZO_IGR_RESTORE
 #include "maizo_restore.h"
+#include "maizo_restore_guard.h"
 #endif
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
@@ -456,9 +457,15 @@ static int __attribute__((noinline)) mzCapturePath(u32 heldDmac)
     /* Readback uses PATH3 and reverses VIF1. Never suspend in an
      * MFIFO transfer, pending graphics completion, reverse FIFO,
      * IPU or scratchpad DMA. Wait for an actual quiet boundary. */
-    if((dctrl&12u) || (stat&0xe006u) || (vif&0x800000u) ||
+    unsigned gifRing=(dctrl&12u)==12u;
+    if((stat&0xe006u) || (vif&0x800000u) || (*MZ_D_ENABLER&0x10000u) ||
+       (*MZ_GS_CSR&3u) ||
        ((*(vu32 *)0x10008000u|*(vu32 *)0x1000b000u|
-         *(vu32 *)0x1000b400u|*MZ_D8_CHCR|*(vu32 *)0x1000d400u)&0x100u))return 0;
+         *(vu32 *)0x1000b400u|*(vu32 *)0x1000d400u)&0x100u) ||
+       !mzrRingIdle(dctrl,ch1,ch2,*MZ_D8_CHCR,
+                    gifRing?*(vu32 *)0x1000a020u:*MZ_D1_QWC,
+                    gifRing?*(vu32 *)0x1000a030u:*MZ_D1_TADR,
+                    *MZ_D8_MADR,*MZ_D_RBSR))return 0;
     return mzIgrSafePath(ch1,ch2,vif,gif,stat)==3?3:0;
 #else
     if(!(dctrl&12u))return mzIgrSafePath(ch1,ch2,vif,gif,stat);
@@ -562,14 +569,16 @@ static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t 
  * reverse FIFO is drained in complete quadwords before restoring
  * BUSDIR and IMR. Internal transfer registers are write-only; do not
  * claim a complete GS snapshot. */
+// Once a reverse transaction fails, do not open again in this overlay.
 #define MZR_BUSDIR ((vu64 *)0x12001040)
+static int mzReverseFault;
 static int __attribute__((noinline)) mzReadLine(u32 *p,int y)
 {
     u64 q[12] __attribute__((aligned(16)));
     u32 n=PW*mzSx*mzBpp/16u;
     u64 imr;
-    int ok=0;
-    if((*MZ_GS_CSR&2u)||!mzOverlayDrain()||(*MZ_VIF1_STAT&0x1f803f0fu))return 0;
+    int ok=0,started=0;
+    if(mzReverseFault || (*MZ_GS_CSR&3u)||!mzOverlayDrain()||(*MZ_VIF1_STAT&0x1f803f0fu))return 0;
     imr=GsGetIMR();
     GsPutIMR(imr|0x200u);
     q[0]=5u|(1ull<<15)|(1ull<<60);q[1]=0xe;
@@ -579,6 +588,7 @@ static int __attribute__((noinline)) mzReadLine(u32 *p,int y)
     q[8]=0;q[9]=0x61;
     q[10]=1;q[11]=0x53;
     if(!mzGifFifo((u32 *)q,6))goto done;
+    started=1;
     for(u32 i=0;i<2000000u;i++)if(*MZ_GS_CSR&2u){ok=1;break;}
     if(!ok)goto done;
     *MZ_VIF1_STAT=0x800000u;*MZR_BUSDIR=1;
@@ -589,8 +599,10 @@ static int __attribute__((noinline)) mzReadLine(u32 *p,int y)
         if(k==2000000u){ok=0;break;}
         asm volatile("lq $8,0(%0)\n\tsq $8,0(%1)\n\tsync.l"::"r"(0x10005000u),"r"(p):"$8","memory");
     }
-    *MZ_VIF1_STAT=0;*MZR_BUSDIR=0;
+    *MZR_BUSDIR=0;*MZ_VIF1_STAT=0;
+    asm volatile("sync.l");
 done:
+    if(started && !ok)mzReverseFault=1;
     if(*MZ_GS_CSR&2u)*MZ_GS_CSR=2u; /* only our event; none present on entry */
     GsPutIMR(imr);
     asm volatile("sync.l");
@@ -599,22 +611,26 @@ done:
 static int mzBackup(u32 *p)
 {
     u32 len=PW*mzSx*mzBpp, h=PH*mzSy;
-    if(mzOverlayPath!=3 || (*MZ_D_CTRL&12u) || !mzRestoreBegin(len*h))return 0;
+    if(mzOverlayPath!=3 || !mzRestoreBegin(len*h))return 0;
     for(u32 y=0;y<h;y++){
         if(!mzReadLine(p,y)||!mzRestoreWrite(y*len,p,len)){
-            mzRestoreEnd();return -1;
+            mzRestoreEnd(0);return -1;
         }
-        if(!mzRestoreKeep()){mzRestoreEnd();return -1;}
+        if(!mzRestoreKeep()){mzRestoreEnd(0);return -1;}
     }
     return 1;
 }
 static int mzRestorePixels(u32 *p)
 {
     u32 len=PW*mzSx*mzBpp,h=PH*mzSy;
+    int complete=1;
     for(u32 y=0;y<h;y++){
-        if(!mzRestoreRead(y*len,p+28,len)||!mzSendLine(p,y))return 0;
+        /* Do not discard other recoverable rows on a single corrupt
+         * line. Never send unverified bytes, and stop on GIF failure. */
+        if(!mzRestoreRead(y*len,p+28,len)){complete=0;continue;}
+        if(!mzSendLine(p,y))return 0;
     }
-    return mzOverlayDrain();
+    return mzOverlayDrain() && complete;
 }
 #endif
 /* Writable GS DISPLAY parameters are not free-form resampling. Keep small
@@ -933,7 +949,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     int result=MAIZO_IGR_RESUME;
     int first;
 #ifdef MAIZO_IGR_RESTORE
-    int backup=0,dirty=0;
+    int backup=0,dirty=0,retain=0;
+    if(mzReverseFault)return MAIZO_IGR_UNAVAILABLE;
 #endif
     if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
     mzGameHasGsm=!!config->EnableGSMOp;
@@ -1157,9 +1174,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
 cleanup:
 #ifdef MAIZO_IGR_RESTORE
     if(dirty && (result==MAIZO_IGR_RESUME || result==MAIZO_IGR_UNAVAILABLE)){
-        if(!mzRestorePixels(p))result=MAIZO_IGR_UNAVAILABLE;
+        if(!mzRestorePixels(p)){
+            retain=1;result=MAIZO_IGR_UNAVAILABLE;
+        }
     }
-    mzRestoreEnd();
+    mzRestoreEnd(retain);
 #endif
     /* No DMA channel or D_STAT bits were modified. PATH2 changes
      * VIF CODE; every submitted packet is complete. */

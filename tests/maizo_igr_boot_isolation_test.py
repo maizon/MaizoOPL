@@ -137,3 +137,12 @@ assert "wake();if(!sealed)release();" in service
 assert "if(!mzRestoreReady())return 0;" in read("ee_core/src/maizo_overlay_stub.c")
 assert "ready=quiet>=2;" in pad
 print("Restore: verified sequential backup, seal, pin, heartbeat and quiet boundary PASS")
+
+# No pitch/voice or AutoDMA mutation; preserve failed sealed rollback.
+assert "SD_VP_PITCH" not in service
+assert "MZR_UNHUSH" in service and "MZR_PING" in service
+assert "mzRestoreEnd(retain)" in run
+assert "if(retain)request=0;" in transport
+assert "mzrRingIdle(dctrl" in menu
+assert "if(started && !ok)mzReverseFault=1;" in menu
+print("Restoration: inactive MFIFO, audio non-interference, handshake and failed rollback retention PASS")

@@ -18,6 +18,8 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_integrity_test.c -o /tmp/mzr-integrity
           /tmp/mzr-integrity
+          cc -std=c99 -Wall -Wextra -Werror tests/maizo_restore_guard_test.c -o /tmp/mzr-guard
+          /tmp/mzr-guard
           python3 tests/maizo_igr_boot_isolation_test.py
       - name: Build and validate independent restoration components
         run: |

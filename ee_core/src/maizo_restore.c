@@ -58,7 +58,10 @@ void mzRestoreLink(int enable)
         u32 p=(u32)ACK->result;
         u32 u=ACK->buf;
         if(p && !(p&15u) && p<0x200000u-sizeof(req) &&
-           u && !(u&15u) && u<=0x200000u-MZR_LINE){request=p;upload=u;}
+           u && !(u&15u) && u<=0x200000u-MZR_LINE){
+            request=p;upload=u;
+            if(post(MZR_PING,0,0)!=0x4d5a5253)request=upload=0;
+        }
     }
 }
 int mzRestoreReady(void)
@@ -106,8 +109,11 @@ int mzRestoreKeep(void)
     if(ticks()-last>147456000u && post(MZR_KEEP,0,0))return 0;
     return 1;
 }
-void mzRestoreEnd(void)
+void mzRestoreEnd(int retain)
 {
-    if(active || bytes)post(MZR_WAKE,0,0);
+    if(active || bytes)post(retain?MZR_UNHUSH:MZR_WAKE,0,0);
+    /* Keep the sole sealed copy after failed rollback; stop reopening
+     * until next IOP reset. The IOP lease still releases the audio. */
+    if(retain)request=0;
     active=sealed=0;bytes=written=lineBytes=0;
 }

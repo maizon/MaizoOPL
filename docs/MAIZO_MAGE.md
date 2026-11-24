@@ -650,3 +650,25 @@ manual workflow remain for reproducibility. Restoration-only changes:
   remain open. No FreezeAnalyzer and no arbitrary game-RAM reservation.
   Hardware tests, especially Ben 10 during loading, repeated open/close,
   and low-memory configurations, are release blockers.
+
+### Restoration recovery boundary (follow-up)
+
+Inactive configured MFIFO (VIF1/GIF) is admitted only with both DMA
+drains and producer stopped, zero selected QWC, equal ring pointers,
+valid ring size and no pending error/graphics event. Active MFIFO is
+still rejected, not reset. The new pure guard has host tests. Readback
+failures after starting reverse transfer permanently inhibit opening
+again in the current overlay. On failed dirty-pixel rollback the IOP
+keeps the sealed backup, unmutes, and EE poisons further requests.
+Remaining valid lines can be restored after a checksum failure; no
+unverified pixels are sent. Boot handshake now checks the actual worker.
+SPU2 now changes only static master volumes, not voice pitch/ADSR or
+AutoDMA; this is mute/unmute, not a playback-position snapshot. Sweep
+volumes are untouched. A partial suspension stops acquiring more threads.
+Overlay ABI 3 reflects End(retain). These are bounded mitigations, not a
+hardware failure guarantee. The pure TRXDIR replay predicate is a future
+cooperative snapshot prerequisite, not actual register restoration.
+Full GS write-only register state, active MFIFO, full SPU2 checkpoint,
+4 MiB VRAM storage and universal thread classification remain unimplemented.
+The panel backup is at most 322560 bytes; IOP has only 2 MiB total RAM.
+No speculative allocation in game RAM, no FreezeAnalyzer, no LIVE.

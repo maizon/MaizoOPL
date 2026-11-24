@@ -8,5 +8,5 @@ int mzRestoreRead(u32 offset,void *line,u32 bytes);
 int mzRestoreHush(void);
 int mzRestoreKeep(void);
 int mzRestoreReady(void);
-void mzRestoreEnd(void);
+void mzRestoreEnd(int retain);
 #endif

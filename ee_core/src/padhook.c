@@ -188,7 +188,12 @@ static int maizoIgrPauseThreads(void)
             continue;
         if (SuspendThread(i) >= 0)
             MaizoIgrSuspended[i >> 5] |= (1u << (i & 31));
-        else ok=0;
+        else {
+            ok=0;
+#ifdef MAIZO_IGR_RESTORE
+            break; /* do not acquire any more threads after failure */
+#endif
+        }
     }
     return ok;
 }

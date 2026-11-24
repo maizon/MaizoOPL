@@ -12,30 +12,33 @@ static u32 eeAck,eeLine,bufSize,written;
 static int sealed;
 static u8 *buf;
 static u8 upload[MZR_LINE] __attribute__((aligned(16)));
-static u16 vol[2][2],pitch[2][24];
+static u16 vol[2][2];
+static unsigned muteMask;
 static int hush,dmaBusy;
 static void wake(void)
 {
-    int c,v,s;
+    int c,s;
     if(!hush)return;
     CpuSuspendIntr(&s);
     for(c=0;c<2;c++){
-        for(v=0;v<24;v++)if(!*SD_VP_PITCH(c,v))*SD_VP_PITCH(c,v)=pitch[c][v];
-        if(!*SD_P_MVOLL(c))*SD_P_MVOLL(c)=vol[c][0];
-        if(!*SD_P_MVOLR(c))*SD_P_MVOLR(c)=vol[c][1];
+        if((muteMask&(1u<<(c*2))) && !*SD_P_MVOLL(c))*SD_P_MVOLL(c)=vol[c][0];
+        if((muteMask&(2u<<(c*2))) && !*SD_P_MVOLR(c))*SD_P_MVOLR(c)=vol[c][1];
     }
-    hush=0;
+    hush=0;muteMask=0;
     CpuResumeIntr(s);
 }
 static void silence(void)
 {
-    int c,v,s;
+    int c,s;
     if(hush)return;
     CpuSuspendIntr(&s);
     for(c=0;c<2;c++){
         vol[c][0]=*SD_P_MVOLL(c);vol[c][1]=*SD_P_MVOLR(c);
-        *SD_P_MVOLL(c)=0;*SD_P_MVOLR(c)=0;
-        for(v=0;v<24;v++){pitch[c][v]=*SD_VP_PITCH(c,v);*SD_VP_PITCH(c,v)=0;}
+        /* Static master volume only. Never stop voice phase, ADSR,
+         * pitch, AutoDMA, KON/KOFF or an IOP audio worker. Preserve
+         * sweep-mode registers instead of restarting their envelope. */
+        if(!(vol[c][0]&0x8000u) && vol[c][0]){*SD_P_MVOLL(c)=0;muteMask|=1u<<(c*2);}
+        if(!(vol[c][1]&0x8000u) && vol[c][1]){*SD_P_MVOLR(c)=0;muteMask|=2u<<(c*2);}
     }
     hush=1;
     CpuResumeIntr(s);
@@ -91,6 +94,8 @@ static int execute(const mzr_req *r)
         sealed=1;silence();return 0;
     case MZR_WAKE: wake();release();return 0;
     case MZR_KEEP: return buf?0:-1;
+    case MZR_PING: return 0x4d5a5253;
+    case MZR_UNHUSH: wake();return sealed?0:-1;
     default:return -1;
     }
 }
