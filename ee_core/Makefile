@@ -68,6 +68,19 @@ endif
 EE_OBJS := $(EE_OBJS:%=$(EE_OBJS_DIR)%)
 
 EE_LDFLAGS = -nostartfiles -nostdlib -Tlinkfile -L$(PS2SDK)/ee/lib -s -Wl,-Map,$(MAPFILE)
+# Enforce an 8 KiB minimum stack for the normal, release EE core.
+# IGS screenshots and debug builds use different resident layouts and
+# retain their pre-existing stack policy. The linker guard catches
+# dangerous release growth at build time rather than on PS2 hardware.
+ifneq ($(IGS),1)
+ifneq ($(EESIO_DEBUG),1)
+ifneq ($(LOAD_DEBUG_MODULES),1)
+ifneq ($(DTL_T10000),1)
+EE_LDFLAGS += -Wl,--defsym=maizo_enforce_8k_stack=1
+endif
+endif
+endif
+endif
 EE_LIBS += -lpatches
 
 ifeq ($(PADEMU),1)

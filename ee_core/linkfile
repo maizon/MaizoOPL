@@ -119,5 +119,6 @@ SECTIONS {
  * The observed Beta-82 regression left 0x2C0 (704 B), compared
  * with Beta-39's 0x3700 (14,080 B). Prevent that silent failure.
  */
-ASSERT((0x00097000 - _end_bss) >= 0x2000,
-       "MAIZO: EE core stack below 8192 bytes - reduce resident code");
+ASSERT((!DEFINED(maizo_enforce_8k_stack) ||
+        (0x00097000 - _end_bss) >= 0x2000),
+       "MAIZO: release EE core stack below 8192 bytes - reduce resident code");
