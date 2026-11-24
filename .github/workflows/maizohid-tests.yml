@@ -45,6 +45,10 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_state_test.c -o /tmp/maizo_igr_state_test
           /tmp/maizo_igr_state_test
+      - name: Verify SMB sequential compressed ZIP read and short-read handling
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/maizo_cheat_smb_read_test.c -o /tmp/maizo_smb_zip
+          /tmp/maizo_smb_zip
       - name: Verify live cheat address and exclusive-group masks
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_cheat_live_test.c -o /tmp/maizo_live

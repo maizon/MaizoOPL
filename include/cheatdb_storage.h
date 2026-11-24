@@ -3,4 +3,5 @@
 /* First readable archive is authoritative; a missing game is not license
  * to combine different databases. Returned text belongs to the caller. */
 int cheatDbLoad(const char *serial, const char *title, char **text, char heading[256], char source[80]);
+const char *cheatDbLastError(void);
 #endif

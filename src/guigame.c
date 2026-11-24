@@ -14,6 +14,7 @@
 #include "include/cheatman.h"
 #include "include/cheatconfig.h"
 #include "include/maizo_cheatdb.h"
+#include "include/cheatdb_storage.h"
 #include "include/system.h"
 #include "include/guigame.h"
 #include "include/ds34common.h"
@@ -506,7 +507,8 @@ void guiGameShowDatabaseCheats(item_list_t *support, int id, config_set_t *cfg)
             default: reason = "Estrutura ZIP inválida (ZIP64/arquivo incompleto não suportado)."; break;
             }
             char message[256];
-            snprintf(message, sizeof(message), "%s\n%.79s", reason, cheatDatabaseSource());
+            snprintf(message, sizeof(message), "%s\n%.79s\n%.90s", reason, cheatDatabaseSource(),
+                     cheatDatabaseMatch()==MZDB_IO?cheatDbLastError():"");
             guiMsgBox(message, 0, NULL);
         }
         else if (cheatDatabaseMatch() > 0)
