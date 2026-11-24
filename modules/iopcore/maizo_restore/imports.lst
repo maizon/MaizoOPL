@@ -15,3 +15,7 @@ I_CreateThread
 I_StartThread
 I_DelayThread
 thbase_IMPORTS_end
+
+sysclib_IMPORTS_start
+I_memcpy
+sysclib_IMPORTS_end

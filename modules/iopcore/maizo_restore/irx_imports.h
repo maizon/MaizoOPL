@@ -4,6 +4,7 @@
 #include <intrman.h>
 #include <loadcore.h>
 #include <sifman.h>
+#include <sysclib.h>
 #include <sysmem.h>
 #include <thbase.h>
 #endif

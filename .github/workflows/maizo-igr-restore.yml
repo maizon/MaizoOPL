@@ -14,6 +14,11 @@ jobs:
         with:
           fetch-depth: 0
       - run: python3 -m pip install --break-system-packages -r requirements.txt
+      - name: Build and validate independent restoration components
+        run: |
+          make -C modules/iopcore/maizo_restore
+          make -C ee_core/overlay MAIZO_MAGE_SKY_EXPERIMENTAL=1 MAIZO_IGR_RESTORE_EXPERIMENTAL=1
+          python3 scripts/check_maizo_overlay.py
       - name: Build opt-in restoration ELF with existing stack guard
         run: |
           set -o pipefail
