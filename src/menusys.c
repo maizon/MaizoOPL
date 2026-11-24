@@ -610,20 +610,6 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Organizar biblioteca", MENU_LIBRARY_SORT, -1);
         submenuAppendItem(&mainMenu, -1, "Filtrar por origem", MENU_SOURCE_FILTER, -1);
         submenuAppendItem(&mainMenu, -1, "Preferências dos jogos", MENU_GAME_PREFERENCES, -1);
-#ifdef MAIZO_IGR_MENU
-        {
-            int igrEnabled = 1;
-            configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &igrEnabled);
-            submenuAppendItem(&mainMenu, -1,
-                              igrEnabled ? "MAIZO In-Game PRO [Ligado]" :
-                                           "MAIZO In-Game PRO [Desligado]",
-                              MENU_INGAME_PRO, -1);
-        }
-#else
-        submenuAppendItem(&mainMenu, -1,
-                          "MAIZO In-Game PRO [Modo seguro]",
-                          MENU_INGAME_PRO, -1);
-#endif
         submenuAppendItem(&mainMenu, -1, "Atualizar biblioteca", MENU_LIBRARY_REFRESH, -1);
         submenuAppendItem(&mainMenu, -1, "Capas dos jogos", MENU_COVER_MODE, -1);
         submenuAppendItem(&mainMenu, -1, "Visualização da biblioteca", MENU_VIEW_LAYOUT, -1);
@@ -638,6 +624,20 @@ static void menuInitMainMenu(void)
         submenuAppendItem(&mainMenu, -1, "Gerenciador de arquivos", MENU_FILE_MANAGER, -1);
         submenuAppendItem(&mainMenu, -1, "Avançado: armazenamento", MENU_STORAGE_PERFORMANCE, -1);
     }
+#ifdef MAIZO_IGR_MENU
+    {
+        int igrEnabled = 1;
+        configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &igrEnabled);
+        submenuAppendItem(&mainMenu, -1,
+                          igrEnabled ? "MAIZO In-Game PRO [Ligado]" :
+                                       "MAIZO In-Game PRO [Desligado]",
+                          MENU_INGAME_PRO, -1);
+    }
+#else
+    submenuAppendItem(&mainMenu, -1,
+                      "MAIZO In-Game PRO [Modo seguro]",
+                      MENU_INGAME_PRO, -1);
+#endif
     submenuAppendItem(&mainMenu, -1, NULL, MENU_GFX_SETTINGS, _STR_GFX_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_CONTROLLER_SETTINGS, _STR_CONTROLLER_SETTINGS);
