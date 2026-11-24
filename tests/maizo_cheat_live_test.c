@@ -15,5 +15,13 @@ int main(void){
  p.mask=1;assert(mzLiveCatalogOK(&p));
  p.mask=3;assert(!mzLiveCatalogOK(&p));
  p.mask=1;p.owner[2]=8;assert(!mzLiveCatalogOK(&p));
+ uint32_t a=0xe1020034u,v=0x00100001u;
+ mzLiveNormalize(&a,&v);
+ assert(a==0xd0100001u&&v==0x02010034u&&mzLiveLineSpan(a,v)==2);
+ assert(mzLiveLineSpan(0xd0100001u,0)==-1);
+ assert(mzLiveLineSpan(0xd0100002u,0)==1);
+ assert(mzLiveLineSpan(0x70100002u,0x001000ffu)==0);
+ assert(mzLiveLineSpan(0x70100001u,0x001000ffu)==-1);
+ assert(mzLiveLineSpan(0xc0100000u,0)==-1);
  return 0;
 }

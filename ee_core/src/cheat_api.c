@@ -113,8 +113,16 @@ void EnableCheats(void)
     MaizoLiveCount=MaizoLiveMask=0;
     if(mzLiveCatalogOK(p)&&p->lines==(unsigned)numcodes&&numhooks>0){
         unsigned i;
-        for(i=0;i<p->lines;i++)
-            if(p->owner[i]>=p->count||!mzLiveWriteOK(codelist[i*2]))break;
+        for(i=0;i<p->lines;i++){
+            int span=mzLiveLineSpan(codelist[i*2],codelist[i*2+1]);
+            if(span<0||(unsigned)span>=p->lines-i||
+               p->owner[i]!=p->owner[i+(unsigned)span])break;
+            /* All intermediate lines must belong to this group too. */
+            unsigned j;
+            for(j=1;j<(unsigned)span;j++)
+                if(p->owner[i]!=p->owner[i+j])break;
+            if(j<(unsigned)span)break;
+        }
         if(i==p->lines){
             for(i=0;i<p->lines;i++)MaizoLiveOwner[i]=p->owner[i];
             MaizoLiveMask=p->mask&((1u<<p->count)-1u);

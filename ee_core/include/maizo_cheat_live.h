@@ -18,6 +18,30 @@ static inline int mzLiveWriteOK(uint32_t addr)
     return type<=2 && !(addr&0x0e000000u) && a>=0x00100000u &&
            !(a&((1u<<type)-1u));
 }
+/* D-conditionals may skip only within their own group. Type E is
+ * normalized before transmission so the resident engine does not need
+ * to rewrite the catalog. The returned span is in RAW lines. */
+static inline int mzLiveLineSpan(uint32_t addr,uint32_t value)
+{
+    unsigned type=addr>>28,op=(value>>20)&15u,fmt=(value>>16)&15u;
+    uint32_t address=addr&0x01ffffffu;
+    if(mzLiveWriteOK(addr))return 0;
+    if((addr&0x0e000000u)||address<0x00100000u)return -1;
+    if(type==7)
+        return op<=5u && !(value&0xff0f0000u) &&
+               (!(op&1u)||!(address&1u))?0:-1;
+    if(type==13 && op<=7u && fmt<=1u && (fmt||!(address&1u)))
+        return (value>>24)?(int)(value>>24):1;
+    return -1;
+}
+static inline void mzLiveNormalize(uint32_t *addr,uint32_t *value)
+{
+    uint32_t a=*addr,v=*value;
+    if((a>>28)!=14u||(a&0x0e000000u)||(v&0x0e000000u)||(v>>28)>7u)return;
+    *addr=0xd0000000u|(v&0x01ffffffu);
+    *value=((a&0x00ff0000u)<<8)|((a&0x01000000u)>>8)|
+           ((v>>28)<<20)|(a&0xffffu);
+}
 static inline int mzLiveCatalogOK(const mz_live_cheats_t *p)
 {
     unsigned i,j,seen=0;
