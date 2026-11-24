@@ -469,7 +469,7 @@ maizo_igr_poll_again:
             for(attempt=0;attempt<3;attempt++){
                 ChangeThreadPriority(TH_SELF,127);
                 for(retries=0;retries<64;retries++){
-                    if(maizoIGR_Preflight())break;
+                    if(maizoIGR_Preflight(0))break;
                     alarm_id=SetAlarm(97,IGR_Poll_Alarm,&IGR_Thread_ID);
                     if(alarm_id>=0)SleepThread();else nopdelay();
                 }
@@ -481,11 +481,11 @@ maizo_igr_poll_again:
                     /* An already submitted transfer may finish without
                      * EE workers. Never reset or truncate game DMA. */
                     for(retries=0;retries<8;retries++){
-                        if(maizoIGR_Preflight())break;
+                        if(maizoIGR_Preflight(MaizoIgrDmacMask))break;
                         maizoIgrYield();
                     }
                     if(retries<8){
-                        choice=maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield);
+                        choice=maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield,MaizoIgrDmacMask);
                         maizoIgrUnhold();
                         break; /* never retry after touching the framebuffer */
                     }

@@ -31,6 +31,10 @@ int main(void)
     assert(!mzIgrReadyPath(0,0,4,0,0));
     assert(!mzIgrReadyPath(0,0,0,8,0));
     assert(!mzIgrReadyPath(0x100,0,0,0,0));
+    assert(!mzIgrReadyPath(0,0,0,0x1000,0));
+    assert(!mzIgrReadyPath(0,0,0,0x20,0));
+    assert(mzIgrOriginalDstat(2,2)==0x20002);
+    assert(!mzIgrReadyPath(0,0,0,1,mzIgrOriginalDstat(2,2)));
     puts("MAIZO In-Game VIF1/GIF pipeline preflight PASS");
     return 0;
 }
