@@ -444,14 +444,33 @@ static int mzWait(vu32 *reg,u32 mask)
 static int mzGifFifo(const u32 *src,u32 qwc)
 {
     unsigned i;
-    for(i=0;i<2000000u;i++){
-        if(mzIgrFifoFits(*MZ_GIF_STAT,qwc))break;
+    u32 fifo=0x10006000u;
+    if(mzOverlayPath==2){
+        /* Reserve the DIRECT payload and aligned command QW before
+         * starting. Do not use FLUSHA, MSKPATH3, DMA or VIF reset. */
+        u32 command[4] __attribute__((aligned(16)))={0,0,0,0x50000000u|qwc};
+        for(i=0;i<2000000u;i++)
+            if(mzIgrVifFifoFits(*MZ_VIF1_STAT,*MZ_GIF_STAT,qwc))break;
+        if(i==2000000u)return 0;
+        fifo=0x10005000u;
+        asm volatile("lq $8,0(%0)\n\tsq $8,0(%1)\n\tsync.l"
+                     ::"r"(command),"r"(fifo):"$8","memory");
+    }else{
+        for(i=0;i<2000000u;i++)
+            if(mzIgrFifoFits(*MZ_GIF_STAT,qwc))break;
+        if(i==2000000u)return 0;
     }
-    if(i==2000000u)return 0;
+    /* Once started, always enqueue the entire packet. */
     for(;qwc;qwc--,src+=4)
         asm volatile("lq $8,0(%0)\n\tsq $8,0(%1)\n\tsync.l"
-                     ::"r"(src),"r"(0x10006000u):"$8","memory");
+                     ::"r"(src),"r"(fifo):"$8","memory");
     return 1;
+}
+static int mzOverlayDrain(void)
+{
+    /* GIF may look idle before a queued DIRECT has been decoded. */
+    if(mzOverlayPath==2 && !mzWait(MZ_VIF1_STAT,0x1f803f0fu))return 0;
+    return mzWait(MZ_GIF_STAT,GIF_BUSY);
 }
 static int mzSendLine(u32 *p,int line)
 {
@@ -485,7 +504,7 @@ static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t 
     }
     /* Do not change CRTC, cheats or menu state while the last
      * overlay IMAGE packet is still queued. */
-    return mzWait(MZ_GIF_STAT,GIF_BUSY);
+    return mzOverlayDrain();
 }
 /* Writable GS DISPLAY parameters are not free-form resampling. Keep small
  * offsets, clamp fields, and preserve the original MAGH/MAGV / mode bits. */
@@ -998,7 +1017,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                     if(!mzSendLine(p,y)){ok=0;break;}
                 }
             }
-            if(!ok||!mzWait(MZ_GIF_STAT,GIF_BUSY)){result=MAIZO_IGR_UNAVAILABLE;break;}
+            if(!ok||!mzOverlayDrain()){result=MAIZO_IGR_UNAVAILABLE;break;}
         }else if(!mzDraw(p,&mzState)){result=MAIZO_IGR_UNAVAILABLE;break;}
     }
     if(result==MAIZO_IGR_RESUME){
@@ -1010,9 +1029,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         }
     }
 cleanup:
-    /* No DMA channel, VIF command parser or D_STAT bits were modified.
-     * Every emitted packet is complete even when the next one timed out. */
-    if(!mzWait(MZ_GIF_STAT,GIF_BUSY))result=MAIZO_IGR_UNAVAILABLE;
+    /* No DMA channel or D_STAT bits were modified. PATH2 changes
+     * VIF CODE; every submitted packet is complete. */
+    if(!mzOverlayDrain())result=MAIZO_IGR_UNAVAILABLE;
     asm volatile("sync.l");
     mzBpcRestore(oldBpc);
     return result;

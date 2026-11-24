@@ -72,3 +72,10 @@ assert "x+=32u" in menu
 close = pad.split("choice=maizoIGR_MenuRun(",1)[1].split("goto mz_capture_done;",1)[0]
 assert close.index("MaizoGsMonitorEnd(0)") < close.index("maizoIgrUnhold()")
 print("Menu recovery: complete FIFO packets, no VIF DMA borrowing PASS")
+
+assert "mzIgrVifFifoFits(*MZ_VIF1_STAT,*MZ_GIF_STAT,qwc)" in menu
+assert "0x50000000u|qwc" in menu and "fifo=0x10005000u" in menu
+drain=menu.split("static int mzOverlayDrain(void)",1)[1].split("static int mzSendLine",1)[0]
+assert drain.index("mzWait(MZ_VIF1_STAT") < drain.index("mzWait(MZ_GIF_STAT")
+assert "mzDmaRegs" not in menu
+print("Dual FIFO route: full DIRECT submission and ordered drain PASS")

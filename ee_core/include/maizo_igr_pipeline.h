@@ -36,14 +36,17 @@ static inline int mzIgrReadyPath(uint32_t ch1,uint32_t ch2,uint32_t vif,
        !(vif&0x1f80300fu))return 3;
     return path==2&&mzIgrPipelineIdle(ch1,ch2,vif,gif)?2:0;
 }
-/* Recovery route: do not borrow VIF1 DMA, whose partially received
- * DIRECT payload cannot be unwound by restoring channel registers.
- * Require VU1 idle, no VIF error and no pending GIF producer.
- * PATH3 masked -> refuse without touching game state. */
+/* Both routes use CPU FIFO stores only; no borrowed DMA channel.
+ * Prefer PATH3 (does not touch VIF CODE); if masked, allow PATH2
+ * at a complete, unstalled VIF command boundary with no queued GIF
+ * producer. Existing game IRQ completion bits are left untouched. */
 static inline int mzIgrSafePath(uint32_t ch1,uint32_t ch2,uint32_t vif,
                                 uint32_t gif,uint32_t stat)
 {
-    return mzIgrReadyPath(ch1,ch2,vif,gif,stat)==3?3:0;
+    if((stat&0xe000u)||(gif&0x1008u))return 0;
+    if(!(gif&3u))
+        return mzIgrReadyPath(ch1,ch2,vif,gif,stat)==3?3:0;
+    return mzIgrPipelineIdle(ch1,ch2,vif,gif)?2:0;
 }
 /* A whole independently terminated GIF packet must fit in the hardware
  * FIFO before writing its first tag. FQC occupies bits 24..28, 16 QW.
@@ -53,6 +56,13 @@ static inline int mzIgrFifoFits(uint32_t gif,unsigned qwc)
     unsigned used=(gif>>24)&31u;
     return qwc && qwc<=16u && used<=16u && qwc<=16u-used &&
            !(gif&0x1fefu);
+}
+/* VIF1 DIRECT: one command QW plus a complete GIF EOP packet.
+ * Start only at an empty, idle VIF parser; no reset/cancel commands. */
+static inline int mzIgrVifFifoFits(uint32_t vif,uint32_t gif,unsigned gifqwc)
+{
+    return gifqwc>0 && gifqwc<=15u &&
+           !(vif&0x1f803f0fu) && !(gif&0x1f001fe8u);
 }
 /* The original enabled IRQ masks must survive our temporary hold.
  * A pending game completion is never treated as an overlay event. */

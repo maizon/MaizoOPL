@@ -38,8 +38,13 @@ int main(void)
     assert(mzIgrReadyPath(0,0,0,0,mzIgrOriginalDstat(4,4))==3);
     assert(!mzIgrReadyPath(0,0,0,1,mzIgrOriginalDstat(2,2)));
     assert(mzIgrSafePath(0,0,0,0,0)==3);
-    assert(!mzIgrSafePath(0,0,0,1,0));
-    assert(!mzIgrSafePath(0,0,0,2,0));
+    assert(mzIgrSafePath(0,0,0,1,0)==2);
+    assert(mzIgrSafePath(0,0,0,2,0)==2);
+    assert(mzIgrSafePath(0,0,0,3,0x20002)==2);
+    assert(!mzIgrSafePath(0,0,0x400,1,0));
+    assert(!mzIgrSafePath(0x100,0,0,1,0));
+    assert(!mzIgrSafePath(0,0,0,0x101,0));
+    assert(!mzIgrSafePath(0,0,0,1,0x8000));
     assert(!mzIgrSafePath(0,0,4,0,0)); /* VU1 running */
     assert(!mzIgrSafePath(0,0,0x1000,0,0)); /* VIF error */
     assert(!mzIgrSafePath(0,0,0x2000,0,0));
@@ -50,8 +55,16 @@ int main(void)
     assert(!mzIgrFifoFits(0x100,14)); /* PATH1 queued */
     assert(!mzIgrFifoFits(0x8,14)); /* GIF stopped */
     assert(!mzIgrFifoFits(0x1000,14)); /* readback */
-    for(unsigned bpp=2;bpp<=4;bpp++)
+    for(unsigned n=0;n<=17;n++){
+        assert(mzIgrVifFifoFits(0,1,n)==(n>0&&n<=15));
+        assert(!mzIgrVifFifoFits(0x1000000,1,n));
+        assert(!mzIgrVifFifoFits(0x400,1,n));
+        assert(!mzIgrVifFifoFits(0,0x81,n));
+    }
+    for(unsigned bpp=2;bpp<=4;bpp++){
         assert(6+32*bpp/16<=16);
+        assert(1+6+32*bpp/16<=16);
+    }
     puts("MAIZO In-Game VIF1/GIF pipeline and bounded FIFO packets PASS");
     return 0;
 }

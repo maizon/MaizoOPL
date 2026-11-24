@@ -451,3 +451,18 @@ readback or restoration; games that split transfers across packets
 remain a risk. VRAM contents behind the overlay are not saved. A true
 fully isolated menu needs verified GS transfer-state ownership and
 restoration. Hardware reference: https://psi-rockin.github.io/ps2tek/
+
+## Dual FIFO overlay recovery
+
+Restore a PATH2 option for PATH3-masked games without restoring VIF
+DMA borrowing. Send one aligned DIRECT command plus a whole
+10/12/14-QW GIF packet via the CPU VIF1 FIFO (maximum 16 QWs).
+Only start on an empty, idle, unstalled parser with no queued GIF
+producer; no FLUSHA, mask toggling, DMA register changes or VIF
+reset. Prefer PATH3 otherwise. Drain VIF before GIF on PATH2.
+Preserve native boot isolation, menu controls and filter intent.
+VIF CODE and internal GS transfer registers are still changed;
+no universal restoration is claimed. Complete CRTC capture,
+pipeline boundary, and suspended title input remain required.
+Host tests do not establish commercial-game compatibility.
+References: https://psi-rockin.github.io/ps2tek/ and PS2SDK VIF1_FIFO.
