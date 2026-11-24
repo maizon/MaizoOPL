@@ -953,6 +953,14 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     char *argv[4];
     void *eeloadCopy, *initUserMemory;
     struct GsmConfig_t gsm_config;
+#ifdef MAIZO_IGR_MENU
+    /* OFF must select the original resident core, not just disable its
+     * overlay. Mode 6 also explicitly disables IGR for this game. */
+    int proEnabled = 1;
+    configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &proEnabled);
+    proEnabled = (proEnabled != 0) && !(compatflags & COMPAT_MODE_6);
+    fallbackCore = !proEnabled;
+#endif
 
     ethGetNetConfig(local_ip_address, local_netmask, local_gateway);
 #if (!defined(__DEBUG) && !defined(_DTL_T10000))
@@ -976,6 +984,12 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
 
     modules = 0;
     ModuleStorage = GetModStorageLocation(filename, compatflags);
+#ifdef MAIZO_IGR_MENU
+    /* Pick the matching module arena before any IRX table is written.
+     * Preserve explicit per-title high-memory storage locations. */
+    if (fallbackCore && ModuleStorage == (void *)MZ_EE_EXP_TOP)
+        ModuleStorage = (void *)MZ_EE_LEGACY_TOP;
+#endif
 
 #ifdef __DECI2_DEBUG
     modules |= CORE_IRX_DECI2 | CORE_IRX_ETH;
@@ -1005,8 +1019,12 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     if(fallbackCore){
         boot_elf=(u8 *)eecore_fallback_elf;
         coreSize=size_eecore_fallback_elf;
-        LOG("SYSTEM guarded legacy core fallback: module arena full\n");
-        guiMsgBox("In-Game PRO indisponivel nesta configuracao. IGR original.",1,NULL);
+        if (proEnabled) {
+            LOG("SYSTEM guarded legacy core fallback: module arena full\n");
+            guiMsgBox("In-Game PRO indisponivel nesta configuracao. IGR original.",1,NULL);
+        } else {
+            LOG("SYSTEM legacy core selected: In-Game PRO OFF or mode 6\n");
+        }
     }
 #endif
     eh = (elf_header_t *)boot_elf;
@@ -1085,9 +1103,7 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     /* The dedicated In-Game ELF starts with the menu ON. A missing
      * saved key can no longer silently select stock IGR reset. */
     if(!fallbackCore){
-        config->EnableMaizoIgrMenu=1;
-        configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &config->EnableMaizoIgrMenu);
-        config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
+        config->EnableMaizoIgrMenu=proEnabled;
         memcpy(config->MaizoProfileID,mzProfileID,sizeof(mzProfileID));
         config->MaizoProfile=mzProfileValue;
         mzSkyChoose(filename,&config->MaizoSky);
