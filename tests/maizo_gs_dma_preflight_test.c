@@ -94,6 +94,18 @@ int main(void)
     assert(mzGsDmaPatchInlineChain(data,48,&policy,&guard,&state,&metrics)!=0);
     assert(memcmp(data,snapshot,48)==0);
 
+    /* END followed by zero padding is valid; nonzero tail is not. */
+    memset(data,0,sizeof(data));
+    mzGifWrite64(data,2ULL|(7ULL<<28));
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    data[63]=1;
+    memcpy(snapshot,data,64);
+    assert(mzGsDmaPatchInlineChain(data,64,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(snapshot,data,64));
+    data[63]=0;
+    assert(mzGsDmaPatchInlineChain(data,64,&policy,&guard,&state,&metrics)==MZ_GS_DMA_OK);
+    assert(mzGifRead64(data+32)==(tri|128ULL));
+
     /* Controlled PATH2 VIF1 DIRECT (not arbitrary VIF microprograms).
        Three VIF NOPs followed by DIRECT with 2 quadwords. */
     memset(data,0,sizeof(data));
@@ -105,15 +117,13 @@ int main(void)
     guard.path=MZ_GS_PATH2_VIF1;
     assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==0);
     assert(mzGifRead64(data+32)==(tri|128ULL));
-    /* Refuse VIF DIRECTHL, arbitrary VIF UNPACK, or wrong QWC. */
-    memcpy(snapshot,data,48);
-    data[15]=0x51; /* DIRECTHL = unsupported */
-    memcpy(snapshot,data,48);
-    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
-    assert(!memcmp(data,snapshot,48));
+    /* DIRECTHL carries the same bounded GIF layout (different PATH2 priority). */
+    data[15]=0x51;
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_OK);
+    assert(mzGifRead64(data+32)==(tri|128ULL));
     data[15]=0x50;data[12]=3; /* 3 QWC requested, only 2 supplied */
     memcpy(snapshot,data,48);
-    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_BAD_PACKET);
     assert(!memcmp(data,snapshot,48));
     data[12]=2;
     data[4]=0x01; /* a VIF command instead of NOP */
@@ -122,7 +132,60 @@ int main(void)
     assert(!memcmp(data,snapshot,48));
     guard.path=MZ_GS_PATH3_GIF_DMA;
     assert(mzGsDmaPatchVif1Direct(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_SKIPPED);
+    guard.path=MZ_GS_PATH2_VIF1;
 
-    puts("MAIZO GS DMA preflight: owned PATH2 DIRECT + PATH3 normal/CNT/END, guard and atomicity PASS");
+    /* Two complete commands, one DIRECTHL and one DIRECT, in one VIF1 buffer. */
+    memset(data,0,sizeof(data));
+    {
+        uint32_t hl=(0x51u<<24)|2u, direct=(0x50u<<24)|2u;
+        memcpy(data+12,&hl,sizeof(hl));
+        memcpy(data+60,&direct,sizeof(direct));
+    }
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    gif_ad(data+64,MZ_GS_PRIM,tri);
+    assert(mzGsDmaPatchVif1Stream(data,96,&policy,&guard,&state,&metrics)==MZ_GS_DMA_OK);
+    assert(mzGifRead64(data+32)==(tri|128ULL));
+    assert(mzGifRead64(data+80)==(tri|128ULL));
+
+    /* Invalid second GIFtag: first DIRECT remains byte-for-byte intact. */
+    memset(data,0,sizeof(data));
+    {
+        uint32_t hl=(0x51u<<24)|2u, direct=(0x50u<<24)|2u;
+        memcpy(data+12,&hl,sizeof(hl));
+        memcpy(data+60,&direct,sizeof(direct));
+    }
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    gif_ad(data+64,MZ_GS_PRIM,tri);
+    mzGifWrite64(data+64,3ULL|(1ULL<<15)|(2ULL<<58)); /* truncated IMAGE payload */
+    memcpy(snapshot,data,96);
+    assert(mzGsDmaPatchVif1Stream(data,96,&policy,&guard,&state,&metrics)==MZ_GS_DMA_BAD_PACKET);
+    assert(!memcmp(data,snapshot,96));
+
+    /* Unknown VIF opcode (including UNPACK) must never be silently skipped. */
+    memset(data,0,sizeof(data));
+    {
+        uint32_t hl=(0x51u<<24)|2u, unpack=(0x6cu<<24)|1u;
+        memcpy(data+12,&hl,sizeof(hl));
+        memcpy(data+60,&unpack,sizeof(unpack));
+    }
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    memcpy(snapshot,data,96);
+    assert(mzGsDmaPatchVif1Stream(data,96,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(data,snapshot,96));
+
+    /* Nonzero INT bit, command NUM or empty streams are rejected. */
+    memset(data,0,sizeof(data));
+    {
+        uint32_t interrupt=(0xd1u<<24)|2u;
+        memcpy(data+12,&interrupt,sizeof(interrupt));
+    }
+    gif_ad(data+16,MZ_GS_PRIM,tri);
+    memcpy(snapshot,data,48);
+    assert(mzGsDmaPatchVif1Stream(data,48,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+    assert(!memcmp(data,snapshot,48));
+    memset(data,0,sizeof(data));
+    assert(mzGsDmaPatchVif1Stream(data,32,&policy,&guard,&state,&metrics)==MZ_GS_DMA_UNSUPPORTED);
+
+    puts("MAIZO GS DMA preflight: owned PATH2 DIRECT/DIRECTHL streams + PATH3 normal/CNT/END, guard and atomicity PASS");
     return 0;
 }

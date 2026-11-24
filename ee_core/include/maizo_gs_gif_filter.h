@@ -67,6 +67,12 @@ typedef struct {
     uint8_t prim_kind;
     uint8_t active_ctx;
     uint8_t active_ctx_known;
+    /* PRMODECONT.AC selects PRIM (1) or PRMODE (0) for GS attributes. */
+    uint8_t prmode_cont_known;
+    uint8_t prmode_cont_ac;
+    uint8_t prim_ctx;
+    uint8_t prmode_ctx;
+    uint8_t prmode_ctx_known;
 } mz_gs_gif_state_t;
 
 static inline uint64_t mzGifRead64(const uint8_t *ptr)
@@ -84,9 +90,11 @@ static inline void mzGifWrite64(uint8_t *ptr, uint64_t value)
 static inline int mzGifPrimitiveSupported(uint64_t prim)
 {
     unsigned int kind = (unsigned int)(prim & 7ULL);
-    /* AA1 is applicable to lines and triangles, not sprites or points.
-       Do not alter alpha-blending to manufacture a coverage effect. */
-    return kind >= 1 && kind <= 5 && ((prim >> 6) & 1ULL);
+    /* AA1 is a per-primitive GS feature for lines and triangles.
+     * GS draws coverage-fringe pixels with its own blending regardless of
+     * PRIM.ABE; requiring ABE here wrongly skips most opaque geometry.
+     * DO NOT set ABE: changing the regular blend mode breaks games. */
+    return kind >= 1 && kind <= 5;
 }
 
 static inline uint64_t mzGifPrimitive(uint64_t src,
@@ -153,15 +161,16 @@ static inline uint64_t mzGifPrmode(uint64_t src,
                                   mz_gs_gif_stats_t *stats)
 {
     uint64_t result = src;
+    (void)state;
+    /* PRMODE may be configured BEFORE the first PRIM, especially in
+     * engines that set a persistent draw environment and then switch
+     * PRMODECONT.AC=0. It has no primitive-kind bits. AA1=1 is defined
+     * on PRMODE independently of the current primitive, and the GS
+     * ignores it for points/sprites. Do NOT invent/change ABE. */
     if (mode == MZ_GS_FORCE_OFF)
         result &= ~(1ULL << 7);
-    else if (mode == MZ_GS_FORCE_ON) {
-        if (state->prim_known && state->prim_kind >= 1 &&
-            state->prim_kind <= 5 && (src & (1ULL << 6)))
-            result |= 1ULL << 7;
-        else
-            stats->unsupported_primitives++;
-    }
+    else if (mode == MZ_GS_FORCE_ON)
+        result |= 1ULL << 7;
     if (result != src)
         stats->primitive_changes++;
     return result;
@@ -171,6 +180,7 @@ enum {
     MZ_GS_PRIM = 0x00,
     MZ_GS_TEX1_1 = 0x14,
     MZ_GS_TEX1_2 = 0x15,
+    MZ_GS_PRMODECONT = 0x1a,
     MZ_GS_PRMODE = 0x1b,
     MZ_GS_SCANMSK = 0x22,
     MZ_GS_DIMX = 0x44,
@@ -190,13 +200,31 @@ static inline uint64_t mzGifAdValue(uint64_t src,
     case MZ_GS_PRIM:
         state->prim_known = 1;
         state->prim_kind = (uint8_t)(src & 7ULL);
-        state->active_ctx = (uint8_t)((src >> 9) & 1ULL);
-        state->active_ctx_known = 1;
+        state->prim_ctx = (uint8_t)((src >> 9) & 1ULL);
+        if (!state->prmode_cont_known || state->prmode_cont_ac) {
+            state->active_ctx = state->prim_ctx;
+            state->active_ctx_known = 1;
+        }
         return mzGifPrimitive(src, policy->aa1, stats);
     case MZ_GS_PRMODE:
-        state->active_ctx = (uint8_t)((src >> 9) & 1ULL);
-        state->active_ctx_known = 1;
+        state->prmode_ctx = (uint8_t)((src >> 9) & 1ULL);
+        state->prmode_ctx_known = 1;
+        if (!state->prmode_cont_known || !state->prmode_cont_ac) {
+            state->active_ctx = state->prmode_ctx;
+            state->active_ctx_known = 1;
+        }
         return mzGifPrmode(src, policy->aa1, state, stats);
+    case MZ_GS_PRMODECONT:
+        state->prmode_cont_known = 1;
+        state->prmode_cont_ac = (uint8_t)(src & 1ULL);
+        if (state->prmode_cont_ac) {
+            state->active_ctx = state->prim_ctx;
+            state->active_ctx_known = state->prim_known;
+        } else {
+            state->active_ctx = state->prmode_ctx;
+            state->active_ctx_known = state->prmode_ctx_known;
+        }
+        return src;
     case MZ_GS_TEX1_1:
     case MZ_GS_TEX1_2:
         return mzGifTex1(src, policy->bilinear, stats);
@@ -298,8 +326,8 @@ static inline int mzGifApplyFilters(void *packet,
             size_t entries, payload;
             size_t i;
             int end = (int)((tag >> 15) & 1ULL);
-            if (kind == 3)  /* FLG=3 is reserved: never guess its size. */
-                return -1;
+            /* FLG=3 is IMAGE2, not a reserved mode. Like IMAGE it
+             * transports opaque GS pixel data without register writes. */
             if (nreg == 0)
                 nreg = 16;
             entries = loops * nreg;
@@ -318,8 +346,11 @@ static inline int mzGifApplyFilters(void *packet,
                 uint64_t orig_prim = (tag >> 47) & 0x7ffULL;
                 current.prim_kind = (uint8_t)(orig_prim & 7ULL);
                 current.prim_known = 1;
-                current.active_ctx = (uint8_t)((orig_prim >> 9) & 1ULL);
-                current.active_ctx_known = 1;
+                current.prim_ctx = (uint8_t)((orig_prim >> 9) & 1ULL);
+                if (!current.prmode_cont_known || current.prmode_cont_ac) {
+                    current.active_ctx = current.prim_ctx;
+                    current.active_ctx_known = 1;
+                }
                 if (pass == 1) {
                     uint64_t new_prim = mzGifPrimitive(orig_prim,
                                                         policy->aa1, &tally);

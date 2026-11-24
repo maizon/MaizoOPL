@@ -78,6 +78,15 @@ MaizoGsFilterPMODE: .dword 0
 MaizoGsFilterBaseFB: .dword 0
 .globl MaizoGsFilterBaseDisplay
 MaizoGsFilterBaseDisplay: .dword 0
+# Native 480p frame buffer scanned out on NTSC 480i (interlaced FRAME).
+# Opt-in, console readout mode only. No new rendering, no DTV 480p output.
+.globl MaizoGs480iMode
+MaizoGs480iMode: .word 0
+.globl MaizoGs480iOriginalFix
+MaizoGs480iOriginalFix: .word 0
+.p2align 3
+.globl MaizoGs480iOriginalSMODE2
+MaizoGs480iOriginalSMODE2: .dword 0
 
 
 .p2align 4                                          # align 16 bytes (IMPORTANT!!!)
@@ -169,6 +178,21 @@ Hook_SetGsCrt:
     # Changing video mode may make interlaced filtering invalid.
     la      $t3, MaizoGsFilterMode
     sw      $zero, 0($t3)
+    # When the game changes its CRT mode, roll back the temporary
+    # 480i FRAME override before executing the forced CRT setup.
+    la      $t3, MaizoGs480iMode
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_480i_setcrt_done
+    sw      $zero, 0($t3)
+    la      $t3, MaizoGs480iOriginalSMODE2
+    ld      $t4, 0($t3)
+    la      $t3, GSMDestGSRegs
+    sd      $t4, Target_SMODE2($t3)
+    la      $t3, MaizoGs480iOriginalFix
+    lw      $t4, 0($t3)
+    la      $t3, GSMFlags
+    sb      $t4, SMODE2_fix($t3)
+maizo_480i_setcrt_done:
 
 # -----------------------------------------------------------------------------------------
 
@@ -580,8 +604,18 @@ have_SMODE2_write:
     or      $v0, $v0, $a1                           # v0 = Target_SMODE2 + Source FFMD
 
 store_v0_as_SMODE2:
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    # GSM's stock SMODE2 adaptation may copy the source FFMD or even
+    # bypass the target for progressive sources. While the opt-in 480i
+    # bridge is active, always use the explicitly verified NTSC FRAME
+    # target (INT=1, FFMD=1). Keep DPMS and unrelated bits unchanged.
+    la      $t3, MaizoGs480iMode
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_480i_smode2_done
+    nop
+    ld      $v0, Target_SMODE2($s1)
+maizo_480i_smode2_done:
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # DISPFB1

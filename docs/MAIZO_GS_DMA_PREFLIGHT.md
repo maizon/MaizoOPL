@@ -34,7 +34,9 @@ processados. Nenhum hook universal é instalado em jogos comerciais.
 
 ### Correções do parser GIF
 
-- Rejeita o modo FLG=3 reservado.
+- Reconhece FLG=3 como IMAGE2, preserva os bytes da imagem sem tentar
+  interpretá-los como comandos de desenho. Pacotes IMAGE2 incompletos
+  são rejeitados antes de qualquer alteração.
 - Suporta várias listas completas EOP concatenadas em um mesmo buffer,
   ao invés de alterar só a primeira silenciosamente.
 - O AA1 em PRMODE não usa bits PRIM inexistentes em PRMODE: acompanha
@@ -68,12 +70,70 @@ todos os jogos.** É proposital: não anunciar funcionamento inexistente.
 Referências: `ps2tek` (GIF/GS/DMA); documentação PS2SDK e
 artigos de programação sobre PATH1/PATH2/PATH3.
 
-## Adaptação PATH2 VIF1 DIRECT
+## Adaptação PATH2 VIF1 DIRECT e DIRECTHL (opt-in)
 
-A API `mzGsDmaPatchVif1Direct` aceita somente um buffer exclusivamente
-controlado pelo chamador contendo **3 VIF NOP + 1 DIRECT (0x50)** em um
-cabeçalho de 16 bytes, seguido de exatamente o número de QWs do payload
-GIF. Valida os códigos VIF e o tamanho antes de reescrever o GIF. Rejeita
-DIRECTHL, UNPACK, MSCAL, cadeias arbitrárias, DMA ativa e buffers sem dono.
-Isso dá suporte **limitado** a um subconjunto conhecido do PATH2, mas
-não intercepta todos os jogos nem o PATH1 via XGKICK.
+`mzGsDmaPatchVif1Stream` recebe apenas um buffer pré-DMA controlado pelo
+chamador, contendo palavras VIF NOP e comandos `DIRECT (0x50)` ou
+`DIRECTHL (0x51)`, cada um seguido do número exato de QWs GIF informado
+no `IMM`. Vários comandos completos por buffer são aceitos. O nome antigo
+`mzGsDmaPatchVif1Direct` permanece como wrapper compatível.
+
+Validação em duas passagens: a primeira verifica o fluxo inteiro, incluindo
+um segundo ou terceiro comando malformado, **antes de editar qualquer byte**.
+A segunda aplica os filtros e contabiliza alterações. Um erro não deve
+deixar um comando anterior modificado. Cadeias VIF arbitrárias não são
+interpretadas: UNPACK, MSCAL, interrupt bit e demais opcodes são recusados.
+
+**Atenção:** isso NÃO implementa captura automática dos comandos gráficos
+de jogos comerciais. Não acessa memória VU1 ou DMA ativa, não representa
+suporte universal ao PATH2 nem garante AA1, bilinear ou dithering dentro
+de jogos. O funcionamento é apenas para código cooperativo que invoca o
+adaptador **antes** do envio e sincroniza a cache.
+
+## Integridade adicional
+
+- Um PATH3 CNT/END com dados não zero após END é recusado. Padding zero é
+  permitido, mas um segundo fluxo não deve ser silenciosamente ignorado.
+- O processamento GIF agora considera `PRMODECONT.AC` ao determinar
+  qual contexto de desenho efetivamente rege o dithering (`PRIM` vs
+  `PRMODE`), reduzindo alterações erradas em framebuffer 32-bit.
+- Os testes host cobrem DIRECTHL, múltiplos comandos PATH2, falhas
+  posteriores sem alteração parcial, cauda PATH3 e alternância de contexto.
+
+## Critério para liberar no menu In-Game
+
+Só habilitar filtro quando houver evidência de integração **real** com a
+renderização do jogo: buffers com propriedade exclusiva, transferência
+parada/não iniciada, cache sincronizada e teste em PS2 real. Na ausência
+dessas condições, o menu deve informar `indisponível para este jogo`
+em vez de exibir um toggle que não modifica os comandos renderizados.
+A meta de 90% exige medições por jogo e **não** é atestada por estes testes.
+
+
+## Escopo de robustez adicional — adaptadores cooperativos
+
+- Cadeias PATH3 com REF/REFE agora podem usar uma lista explícita de
+  regiões previamente verificadas, cada uma com endereço DMA e buffer EE
+  mutável correspondente. O adaptador **não** segue endereços do jogo;
+  valida alinhamento, tamanho, exclusividade e sobreposições antes da edição.
+- Um mesmo endereço DMA não pode ser associado a duas regiões distintas,
+  e regiões sobrepostas à cadeia ou entre si são recusadas.
+- PATH1 possui o adaptador `mzGsDmaPatchVu1Staging` exclusivamente para um
+  pacote de comando GIF pertencente ao renderizador **antes de copiá-lo
+  para a VU1**. Ele não lê VU1 e não intercepta `XGKICK`.
+- O parser reconhece `IMAGE2` (FLG=3) como transferência opaca de imagem,
+  segundo ps2tek e PCSX2. Nenhuma modificação nos dados dos pixels.
+- Regressões: `tests/maizo_gs_trusted_refs_test.c`,
+  `tests/maizo_gs_gif_filter_test.c` e
+  `tests/maizo_gs_dma_preflight_test.c`.
+
+### Sem porcentagens fictícias
+
+**Não há 80% nem 90% de compatibilidade com jogos comprovada.**
+A interceptação transparente de PATH1, PATH2 e PATH3 de executáveis
+comerciais continua ausente. Emuladores como PCSX2 podem implementar
+filtros por software/GPU hospedeira, não equivalentes a recursos
+de hardware disponíveis no GS físico. AA1 não é MSAA/FXAA global,
+bilinear no GS não aumenta resolução interna e dithering não cria
+profundidade de cor adicional. Não expor os três como ON/OFF universal
+até a ligação real aos fluxos gráficos dos jogos ser validada.

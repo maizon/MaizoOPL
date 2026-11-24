@@ -41,6 +41,30 @@ int main(void)
     assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
     assert(((mzGifRead64(buf)>>47)&0x7ffULL)==(tri|128ULL));
     assert(st.primitive_changes==1);
+    /* Real opaque game geometry normally clears ABE. AA1 must still
+     * apply, without changing ABE/blending or primitive type. */
+    mzGifWrite64(buf,tag(0,1,1,3u,0,1));
+    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
+    assert(((mzGifRead64(buf)>>47)&0x7ffULL)==(3ULL|128ULL));
+    assert(!(((mzGifRead64(buf)>>47)&0x7ffULL)&(1ULL<<6)));
+    one(buf,MZ_GS_PRIM,3ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(3ULL|128ULL));
+    one(buf,MZ_GS_PRMODE,0ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==128ULL);
+    /* PRMODE is commonly uploaded before any primitive. The AA1 mode
+     * must already be present when the game later chooses PRMODECONT=0. */
+    init(&p,&s,&st);
+    p.aa1=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_PRMODE,0ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(1ULL<<7));
+    assert(st.primitive_changes==1 && !st.unsupported_primitives);
+    one(buf,MZ_GS_PRMODECONT,0,&p,&s,&st);
+    one(buf,MZ_GS_PRIM,3ULL,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==(3ULL|128ULL));
+    one(buf,MZ_GS_PRMODE,1ULL<<9,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==((1ULL<<9)|(1ULL<<7)));
+    assert(!(mzGifRead64(buf+16)&(1ULL<<6))); /* ABE preserved */
+
     mzGifWrite64(buf,tag(0,1,1,(unsigned int)(6ULL|(1ULL<<6)),0,1));
     assert(mzGifApplyFilters(buf,16,&p,&s,&st)==0);
     assert(st.unsupported_primitives==1); /* sprite may not use AA1 */
@@ -98,12 +122,19 @@ int main(void)
     assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-2);
     assert(!memcmp(before,buf,32));
     init(&p,&s,&st);
-    /* Reserved GIF FLG=3 must be rejected transactionally. */
+    /* IMAGE2 (FLG=3) is an opaque 16-byte/loop image transfer,
+     * identical in length to IMAGE (FLG=2). Never edit pixel bytes. */
     memset(buf,0,sizeof(buf));
-    mzGifWrite64(buf,tag(0,1,0,0,3,1));
-    memcpy(before,buf,16);
-    assert(mzGifApplyFilters(buf,16,&p,&s,&st)==-1);
-    assert(!memcmp(buf,before,16));
+    mzGifWrite64(buf,tag(2,1,0,0,3,1));
+    memset(buf+16,0x5a,32);
+    memcpy(before,buf,48);
+    assert(mzGifApplyFilters(buf,48,&p,&s,&st)==0);
+    assert(!memcmp(buf,before,48));
+    /* Invalid IMAGE2 length must be rejected without mutation. */
+    mzGifWrite64(buf,tag(3,1,0,0,3,1));
+    memcpy(before,buf,48);
+    assert(mzGifApplyFilters(buf,48,&p,&s,&st)==-1);
+    assert(!memcmp(buf,before,48));
     /* A normal GIF DMA packet can contain multiple EOP-tagged lists. */
     p.aa1=MZ_GS_FORCE_ON;
     memset(buf,0,sizeof(buf));
@@ -128,6 +159,25 @@ int main(void)
     one(buf,MZ_GS_PRIM,tri,&p,&s,&st);
     one(buf,MZ_GS_DTHE,0,&p,&s,&st);
     assert(mzGifRead64(buf+16)==1);
+    /* PRMODECONT determines which drawing context is active. A PRMODE
+     * write must not override PRIM when AC=1, or vice versa. */
+    init(&p,&s,&st);
+    p.dither=MZ_GS_FORCE_ON;
+    one(buf,MZ_GS_FRAME_1,2ULL<<24,&p,&s,&st);
+    one(buf,MZ_GS_FRAME_2,0,&p,&s,&st);
+    one(buf,MZ_GS_DIMX,0x12,&p,&s,&st);
+    one(buf,MZ_GS_PRIM,tri,&p,&s,&st);  /* 16-bit context 0 */
+    one(buf,MZ_GS_PRMODE,tri|(1ULL<<9),&p,&s,&st); /* 32-bit context 1 */
+    one(buf,MZ_GS_PRMODECONT,1,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==1);
+    one(buf,MZ_GS_PRMODECONT,0,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==0);
+    one(buf,MZ_GS_PRMODECONT,1,&p,&s,&st);
+    one(buf,MZ_GS_DTHE,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==1);
+
     init(&p,&s,&st);
     assert(mzGifApplyFilters(buf,17,&p,&s,&st)==-1);
     assert(mzGifApplyFilters(NULL,32,&p,&s,&st)==-1);
