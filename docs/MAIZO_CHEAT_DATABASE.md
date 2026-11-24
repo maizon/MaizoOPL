@@ -11,3 +11,7 @@ Referência do formato: https://github.com/root670/CheatDevicePS2 e https://isra
 Validação física necessária: combinação de arquivos reais, MC nativo, FAT32, exFAT, SMB, versões de jogos, renderização CRT e limites do PS2RD.
 
 Seleções novas identificam também o conteúdo RAW de cada grupo, evitando escolher outra cheat com nome duplicado. O limite de códigos e hooks é aplicado antes de salvar e novamente antes de iniciar. L1/R1 avançam páginas; a lista mostra quantas opções estão ativadas. O firmware do motor também rejeita listas maiores que seus buffers.
+
+O leitor agora informa separadamente erro de leitura, estrutura ZIP, compactação, CRC, memória ou limite. O limite de leitura do arquivo é 512 MiB, com orçamento de 256 MiB de TXT descompactado e 256 KiB por seção de jogo; a leitura continua em fluxo. ZIP64 completo ainda não é aceito.
+
+No In-Game PRO experimental, Jogo e Cheats permite pausar/retomar os códigos RAW previamente carregados, somente após confirmar que o hook PS2RD foi instalado. Pausar não desfaz valores já escritos e não carrega novos grupos do ZIP durante a partida.

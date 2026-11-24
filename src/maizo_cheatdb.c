@@ -8,8 +8,10 @@
 #include <zlib.h>
 
 #define DB_TEXT_LIMIT    (256u * 1024u)
-#define DB_ARCHIVE_LIMIT (128u * 1024u * 1024u)
-#define DB_SCAN_LIMIT    (64u * 1024u * 1024u)
+/* These are I/O/work budgets, not heap allocations. Only matching
+ * sections and two small streaming chunks are retained in memory. */
+#define DB_ARCHIVE_LIMIT (512u * 1024u * 1024u)
+#define DB_SCAN_LIMIT    (256u * 1024u * 1024u)
 #define DB_CHUNK         8192
 
 static uint16_t u16le(const unsigned char *p)
@@ -122,13 +124,13 @@ typedef struct
 static void finishSection(scanner_t *s)
 {
     if (s->currentRank && s->overflow)
-        s->failed = 1;
+        s->failed = MZDB_LIMIT;
     if (s->currentRank && s->used && !s->overflow) {
         if (s->currentRank > s->bestRank) {
             if (!s->best)
                 s->best = malloc(DB_TEXT_LIMIT + 1);
             if (!s->best) {
-                s->failed = 1;
+                s->failed = MZDB_MEMORY;
                 return;
             }
             memcpy(s->best, s->candidate, s->used);
@@ -153,7 +155,7 @@ static void scanLine(scanner_t *s)
         if (s->currentRank)
             s->overflow = 1;
         if (!s->quoted && s->fileRank)
-            s->failed = 1;
+            s->failed = MZDB_LIMIT;
         s->longLine = 0;
         s->lineUsed = 0;
         return;
@@ -214,19 +216,26 @@ static int scanMember(maizo_zip_read read_at, void *ctx, uint32_t offset, uint32
     unsigned char *in = malloc(DB_CHUNK), *out = malloc(DB_CHUNK);
     z_stream z;
     uint32_t actual = 0, checksum = crc32(0, NULL, 0);
-    int result = 0, initialized = 0, ended = 0;
+    int result = MZDB_CORRUPT, initialized = 0, ended = 0;
     memset(&z, 0, sizeof(z));
-    if (!in || !out)
+    if (!in || !out) {
+        result = MZDB_MEMORY;
         goto done;
+    }
     if (method == 8) {
-        if (inflateInit2(&z, -MAX_WBITS) != Z_OK)
+        int code = inflateInit2(&z, -MAX_WBITS);
+        if (code != Z_OK) {
+            result = code == Z_MEM_ERROR ? MZDB_MEMORY : MZDB_METHOD;
             goto done;
+        }
         initialized = 1;
     }
     while (compressed && !ended) {
         uint32_t size = compressed < DB_CHUNK ? compressed : DB_CHUNK;
-        if (!read_at(ctx, offset, in, size))
+        if (!read_at(ctx, offset, in, size)) {
+            result = MZDB_IO;
             goto done;
+        }
         offset += size;
         compressed -= size;
         if (method == 0) {
@@ -242,9 +251,21 @@ static int scanMember(maizo_zip_read read_at, void *ctx, uint32_t offset, uint32
         do {
             z.next_out = out;
             z.avail_out = DB_CHUNK;
+            unsigned int before = z.avail_in;
             int code = inflate(&z, Z_NO_FLUSH);
             size_t have = DB_CHUNK - z.avail_out;
+            /* A full output chunk can require one more inflate call
+             * even when the current input chunk is exhausted. Z_BUF_ERROR
+             * here means "need more input", not a corrupt member. */
+            if (code == Z_BUF_ERROR && !z.avail_in && !have)
+                break;
+            if (code == Z_MEM_ERROR) {
+                result = MZDB_MEMORY;
+                goto done;
+            }
             if (have > uncompressed - actual || (code != Z_OK && code != Z_STREAM_END))
+                goto done;
+            if (code == Z_OK && before == z.avail_in && !have)
                 goto done;
             actual += have;
             checksum = crc32(checksum, out, have);
@@ -262,7 +283,7 @@ static int scanMember(maizo_zip_read read_at, void *ctx, uint32_t offset, uint32
     if (s->lineUsed || s->longLine)
         scanLine(s);
     finishSection(s);
-    result = !s->failed;
+    result = s->failed ? s->failed : 1;
 done:
     if (initialized)
         inflateEnd(&z);
@@ -282,17 +303,31 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
     int foundEnd = 0;
     *text = NULL;
     heading[0] = 0;
-    if (size < 22 || size > DB_ARCHIVE_LIMIT)
+    if (size < 22)
         return result;
+    if (size > DB_ARCHIVE_LIMIT)
+        return MZDB_LIMIT;
     tailSize = size < 65557 ? size : 65557;
     tail = malloc(tailSize);
     s = calloc(1, sizeof(*s));
-    if (!tail || !s || !serialAt(serial, s->serial))
+    if (!tail || !s) {
+        result = MZDB_MEMORY;
         goto done;
+    }
+    if (!serial || !serialAt(serial, s->serial)) {
+        result = MZDB_SERIAL_INVALID;
+        goto done;
+    }
     s->candidate = malloc(DB_TEXT_LIMIT + 1);
-    s->title = title;
-    if (!s->candidate || !read_at(ctx, size - tailSize, tail, tailSize))
+    s->title = title ? title : "";
+    if (!s->candidate) {
+        result = MZDB_MEMORY;
         goto done;
+    }
+    if (!read_at(ctx, size - tailSize, tail, tailSize)) {
+        result = MZDB_IO;
+        goto done;
+    }
     for (int i = (int)tailSize - 22; i >= 0; i--) {
         unsigned char *p = tail + i;
         if (u32le(p) != 0x06054b50 || (uint32_t)i + 22 + u16le(p + 20) != tailSize)
@@ -339,9 +374,15 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
             continue;
         if (hasOtherSerial(name, s->serial) && !containsSerial(name, s->serial))
             continue;
-        if ((flags & 1) || (method != 0 && method != 8) || u16le(h + 34))
+        if ((flags & 1) || (method != 0 && method != 8) || u16le(h + 34)) {
+            result = MZDB_METHOD;
             goto done;
-        if (uncompressed > DB_SCAN_LIMIT - scanned || offset > size - sizeof(local) ||
+        }
+        if (uncompressed > DB_SCAN_LIMIT - scanned) {
+            result = MZDB_LIMIT;
+            goto done;
+        }
+        if (offset > size - sizeof(local) ||
             !read_at(ctx, offset, local, sizeof(local)) || u32le(local) != 0x04034b50 ||
             u16le(local + 8) != method || (u16le(local + 6) & 1))
             goto done;
@@ -359,8 +400,11 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
         s->used = s->lineUsed = 0;
         strncpy(s->heading, name, sizeof(s->heading) - 1);
         s->heading[sizeof(s->heading) - 1] = 0;
-        if (!scanMember(read_at, ctx, dataOffset, compressed, uncompressed, method, u32le(h + 16), s))
+        int memberResult = scanMember(read_at, ctx, dataOffset, compressed, uncompressed, method, u32le(h + 16), s);
+        if (memberResult < 0) {
+            result = memberResult;
             goto done;
+        }
     }
     if (central != centralEnd)
         goto done;

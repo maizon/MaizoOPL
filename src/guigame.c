@@ -494,8 +494,21 @@ void guiGameShowDatabaseCheats(item_list_t *support, int id, config_set_t *cfg)
     if (cheatLookupResult < 0) {
         if (cheatDatabaseMatch() == MZDB_AMBIGUOUS)
             guiMsgBox("Mais de uma versão encontrada. Use um TXT/CHT com ID exato dentro do ZIP.", 0, NULL);
-        else if (cheatDatabaseSource()[0] && cheatDatabaseMatch() < 0)
-            guiMsgBox("Banco ZIP inválido, muito grande ou incompatível.", 0, NULL);
+        else if (cheatDatabaseMatch() < 0) {
+            const char *reason;
+            switch (cheatDatabaseMatch()) {
+            case MZDB_IO: reason = "Falha ao ler ou buscar dados no dispositivo."; break;
+            case MZDB_LIMIT: reason = "Limite do banco ou da seção do jogo excedido."; break;
+            case MZDB_METHOD: reason = "Compactação não suportada ou ZIP protegido. Use Deflate ou Store."; break;
+            case MZDB_CORRUPT: reason = "Dados Deflate ou CRC inválidos."; break;
+            case MZDB_MEMORY: reason = "Memória insuficiente para ler o banco."; break;
+            case MZDB_SERIAL_INVALID: reason = "Código do jogo inválido."; break;
+            default: reason = "Estrutura ZIP inválida (ZIP64/arquivo incompleto não suportado)."; break;
+            }
+            char message[256];
+            snprintf(message, sizeof(message), "%s\n%.79s", reason, cheatDatabaseSource());
+            guiMsgBox(message, 0, NULL);
+        }
         else if (cheatDatabaseMatch() > 0)
             guiMsgBox("Jogo localizado, mas sem códigos RAW compatíveis com PS2RD.", 0, NULL);
         else if (cheatDatabaseSource()[0])
