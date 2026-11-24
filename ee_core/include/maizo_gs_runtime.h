@@ -148,7 +148,7 @@ static inline int mzGsRuntimeSetMode(unsigned int feature, unsigned int mode)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
     unsigned int mask;
-    if (shift > 8 || mode > ((feature==MZ_DRAW_SCANLINES || feature==MZ_DRAW_BILINEAR)?3u:MZ_GS_FORCE_OFF) ||
+    if (shift > 8 || mode > ((feature==MZ_DRAW_SCANLINES || feature==MZ_DRAW_BILINEAR || feature==MZ_DRAW_AA1)?3u:MZ_GS_FORCE_OFF) ||
         !(mzRuntimeCapabilities & feature)) return 0;
     mask = 3u << shift;
     mzRuntimeModes = (mzRuntimeModes & ~mask) | (mode << shift);

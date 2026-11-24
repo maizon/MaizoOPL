@@ -35,7 +35,8 @@
           "experimental_off_branch": "0x10000006",
           "elf_ram_match": true,
           "validated_on_console": false
-        }
+        },
+        "multiframe_menu_and_gameplay_match": true
       }
     },
     {
@@ -140,7 +141,8 @@
           "experimental_off_branch": "0x10000006",
           "elf_ram_match": true,
           "validated_on_console": false
-        }
+        },
+        "multiframe_menu_and_gameplay_match": true
       }
     },
     {
@@ -175,7 +177,8 @@
           "experimental_off_branch": "0x10000006",
           "elf_ram_match": true,
           "validated_on_console": false
-        }
+        },
+        "multiframe_menu_and_gameplay_match": true
       }
     },
     {
@@ -233,6 +236,16 @@
           "experimental_off_branch": "0x10000006",
           "elf_ram_match": true,
           "validated_on_console": false
+        },
+        "multiframe_menu_and_gameplay_match": true,
+        "reload_blur": {
+          "address": "0x001c27a0",
+          "normalized_fnv": "0x50270b46",
+          "original": "0x24020001",
+          "off": "0x24020000",
+          "elf_and_both_ram_match": true,
+          "source": "Gabominated/PCSX2, SLUS-21376_5C891FF1.pnach, No Blur While Reload",
+          "modified_game_tested": false
         }
       }
     },

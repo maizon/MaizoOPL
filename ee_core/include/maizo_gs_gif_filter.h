@@ -28,7 +28,8 @@ enum {
     MZ_GS_KEEP = 0,
     MZ_GS_FORCE_ON = 1,
     MZ_GS_FORCE_OFF = 2,
-    MZ_GS_TRILINEAR = 3 /* TEX1 only; other filters reject this mode */
+    MZ_GS_TRILINEAR = 3, /* TEX1 only */
+    MZ_GS_AA1_ADAPTIVE = 3 /* AA1 field only; scoped, fail closed */
 };
 
 /*
@@ -295,6 +296,90 @@ static inline uint64_t mzGifAdValue(uint64_t src,
 }
 
 /*
+ * Adaptive AA1: prove a self-contained opaque draw, not just a PRIM bit.
+ * The renderer must still certify this packet as optional world geometry,
+ * with exclusive ownership. No cached state from other GIF paths or
+ * skipped UI packets is trusted. Only one PACKED PRE draw is eligible,
+ * followed by an existing explicit PRIM restore with the original value.
+ * This preserves the original outgoing primitive state and topology.
+ * A general frame or arbitrary commercial packet is NOT such a scope.
+ */
+static inline size_t mzGifAdaptiveScope(const uint8_t *buf,size_t bytes)
+{
+    uint64_t frame[2]={0,0},zbuf[2]={0,0},test[2]={0,0},tex0[2]={0,0};
+    unsigned known[2]={0,0},ac=0,pabe=2;
+    size_t at=0,draw=(size_t)-1;
+    unsigned original=0;
+    while(at+16u<=bytes){
+        uint64_t tag=mzGifRead64(buf+at),regs=mzGifRead64(buf+at+8);
+        unsigned loops=(unsigned)(tag&32767u),nr=(unsigned)(tag>>60),kind=(unsigned)((tag>>58)&3u);
+        size_t payload;
+        if(!nr)nr=16;
+        if(kind||!loops)return (size_t)-1;
+        payload=(size_t)loops*nr*16u;
+        if(payload>bytes-at-16u)return (size_t)-1;
+        if(draw!=(size_t)-1){
+            /* The unmodified final PRIM is a required restore, not a
+             * fabricated extra tag or a write during active DMA. */
+            if(loops!=1||nr!=1||regs!=14u||(tag&(1ULL<<46))||
+               !(tag&(1ULL<<15))||at+32u!=bytes||
+               mzGifRead64(buf+at+16)!=original||
+               mzGifRead64(buf+at+24)!=MZ_GS_PRIM)return (size_t)-1;
+            return draw;
+        }
+        if(tag&(1ULL<<15))return (size_t)-1;
+        if(tag&(1ULL<<46)){
+            unsigned prim=(unsigned)((tag>>47)&2047u),ctx=(prim>>9)&1u,k=prim&7u,vertices=0;
+            unsigned psm=(unsigned)((frame[ctx]>>24)&63u);
+            if(!((frame[ctx]>>16)&63u)||(psm!=0u&&psm!=1u&&psm!=2u&&psm!=10u))
+                return (size_t)-1;
+            if(ac!=1u||pabe!=0u||k<1||k>5||(prim&(0x40u|0x80u|0x100u))||
+               (known[ctx]&7u)!=7u||(frame[ctx]>>32)||
+               (zbuf[ctx]&(1ULL<<32))||
+               (test[ctx]&0x4001u)||!(test[ctx]&(1ULL<<16))||
+               ((test[ctx]>>17)&3u)<2u)return (size_t)-1;
+            /* TCC=RGB only: never force AA over unknown texture alpha. */
+            if((prim&16u)&&(!(known[ctx]&8u)||(tex0[ctx]&(1ULL<<34))))return (size_t)-1;
+            for(unsigned i=0;i<nr;i++){
+                unsigned reg=(unsigned)((regs>>(4u*i))&15u);
+                if(reg==4u||reg==5u)vertices++;
+                else if(reg!=1u&&reg!=2u&&reg!=3u&&reg!=10u)return (size_t)-1;
+            }
+            if(vertices!=1u||(k==1u&&(loops<2||loops%2u))||(k==2u&&loops<2)||
+               (k==3u&&(loops<3||loops%3u))||(k>=4u&&loops<3u))return (size_t)-1;
+            for(size_t i=0;i<(size_t)loops*nr;i++){
+                unsigned reg=(unsigned)((regs>>(4u*(i%nr)))&15u);
+                if((reg==4u||reg==5u)&&(mzGifRead64(buf+at+24u+i*16u)&(1ULL<<47)))
+                    return (size_t)-1;
+            }
+            original=prim;draw=at;
+        }else{
+            /* Only state setup is accepted before the draw. Explicitly
+             * exclude transfers, kick registers, PRMODE, unknown commands. */
+            if(nr!=1||regs!=14u)return (size_t)-1;
+            for(unsigned i=0;i<loops;i++){
+                uint64_t v=mzGifRead64(buf+at+16u+i*16u),a=mzGifRead64(buf+at+24u+i*16u);
+                unsigned c=(unsigned)a&1u;
+                switch(a){
+                case 0x1a:ac=(unsigned)v&1u;break;
+                case 0x49:pabe=(unsigned)v&1u;break;
+                case 0x4c:case 0x4d:frame[c]=v;known[c]|=1u;break;
+                case 0x4e:case 0x4f:zbuf[c]=v;known[c]|=2u;break;
+                case 0x47:case 0x48:c=(unsigned)a-0x47u;test[c]=v;known[c]|=4u;break;
+                case 0x06:case 0x07:tex0[c]=v;known[c]|=8u;break;
+                case 0x08:case 0x09:case 0x14:case 0x15:
+                case 0x18:case 0x19:case 0x40:case 0x41:
+                case 0x42:case 0x43:case 0x44:case 0x45:case 0x46:break;
+                default:return (size_t)-1;
+                }
+            }
+        }
+        at+=16u+payload;
+    }
+    return (size_t)-1;
+}
+
+/*
  * Rewrite a COMPLETE GIF packet stream, bounded by packet_size bytes.
  *  0    OK
  * -1    Invalid input / malformed tag / truncated packet; buffer unchanged
@@ -316,17 +401,19 @@ static inline int mzGifApplyFilters(void *packet,
 {
     uint8_t *buf = (uint8_t *)packet;
     int pass;
+    size_t adaptive_at=(size_t)-1;
     mz_gs_gif_state_t snapshot;
 
     if (!packet || !policy || !state || !stats || !packet_size ||
         (packet_size & 15u) || packet_size > (1u << 20))
         return -1;
-    if (policy->aa1 > MZ_GS_FORCE_OFF ||
+    if (policy->aa1 > MZ_GS_AA1_ADAPTIVE ||
         policy->bilinear > 11u ||
         policy->dither > MZ_GS_FORCE_OFF ||
         (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY))
         return -2;
 
+    if(policy->aa1==MZ_GS_AA1_ADAPTIVE)adaptive_at=mzGifAdaptiveScope(buf,packet_size);
     snapshot = *state;
 
     for (pass = 0; pass < 2; pass++) {
@@ -373,6 +460,7 @@ static inline int mzGifApplyFilters(void *packet,
                 if (pass == 1) {
                     uint64_t new_prim = mzGifPrimitive(orig_prim,
                                                         policy->aa1, &tally);
+                    if(at==adaptive_at){new_prim|=128ULL;tally.primitive_changes++;}
                     if (new_prim != orig_prim) {
                         tag &= ~(0x7ffULL << 47);
                         tag |= new_prim << 47;

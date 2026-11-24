@@ -8,6 +8,8 @@ int main(void)
     assert(r.fog==0x0035056cu && r.fog_hash==0x023909aau);
     mzSkyChoose("SLUS_212.69",&r);
     assert(r.state && !r.fog && !r.fog_hash);
+    mzSkyChoose("SLUS_213.76",&r);
+    assert(r.reload_blur==0x001c27a0u && r.reload_blur_hash==0x50270b46u);
     mzSkyChoose("UNKNOWN",&r);
     assert(!r.state && !r.hash);
     assert(mzSkyLimit(0x9b800,0xd0000)==0x02000000);

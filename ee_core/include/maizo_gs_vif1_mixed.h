@@ -35,7 +35,7 @@ static inline int mzGsDmaPatchVif1Mixed(
         mzGsDmaRecord(metrics, MZ_GS_DMA_SKIPPED, NULL);
         return MZ_GS_DMA_SKIPPED;
     }
-    if (policy->aa1 > MZ_GS_FORCE_OFF ||
+    if (policy->aa1 > MZ_GS_AA1_ADAPTIVE ||
         policy->bilinear > 11u ||
         policy->dither > MZ_GS_FORCE_OFF ||
         (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY)) {

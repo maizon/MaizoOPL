@@ -42,6 +42,19 @@ static inline int mzSkyFogCodeOK(const volatile uint32_t *code,uint32_t hash)
     if(first!=MZ_SKY_FOG_ORIGINAL && first!=MZ_SKY_FOG_OFF)return 0;
     return mzSkyHash((2166136261u^MZ_SKY_FOG_ORIGINAL)*16777619u,code+1,13)==hash;
 }
+/* BLACK SLUS_213.76 (5C891FF1): exact 9-word window confirmed
+ * in ELF, gameplay RAM and menu RAM. The one-word change is the
+ * documented reload blur override, NOT all blur or all post effects. */
+#define MZ_SKY_RELOAD_ORIGINAL 0x24020001u
+#define MZ_SKY_RELOAD_OFF      0x24020000u
+static inline int mzSkyReloadCodeOK(const volatile uint32_t *code,uint32_t hash)
+{
+    uint32_t w=code[4],h;
+    if(w!=MZ_SKY_RELOAD_ORIGINAL&&w!=MZ_SKY_RELOAD_OFF)return 0;
+    h=mzSkyHash(2166136261u,code,4);
+    h=(h^MZ_SKY_RELOAD_ORIGINAL)*16777619u;
+    return mzSkyHash(h,code+5,4)==hash;
+}
 void maizoSkySelect(const char *path);
 int maizoSkyAvailable(void);
 unsigned maizoSkyMode(void);
@@ -49,4 +62,7 @@ int maizoSkySetMode(unsigned mode);
 int maizoSkyFogAvailable(void);
 unsigned maizoSkyFogMode(void);
 int maizoSkyFogSet(unsigned mode);
+int maizoSkyReloadAvailable(void);
+unsigned maizoSkyReloadMode(void);
+int maizoSkyReloadSet(unsigned mode);
 #endif

@@ -35,7 +35,9 @@ int main(void)
     assert(mzGsRuntimeMode(MZ_DRAW_SCANLINES)==3);
     assert(!mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,4));
     assert(mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,0));
-    assert(!mzGsRuntimeSetMode(MZ_DRAW_AA1,3));
+    assert(mzGsRuntimeSetMode(MZ_DRAW_AA1,MZ_GS_AA1_ADAPTIVE));
+    assert(mzGsRuntimeMode(MZ_DRAW_AA1)==MZ_GS_AA1_ADAPTIVE);
+    assert(!mzGsRuntimeSetMode(MZ_DRAW_AA1,4));
     assert(mzGsRuntimeSetMode(MZ_DRAW_AA1,MZ_GS_FORCE_ON));
     assert(mzGsRuntimeMode(MZ_DRAW_AA1)==MZ_GS_FORCE_ON);
     assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0)==0);

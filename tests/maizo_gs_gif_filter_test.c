@@ -140,7 +140,7 @@ int main(void)
     memcpy(before,buf,32);
     assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-1);
     assert(!memcmp(before,buf,32)); /* no partially patched packets */
-    p.aa1=3;
+    p.aa1=4;
     assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-2);
     assert(!memcmp(before,buf,32));
     init(&p,&s,&st);
@@ -204,6 +204,58 @@ int main(void)
     assert(mzGifApplyFilters(buf,17,&p,&s,&st)==-1);
     assert(mzGifApplyFilters(NULL,32,&p,&s,&st)==-1);
     assert(mzGifApplyFilters(buf,1u<<21,&p,&s,&st)==-1);
+    /* Self-contained opaque triangle with known GS state, one
+     * PRE draw and an explicit original PRIM restoration. */
+    {
+        uint8_t scope[192]={0},orig[192];
+        init(&p,&s,&st);
+        p.aa1=MZ_GS_AA1_ADAPTIVE;
+        mzGifWrite64(scope,tag(5,0,0,0,0,1));
+        mzGifWrite64(scope+8,14u);
+        put_ad(scope+16,0x1a,1);
+        put_ad(scope+32,0x49,0);
+        put_ad(scope+48,0x4c,10ULL<<16);
+        put_ad(scope+64,0x4e,140);
+        put_ad(scope+80,0x47,(1ULL<<16)|(2ULL<<17));
+        mzGifWrite64(scope+96,tag(3,0,1,3,0,1));
+        mzGifWrite64(scope+104,5);
+        mzGifWrite64(scope+160,tag(1,1,0,0,0,1));
+        mzGifWrite64(scope+168,14);
+        put_ad(scope+176,MZ_GS_PRIM,3);
+        memcpy(orig,scope,sizeof(scope));
+        assert(mzGifAdaptiveScope(scope,sizeof(scope))==96);
+        assert(mzGifApplyFilters(scope,sizeof(scope),&p,&s,&st)==0);
+        assert(st.primitive_changes==1);
+        assert(mzGifRead64(scope+96)==(mzGifRead64(orig+96)|(128ULL<<47)));
+        mzGifWrite64(scope+96,mzGifRead64(orig+96));
+        assert(!memcmp(scope,orig,sizeof(scope)));
+        /* Unknown PABE, alpha test, DATE, mask, invalid PSM,
+         * Z writes masked, blended or sprite, ADC, and missing restore
+         * each independently refuse to edit, even with cached state. */
+        for(unsigned i=0;i<10;i++){
+            memcpy(scope,orig,sizeof(scope));
+            switch(i){
+            case 0:put_ad(scope+32,0x49,1);break;
+            case 1:mzGifWrite64(scope+80,mzGifRead64(scope+80)|1);break;
+            case 2:mzGifWrite64(scope+80,mzGifRead64(scope+80)|0x4000);break;
+            case 3:mzGifWrite64(scope+48,mzGifRead64(scope+48)|(1ULL<<32));break;
+            case 4:mzGifWrite64(scope+48,mzGifRead64(scope+48)|(63ULL<<24));break;
+            case 5:mzGifWrite64(scope+64,mzGifRead64(scope+64)|(1ULL<<32));break;
+            case 6:mzGifWrite64(scope+96,tag(3,0,1,3|64,0,1));break;
+            case 7:mzGifWrite64(scope+96,tag(3,0,1,6,0,1));break;
+            case 8:mzGifWrite64(scope+120,1ULL<<47);break;
+            case 9:put_ad(scope+176,MZ_GS_PRIM,0);break;
+            }
+            uint8_t saved[192];memcpy(saved,scope,sizeof(scope));
+            assert(mzGifAdaptiveScope(scope,sizeof(scope))==(size_t)-1);
+            assert(mzGifApplyFilters(scope,sizeof(scope),&p,&s,&st)==0);
+            assert(!st.primitive_changes&&!memcmp(scope,saved,sizeof(scope)));
+        }
+        /* Malformed/truncated packet may never partially edit. */
+        memcpy(scope,orig,sizeof(scope));
+        assert(mzGifApplyFilters(scope,sizeof(scope)-16,&p,&s,&st)==-1);
+        assert(!memcmp(scope,orig,sizeof(scope)));
+    }
     puts("MAIZO GIF filter packet tests: PASS");
     return 0;
 }

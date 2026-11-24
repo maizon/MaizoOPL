@@ -86,7 +86,7 @@ static int mzOverlayPath;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-static int mzSkyMenu,mzSkyFogMenu;
+static int mzSkyMenu,mzSkyFogMenu,mzSkyReloadMenu;
 #endif
 static u64 mzOriginalDisp[2];
 static int mzGameHasGsm;
@@ -122,6 +122,13 @@ static void __attribute__((noinline)) mzEffectsSync(void)
         mzState.effect_caps|=1u<<MZ_EFFECT_FOG;
         mzState.effect_reduced&=~(1u<<MZ_EFFECT_FOG);
         mzState.effect_modes=mzEffectPut(mzState.effect_modes,MZ_EFFECT_FOG,maizoSkyFogMode());
+    }
+    mzSkyReloadMenu=maizoSkyReloadAvailable() &&
+        (!(mzState.effect_caps&(1u<<MZ_EFFECT_SCREEN_BLUR)) || maizoSkyReloadMode()==MZ_EFFECT_OFF);
+    if(mzSkyReloadMenu){
+        mzState.effect_caps|=1u<<MZ_EFFECT_SCREEN_BLUR;
+        mzState.effect_reduced&=~(1u<<MZ_EFFECT_SCREEN_BLUR);
+        mzState.effect_modes=mzEffectPut(mzState.effect_modes,MZ_EFFECT_SCREEN_BLUR,maizoSkyReloadMode());
     }
 #endif
 }
@@ -227,7 +234,7 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(55,11,s->draw_caps&1?4:5,
                !(s->draw_caps&1)?"AA1: N/D":
                ((s->draw_modes&3)==1?"AA1: ON":
-                (s->draw_modes&3)==2?"AA1: OFF":"AA1: JOGO"));
+                (s->draw_modes&3)==2?"AA1: OFF":(s->draw_modes&3)==3?"AA1: AUTO":"AA1: JOGO"));
         mzLine(65,11,s->draw_caps&2?4:5,
                !(s->draw_caps&2)?"BILINEAR: N/D":
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
@@ -279,7 +286,11 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         unsigned start=s->page==MZ_PAGE_EFFECTS_2?7u:0u;
         for(i=0;i<7;i++){
             unsigned id=start+i,cap=s->effect_caps&(1u<<id),mode=mzEffectMode(s->effect_modes,id);
-            char label[CHARS+1],*p=mzCopy(label,effects[id]);
+            const char *name=effects[id];
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+            if(id==MZ_EFFECT_SCREEN_BLUR&&mzSkyReloadMenu)name="BLUR RECARGA";
+#endif
+            char label[CHARS+1],*p=mzCopy(label,name);
             mzCopy(p,!cap?" N/D":mode==MZ_EFFECT_OFF?" OFF":mode==MZ_EFFECT_REDUCED?" REDUZIDO":" JOGO");
             mzLine(25+i*10,11,cap?4:5,label);
         }
@@ -909,6 +920,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             unsigned id=mzState.effect_choice-1,mode=mzEffectMode(mzState.effect_modes,id);
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
             if(id==MZ_EFFECT_FOG&&mzSkyFogMenu)maizoSkyFogSet(mode);
+            else if(id==MZ_EFFECT_SCREEN_BLUR&&mzSkyReloadMenu)maizoSkyReloadSet(mode);
             else
 #endif
                 mzGsEffectSet(id,mode);

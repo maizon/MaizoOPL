@@ -6,7 +6,7 @@
 static inline unsigned mzMageModes(unsigned v)
 {
     v &= 1023u;
-    if ((v & 3u) == 3u) v &= ~3u;
+    /* AA1 3 = adaptive, scoped opaque geometry. */
     if (((v >> 4) & 3u) == 3u) v &= ~(3u << 4);
     if (((v >> 8) & 3u) == 3u) v &= ~(3u << 8);
     return v;

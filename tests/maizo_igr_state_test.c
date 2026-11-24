@@ -48,7 +48,7 @@ int main(void) {
     assert(s.draw_modes==0 && s.draw_changed==0);
     s.draw_caps=1|4; /* AA1 and dithering, NOT bilinear */
     maizoIgrStep(&s,MZ_KEY_OK);
-    assert((s.draw_modes&3u)==1 && (s.draw_changed&1u));
+    assert((s.draw_modes&3u)==3 && (s.draw_changed&1u));
     maizoIgrStep(&s,MZ_KEY_OK);
     assert((s.draw_modes&3u)==2);
     maizoIgrStep(&s,MZ_KEY_OK);

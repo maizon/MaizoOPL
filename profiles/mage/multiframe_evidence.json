@@ -1,0 +1,146 @@
+{
+  "source": "SkyCompact-PCSX2-Compacto.zip",
+  "manifest_entries_verified": 89,
+  "save_state_members_verified": 160,
+  "targeted_trace_events": 120,
+  "trace_instruction_windows_match_gameplay_ram": 120,
+  "trace_instruction_windows_match_menu_ram": 120,
+  "limits": [
+    "Original save states and GIF records verified; no modified game execution",
+    "Trace windows are not causal EE-to-GIF attribution",
+    "Replay index is not physical DMA channel",
+    "Initial frozen GS state not decoded",
+    "No conservative AA1 state candidate under explicit known AC, PABE, Z and alpha constraints in observed PRIM/PRMODE writes; no proof of eligible draw scope"
+  ],
+  "scenes": [
+    {
+      "game": "BLACK",
+      "scene": "efeitos-hud",
+      "serial": "SLUS-21376",
+      "crc": "5C891FF1",
+      "vsync": 8,
+      "gif_tags": 28059,
+      "aa1_writes": 10405,
+      "aa1_on": 0,
+      "lod_eligible": 883,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "BLACK",
+      "scene": "menu",
+      "serial": "SLUS-21376",
+      "crc": "5C891FF1",
+      "vsync": 8,
+      "gif_tags": 28196,
+      "aa1_writes": 10520,
+      "aa1_on": 0,
+      "lod_eligible": 924,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "Burnout3",
+      "scene": "corrida-efeitos",
+      "serial": "SLES-52584",
+      "crc": "FCC72D87",
+      "vsync": 6,
+      "gif_tags": 20406,
+      "aa1_writes": 10098,
+      "aa1_on": 0,
+      "lod_eligible": 348,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "Burnout3",
+      "scene": "menu",
+      "serial": "SLES-52584",
+      "crc": "FCC72D87",
+      "vsync": 8,
+      "gif_tags": 25752,
+      "aa1_writes": 12592,
+      "aa1_on": 0,
+      "lod_eligible": 424,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "GTA-SA",
+      "scene": "menu",
+      "serial": "SLUS-20946",
+      "crc": "9DBFB002",
+      "vsync": 8,
+      "gif_tags": 1872,
+      "aa1_writes": 1508,
+      "aa1_on": 448,
+      "lod_eligible": 0,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "GTA-SA",
+      "scene": "movimento-hud",
+      "serial": "SLUS-20946",
+      "crc": "9DBFB002",
+      "vsync": 12,
+      "gif_tags": 24328,
+      "aa1_writes": 5345,
+      "aa1_on": 36,
+      "lod_eligible": 0,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "Tekken5",
+      "scene": "luta-hud",
+      "serial": "SLUS-21059",
+      "crc": "652050D2",
+      "vsync": 8,
+      "gif_tags": 25020,
+      "aa1_writes": 12798,
+      "aa1_on": 0,
+      "lod_eligible": 0,
+      "sky_hash_dispatch_table_fog_match": null
+    },
+    {
+      "game": "Tekken5",
+      "scene": "menu",
+      "serial": "SLUS-21059",
+      "crc": "652050D2",
+      "vsync": 8,
+      "gif_tags": 28728,
+      "aa1_writes": 14752,
+      "aa1_on": 0,
+      "lod_eligible": 0,
+      "sky_hash_dispatch_table_fog_match": null
+    },
+    {
+      "game": "TheWarriors",
+      "scene": "geometria-transparencia",
+      "serial": "SLUS-21215",
+      "crc": "B99A75DE",
+      "vsync": 12,
+      "gif_tags": 22406,
+      "aa1_writes": 6440,
+      "aa1_on": 0,
+      "lod_eligible": 108,
+      "sky_hash_dispatch_table_fog_match": true
+    },
+    {
+      "game": "TheWarriors",
+      "scene": "menu",
+      "serial": "SLUS-21215",
+      "crc": "B99A75DE",
+      "vsync": 8,
+      "gif_tags": 15844,
+      "aa1_writes": 4284,
+      "aa1_on": 0,
+      "lod_eligible": 96,
+      "sky_hash_dispatch_table_fog_match": true
+    }
+  ],
+  "black_reload_blur": {
+    "elf_and_two_ram_windows_match": true,
+    "address": "0x001c27a0",
+    "original": "0x24020001",
+    "off": "0x24020000",
+    "normalized_fnv": "0x50270b46",
+    "source": "https://github.com/Gabominated/PCSX2/blob/main/PCSX2%20Patches/SLUS-21376_5C891FF1.pnach",
+    "modified_game_tested": false
+  }
+}

@@ -251,3 +251,38 @@ linker and independent map check still require 8 KiB stack; clients
 use the matching shared layout bound. No growth into ramD0. CI tests
 and physical boot with USB/SMB/HDD/VMC/PadEmu are required before
 declaring the experimental variant stable.
+
+## Multiframe evidence and scoped adaptive AA1
+
+The second capture package contains ten original GS streams and ten
+save states (five titles, gameplay and menu). Independently checked
+89 manifest hashes, 160 uncompressed save-state members and 220,611
+GIF tags over 86 VSync records. All eight RenderWare captures matched
+Sky signature, dispatch, table and fog code. Tekken 5 is not matched
+to this Sky route. All 120 targeted instruction windows matched the
+gameplay snapshots, but no packet-exact causal relation is established.
+
+AA1 AUTO (mode 3 in the AA1 field only) now refuses unknown state,
+blending, alpha/destination alpha tests, masked depth/color writes,
+sprites, fixed UV, texture alpha, invalid color format, ADC and
+incomplete primitives. It requires a self-contained opaque PACKED PRE
+draw and an existing final original PRIM restore. The adapter still
+must certify the packet's world geometry and ownership; there is no
+universal commercial hook. Legacy explicit force-on API remains for
+reviewed adapters. The in-game cycle now prefers AUTO, OFF, GAME.
+No candidate was established in the ten recorded streams under the
+strict observed-state prerequisites. This does not prove that no safe
+AA1 geometry exists; the frozen initial GS state is not decoded.
+No visual quality, FPS or compatibility percentage is claimed.
+
+BLACK (SLUS-21376, 5C891FF1) gains a separate experimental reload-blur
+control (shown as BLUR RECARGA in the Screen Blur slot, not global
+screen blur). A publicly documented patch by Gabominated was checked
+against the supplied exact ELF and both new RAM snapshots. A normalized
+nine-word signature and original opcode must match before enabling;
+original/disabled replace only the known instruction while paused,
+with both caches flushed. No change is made at launch, and other
+versions do not advertise this route. The patch has not been run in
+PCSX2 or on console in this change.
+
+Source: https://github.com/Gabominated/PCSX2/blob/main/PCSX2%20Patches/SLUS-21376_5C891FF1.pnach

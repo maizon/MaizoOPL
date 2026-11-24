@@ -6,7 +6,7 @@
 #include "util.h"
 #include <kernel.h>
 static int skyMode=-1;
-static int skyFogReady;
+static int skyFogReady,skyReloadReady;
 static int skyValid(const mz_sky_record_t *p,unsigned mode)
 {
     uint32_t h=mzSkyHash(2166136261u,(const volatile uint32_t *)(uintptr_t)p->set,16);
@@ -22,7 +22,7 @@ void maizoSkySelect(const char *path)
     const mz_sky_record_t *p=&config->MaizoSky;
     unsigned limit=mzSkyLimit((unsigned)config->ModStorageStart,(unsigned)config->ModStorageEnd);
     skyMode=-1;
-    skyFogReady=0;
+    skyFogReady=skyReloadReady=0;
     if(!p->state || !mzGsResident.enabled ||
        _strncmp(path,"cdrom0:\\",8) || _strncmp(path+8,config->GameID,11) ||
        (path[19] && _strcmp(path+19,";1")))return;
@@ -34,6 +34,10 @@ void maizoSkySelect(const char *path)
        *(const volatile uint32_t *)(uintptr_t)(p->dispatch+52u)==p->fog &&
        *(const volatile uint32_t *)(uintptr_t)p->fog==MZ_SKY_FOG_ORIGINAL &&
        mzSkyFogCodeOK((const volatile uint32_t *)(uintptr_t)p->fog,p->fog_hash))skyFogReady=1;
+    if(skyMode>=0 && p->reload_blur_hash && p->reload_blur>=16u &&
+       mzSkyRange(p->reload_blur-16u,36,limit) &&
+       *(const volatile uint32_t *)(uintptr_t)p->reload_blur==MZ_SKY_RELOAD_ORIGINAL &&
+       mzSkyReloadCodeOK((const volatile uint32_t *)(uintptr_t)(p->reload_blur-16u),p->reload_blur_hash))skyReloadReady=1;
 }
 int maizoSkyAvailable(void)
 {
@@ -77,6 +81,30 @@ int maizoSkyFogSet(unsigned mode)
     volatile uint32_t *code=(volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.fog;
     uint32_t desired=mode==2u?MZ_SKY_FOG_OFF:MZ_SKY_FOG_ORIGINAL;
     if((mode!=0u && mode!=2u)||!maizoSkyFogAvailable())return 0;
+    if(*code!=desired){
+        *code=desired;
+        FlushCache(0);
+        FlushCache(2);
+    }
+    return 1;
+}
+
+int maizoSkyReloadAvailable(void)
+{
+    const mz_sky_record_t *p=&g_ee_core_config.MaizoSky;
+    return skyReloadReady && skyMode>=0 &&
+           mzSkyReloadCodeOK((const volatile uint32_t *)(uintptr_t)(p->reload_blur-16u),p->reload_blur_hash);
+}
+unsigned maizoSkyReloadMode(void)
+{
+    return maizoSkyReloadAvailable() &&
+           *(const volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.reload_blur==MZ_SKY_RELOAD_OFF?2u:0u;
+}
+int maizoSkyReloadSet(unsigned mode)
+{
+    volatile uint32_t *code=(volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.reload_blur;
+    uint32_t desired=mode==2u?MZ_SKY_RELOAD_OFF:MZ_SKY_RELOAD_ORIGINAL;
+    if((mode!=0u && mode!=2u)||!maizoSkyReloadAvailable())return 0;
     if(*code!=desired){
         *code=desired;
         FlushCache(0);
