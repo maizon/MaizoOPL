@@ -1,0 +1,39 @@
+name: MAIZO In-Game PRO experimental build (stack guarded)
+
+on:
+  push:
+    branches: [feat/recovery-b-ingame-pro-safe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protected-ingame:
+    runs-on: ubuntu-latest
+    container: ghcr.io/ps2homebrew/ps2homebrew:main
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Python build requirements
+        run: python3 -m pip install --break-system-packages -r requirements.txt
+      - name: Build the complete In-Game PRO without compromising the EE stack
+        run: |
+          set -o pipefail
+          make clean
+          make --trace release MAIZO_IGR_EXPERIMENTAL=1 2>&1 | tee build-igr-experimental.log
+      - name: Upload diagnostic build log (including memory budget)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAIZO-IGR-EXPERIMENTAL-LOG
+          path: build-igr-experimental.log
+          if-no-files-found: warn
+      - name: Upload optional In-Game ELF, only if memory guard passes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAIZO-IGR-EXPERIMENTAL-ELF
+          path: OPNPS2LD-*.ELF
+          if-no-files-found: error
