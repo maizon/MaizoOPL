@@ -10,6 +10,17 @@ permissions:
 
 jobs:
   protected-ingame:
+    name: EE size guard (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: oz
+            flags: "-Oz"
+          - variant: oz-no-once
+            flags: "-Oz -fno-inline-functions-called-once"
+          - variant: os-no-once
+            flags: "-Os -fno-inline-functions-called-once"
     runs-on: ubuntu-latest
     container: ghcr.io/ps2homebrew/ps2homebrew:main
     steps:
@@ -19,21 +30,31 @@ jobs:
       - name: Install Python build requirements
         run: python3 -m pip install --break-system-packages -r requirements.txt
       - name: Build the complete In-Game PRO without compromising the EE stack
+        env:
+          MAIZO_EE_SIZE_FLAGS: ${{ matrix.flags }}
         run: |
           set -o pipefail
           make clean
           make --trace release MAIZO_IGR_EXPERIMENTAL=1 2>&1 | tee build-igr-experimental.log
+      - name: Resident memory diagnostics (even on guard failure)
+        if: always()
+        run: |
+          if test -f ee_core/ee_core.map; then
+            grep -E '^\.(text|rodata|data|bss|sbss|sdata)|_end_bss' ee_core/ee_core.map || true
+          fi
       - name: Upload diagnostic build log (including memory budget)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: MAIZO-IGR-EXPERIMENTAL-LOG
-          path: build-igr-experimental.log
+          name: MAIZO-IGR-EXPERIMENTAL-LOG-${{ matrix.variant }}
+          path: |
+            build-igr-experimental.log
+            ee_core/ee_core.map
           if-no-files-found: warn
       - name: Upload optional In-Game ELF, only if memory guard passes
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: MAIZO-IGR-EXPERIMENTAL-ELF
+          name: MAIZO-IGR-EXPERIMENTAL-ELF-${{ matrix.variant }}
           path: OPNPS2LD-*.ELF
           if-no-files-found: error

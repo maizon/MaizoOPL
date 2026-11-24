@@ -56,7 +56,7 @@ extern u16 GSMDestSetGsCrt[3];
 extern volatile u32 MaizoNativeMask;
 extern volatile u64 MaizoNativeSource[2],MaizoNativeTarget[2];
 extern volatile u32 MaizoGsMonitorOnly;
-extern volatile u32 MaizoGs480iMode;
+extern volatile u32 MaizoGs480iMode,MaizoGs480iArmed;
 extern u32 MaizoGs480iOriginalFix;
 extern u64 MaizoGs480iOriginalSMODE2;
 extern volatile u32 MaizoGsFilterMode;
@@ -90,7 +90,7 @@ static const u8 mzColors[6][3] = {
     {252, 182, 101}   /* warning */
 };
 
-static void __attribute__((noinline)) mzLine(int y, int x, int color, const char *s)
+static void mzLine(int y, int x, int color, const char *s)
 {
     mz_line_t *l;
     int i;
@@ -118,7 +118,7 @@ static char *mzNumber(char *dst, int n)
     while(len)*dst++=temp[--len];
     *dst=0;return dst;
 }
-static void __attribute__((noinline)) mzValue(int row,const char *name,int number,int suffix)
+static void mzValue(int row,const char *name,int number,int suffix)
 {
     char temp[CHARS + 1],*p=mzCopy(temp,name);
     p=mzCopy(p," ");
@@ -198,7 +198,7 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(85,11,4,"GS AO VIVO >");
         mzLine(95,11,s->frame480i_caps?4:5,
                s->frame480i_caps?
-               (s->frame480i_mode?"480P>480I ON":"480P>480I OFF"):
+               (s->frame480i_mode?(MaizoGs480iMode?"480P>480I ATIVO":"480P>480I ARMADO"):"480P>480I OFF"):
                "480P>480I N/D");
         mzLine(105,11,4,"VOLTAR");
     }else if(s->page==MZ_PAGE_GS_STATUS){
@@ -250,7 +250,7 @@ static void mzPut(u8 *dest,int color)
         if(mzBpp==4)dest[3]=0x80;
     }
 }
-static void __attribute__((noinline)) mzRenderLine(u8 *dest,int y)
+static void mzRenderLine(u8 *dest,int y)
 {
     const mz_line_t *active[4];int n=0,i,x;
     int uy=y/mzSy;
@@ -283,7 +283,7 @@ static void __attribute__((noinline)) mzRenderLine(u8 *dest,int y)
  * do not reject the entire menu for this common layout. Resolve one
  * actually enabled, VRAM-bounded circuit, preferring read circuit 1.
  */
-static int __attribute__((noinline)) mzFrame(void)
+static int mzFrame(void)
 {
     const u64 *r=GSMSourceGSRegs;
     mz_igr_frame_t f;
@@ -316,7 +316,7 @@ int maizoIGR_Preflight(void)
            mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                              *MZ_VIF1_STAT,*MZ_GIF_STAT);
 }
-static int __attribute__((noinline)) mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
+static int mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
 {
     int i;
     for(i=0;i<2000000;i++)
@@ -450,7 +450,7 @@ static u64 mzOutputSource(int index, int fix)
 /* The game must NATIVELY render progressive 480p into a full-height
  * frame buffer while GSM produces NTSC 480i. A field-mode renderer
  * cannot be converted to a 480p renderer by changing SMODE2 alone. */
-static int __attribute__((noinline)) mzFrame480iCaps(void)
+static int __attribute__((noinline)) mzFrame480iSourceOK(void)
 {
     const u64 *r=GSMSourceGSRegs;
     return mzGs480iBridgeCaps(
@@ -463,12 +463,24 @@ static int __attribute__((noinline)) mzFrame480iCaps(void)
  * GS scanout mode and its GSM shadow; never touch per-game primitives,
  * frame buffer layout, DISPLAY/DISPFB or GS timing mode (NTSC stays
  * NTSC). Hook_SetGsCrt rolls back this opt-in on CRT mode changes. */
+static int mzFrame480iCaps(void)
+{
+    return MaizoGs480iArmed ||
+        mzGs480iArmCaps(GSMSourceSetGsCrt[0],GSMSourceSetGsCrt[1],
+                       GSMDestSetGsCrt[0],GSMDestSetGsCrt[1]);
+}
 static int __attribute__((noinline)) mzFrame480iApply(int enabled)
 {
     u64 value;
     if(enabled){
         if(!mzFrame480iCaps())return 0;
         if(MaizoGs480iMode)return 1;
+        if(GSMSourceSetGsCrt[0]==1 && GSMSourceSetGsCrt[1]==2){
+            MaizoGs480iArmed=1;
+            return 1; /* native 480i: no changes to scanout */
+        }
+        if(!mzFrame480iSourceOK())return 0;
+        MaizoGs480iArmed=1;
         MaizoGs480iOriginalSMODE2=GSMDestGSRegs[2];
         MaizoGs480iOriginalFix=(u32)GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET];
         value=mzGs480iFrameSMODE2(GSMDestGSRegs[2]);
@@ -476,6 +488,7 @@ static int __attribute__((noinline)) mzFrame480iApply(int enabled)
         GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]=1;
         MaizoGs480iMode=1;
     }else{
+        MaizoGs480iArmed=0;
         if(!MaizoGs480iMode)return 1;
         /* Stop enforcing the scanout override before restoring. */
         MaizoGs480iMode=0;
@@ -487,7 +500,7 @@ static int __attribute__((noinline)) mzFrame480iApply(int enabled)
     asm volatile("sync.l");
     return 1;
 }
-static int __attribute__((noinline)) mzFilterCapabilities(void)
+static int mzFilterCapabilities(void)
 {
     u64 pmode=mzOutputSource(0,GSMFlags[9]);
     u64 smode=mzOutputSource(2,GSMFlags[MAIZO_GSM_SMODE2_FIX_OFFSET]);
@@ -582,7 +595,7 @@ static void mzBpcRestore(u32 old)
 /* Keep polling independent of sleeping game threads and masked game
  * IRQs. COP0 Count is read via the existing kernel syscall; the finite
  * iteration bound also protects against a title resetting the counter. */
-static void __attribute__((noinline)) mzPollDelay(void)
+static void mzPollDelay(void)
 {
     u32 start=GetCop0(9);
     unsigned int i;
@@ -625,7 +638,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4);
     mzState.draw_changed=0;
     mzState.frame480i_caps=mzGameHasGsm?mzFrame480iCaps():0;
-    mzState.frame480i_mode=!!MaizoGs480iMode;
+    mzState.frame480i_mode=!!MaizoGs480iArmed;
     mzState.frame480i_changed=0;
     if(!mzGameHasGsm){
         if(!MaizoNativeMask)
@@ -647,7 +660,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     /* If a game changed its readout layout without SetGsCrt, restore
      * before touching more VRAM. Fail closed instead of pretending
      * a 224-line title has a native 480-line render buffer. */
-    if(MaizoGs480iMode && !mzFrame480iCaps()){
+    if(MaizoGs480iMode && !mzFrame480iSourceOK()){
         mzFrame480iApply(0);
         mzState.frame480i_mode=0;
     }
@@ -715,7 +728,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             int desired=(int)mzState.frame480i_mode;
             mzState.frame480i_changed=0;
             if(!mzFrame480iApply(desired))
-                mzState.frame480i_mode=!!MaizoGs480iMode;
+                mzState.frame480i_mode=!!MaizoGs480iArmed;
             mzState.frame480i_caps=mzFrame480iCaps();
         }
         if(mzState.draw_changed){

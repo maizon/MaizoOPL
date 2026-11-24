@@ -93,6 +93,8 @@ MaizoGsFilterBaseDisplay: .dword 0
 # Opt-in, console readout mode only. No new rendering, no DTV 480p output.
 .globl MaizoGs480iMode
 MaizoGs480iMode: .word 0
+.globl MaizoGs480iArmed
+MaizoGs480iArmed: .word 0
 .globl MaizoGs480iOriginalFix
 MaizoGs480iOriginalFix: .word 0
 .p2align 3
@@ -229,6 +231,39 @@ maizo_native_setcrt_done:
     lh      $a0, Target_INT($v0)
     lh      $a1, Target_MODE($v0)
     lh      $a2, Target_FFMD($v0)
+    # Preserve the user's arm across SetGsCrt. Only activate the FRAME
+    # override for a real 480p request and an already forced NTSC target.
+    la      $t3, MaizoGs480iArmed
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_480i_arm_done
+    li      $t4, 2
+    bne     $a1, $t4, maizo_480i_arm_done
+    li      $t4, 1
+    bne     $a0, $t4, maizo_480i_arm_done
+    nop
+    la      $t3, GSMSourceSetGsCrt
+    lh      $t4, Source_INT($t3)
+    bnez    $t4, maizo_480i_arm_done
+    lh      $t4, Source_MODE($t3)
+    li      $t3, 0x50
+    bne     $t4, $t3, maizo_480i_arm_done
+    nop
+    la      $t3, GSMDestGSRegs
+    ld      $t4, Target_SMODE2($t3)
+    la      $t5, MaizoGs480iOriginalSMODE2
+    sd      $t4, 0($t5)
+    ori     $t4, $t4, 3
+    sd      $t4, Target_SMODE2($t3)
+    la      $t3, GSMFlags
+    lbu     $t4, SMODE2_fix($t3)
+    la      $t5, MaizoGs480iOriginalFix
+    sw      $t4, 0($t5)
+    li      $t4, 1
+    sb      $t4, SMODE2_fix($t3)
+    la      $t3, MaizoGs480iMode
+    sw      $t4, 0($t3)
+    li      $a2, 1
+maizo_480i_arm_done:
     sync.l                                          # Wait for any outstanding stores to registers to complete before calling SetGsCrt. A lot of games were made compatible because of this.
 
 # -----------------------------------------------------------------------------------------

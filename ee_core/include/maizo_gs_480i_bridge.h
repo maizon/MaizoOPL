@@ -19,6 +19,18 @@
 
 enum { MZ_480I_NATIVE_NTSC = 0x02, MZ_480I_SOURCE_480P = 0x50 };
 
+/* Arm before the progressive scan option is selected in the game.
+ * The already configured NTSC GSM output is the only supported target
+ * here. Arming alone must not modify a native 480i framebuffer. */
+static inline int mzGs480iArmCaps(unsigned int game_interlace,
+                                  unsigned int game_mode,
+                                  unsigned int target_interlace,
+                                  unsigned int target_mode)
+{
+    return target_interlace == 1u && target_mode == MZ_480I_NATIVE_NTSC &&
+        ((game_interlace == 1u && game_mode == MZ_480I_NATIVE_NTSC) ||
+         (game_interlace == 0u && game_mode == MZ_480I_SOURCE_480P));
+}
 static inline uint64_t mzGs480iFrameSMODE2(uint64_t original)
 {
     /* Modify ONLY INT / FFMD. Keep the DPMS and other register bits. */
