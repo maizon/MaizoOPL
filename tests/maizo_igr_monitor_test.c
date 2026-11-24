@@ -31,6 +31,14 @@ int main(void)
     assert(f.x==160 && f.y==49);
     assert(!mzIgrResolveFrame(&f,3u,0,0,
                               disp(640,224,4),disp(640,224,4),3,0));
+    /* Independent display buffers: fixed alpha selects visible RC2. */
+    assert(mzIgrResolveFrame(&f,3u|0x20u,fb,fb|256u,
+                             disp(640,224,4),disp(640,224,4),3,0));
+    assert(f.fbbase==(256u*32u));
+    assert(mzIgrResolveFrame(&f,3u|0x20u|(0xc0u<<8),fb,fb|256u,
+                             disp(640,224,4),disp(640,224,4),3,0));
+    assert(f.fbbase==0);
+
     assert(!mzIgrMonitorFrame(&f,3u,fb,fb|((uint64_t)1u<<15),
                               disp(640,224,4),disp(640,224,4),3,0));
     assert(!mzIgrMonitorFrame(&f,3u,fb,fb,

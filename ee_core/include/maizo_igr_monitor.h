@@ -103,6 +103,15 @@ MZ_IGR_FN int mzIgrResolveFrame(mz_igr_frame_t *out,
     if(mzIgrMonitorFrame(out,pm,fb1,fb2,d1,d2,sm,legacy_gsm_height))
         return 1;
     if((pm&3ULL)!=3ULL)return 0;
+    /* When mixing distinct surfaces with a FIXED ALP value, an
+     * ALP below 0x80 means circuit 2 dominates the displayed pixel.
+     * Drawing only on circuit 1 could look like a no-op. Never
+     * guess: both candidate readouts undergo full bounds checks. */
+    if(!(pm&0x80ULL) && (pm&0x20ULL) &&
+       ((pm>>8)&0xffULL)<128ULL){
+        return mzIgrMonitorFrame(out,(pm&~3ULL)|2ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height) ||
+               mzIgrMonitorFrame(out,(pm&~3ULL)|1ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height);
+    }
     return mzIgrMonitorFrame(out,(pm&~3ULL)|1ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height) ||
            mzIgrMonitorFrame(out,(pm&~3ULL)|2ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height);
 }
