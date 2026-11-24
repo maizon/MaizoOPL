@@ -510,3 +510,24 @@ SPU2 operations are added. Full pixel backup/restore, audio restoration,
 exact GS internal state and the separately loaded overlay remain open;
 these require a bounded IOP mailbox and hardware validation before default
 enablement. No 99% claim is supported by host tests alone.
+
+## Restoration laboratory (opt-in build only)
+
+MAIZO_IGR_RESTORE_EXPERIMENTAL=1 adds a separate IOP module for an
+on-demand panel buffer (max 322560 bytes), bounded SIF DMA requests
+with sequence numbers and resident staging, and SPU2 master volume/
+voice pitch hold with conditional restore and an inactivity lease.
+No new RPC during pause. The normal PRO build does not include it.
+GS readback is restricted to idle PATH3 without MFIFO; no DMA channel
+is borrowed. Restore the panel on ordinary resume or menu abort.
+A timeout during reverse FIFO transfer remains an experimental risk:
+the internal GS transfer state is not readable, and the code cannot
+promise exact restoration of arbitrary in-flight GS commands. Audio
+AutoDMA and envelope phase are not frozen by pitch hold. The EE overlay
+is still resident; separate IRX is the restoration helper, not a
+separately loaded EE menu. A fixed-address EE overlay requires a
+versioned ABI and verified module-arena reservation, not an arbitrary
+game RAM address. No Freeze Analyzer. Hardware testing required.
+
+References: RIPPS2/RiptOPL igrmbox and igrmenu (AFL-3.0), PS2SDK
+screenshot.c, PS2tek GS transfers and VIF1 STAT.

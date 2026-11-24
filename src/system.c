@@ -56,6 +56,10 @@ extern unsigned int size_eecore_elf;
 #ifdef MAIZO_IGR_MENU
 extern unsigned char eecore_fallback_elf[];
 extern unsigned int size_eecore_fallback_elf;
+#ifdef MAIZO_IGR_RESTORE
+extern unsigned char maizo_restore_irx[];
+extern unsigned int size_maizo_restore_irx;
+#endif
 static char mzProfileID[12];
 static u32 mzProfileValue;
 /* Two independent slots: an interrupted write cannot truncate the
@@ -695,6 +699,13 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 #endif
 
     modcount += addIopPatch(mode_str, startup, &irxptr_tab[modcount]);
+#ifdef MAIZO_IGR_RESTORE
+    /* Optional and last: remove on legacy fallback before copying IRXs. */
+    if(!*fallback){
+        irxptr_tab[modcount].info=size_maizo_restore_irx|SET_OPL_MOD_ID(OPL_MODULE_ID_MAIZO_RESTORE);
+        irxptr_tab[modcount++].ptr=maizo_restore_irx;
+    }
+#endif
 
 #ifdef MAIZO_IGR_MENU
     {
@@ -708,6 +719,14 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
              * game-specific high storage addresses unchanged. */
             base=MZ_EE_LEGACY_TOP;
             *fallback=1;
+#ifdef MAIZO_IGR_RESTORE
+            if(modcount && GET_OPL_MOD_ID(localTable[modcount-1].info)==OPL_MODULE_ID_MAIZO_RESTORE){
+                modcount--;
+                footprint=(sizeof(irxtab_t)+sizeof(irxptr_t)*modcount+15u)&~15u;
+                for(i=0;i<modcount;i++)footprint+=(GET_OPL_MOD_SIZE(localTable[i].info)+15u)&~15u;
+                footprint=(footprint+63u)&~63u;
+            }
+#endif
         }
         limit=base>=0x00100000u?(unsigned int)GetMemorySize():
             (*fallback?0x00100000u:MZ_EE_LOW_LIMIT);

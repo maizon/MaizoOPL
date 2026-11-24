@@ -1,0 +1,34 @@
+name: MAIZO In-Game PRO restoration laboratory
+on:
+  push:
+    branches: [feat/recovery-b-ingame-pro-safe]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    container: ghcr.io/ps2homebrew/ps2homebrew:main
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --break-system-packages -r requirements.txt
+      - name: Build opt-in restoration ELF with existing stack guard
+        run: |
+          set -o pipefail
+          make clean
+          make --trace release MAIZO_IGR_EXPERIMENTAL=1 MAIZO_MAGE_SKY_EXPERIMENTAL=1 MAIZO_IGR_RESTORE_EXPERIMENTAL=1 2>&1 | tee restore.log
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: MAIZO-IGR-RESTORE-EXPERIMENTAL
+          path: OPNPS2LD-*.ELF
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: MAIZO-RESTORE-BUILD-ERROR
+          path: |
+            restore.log
+            ee_core/ee_core.map

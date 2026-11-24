@@ -30,6 +30,9 @@
 #include "maizo_igr_gsm_layout.h"
 #include "maizo_igr_pipeline.h"
 #include "maizo_igr_input.h"
+#ifdef MAIZO_IGR_RESTORE
+#include "maizo_restore.h"
+#endif
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -521,6 +524,67 @@ static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t 
      * overlay IMAGE packet is still queued. */
     return mzOverlayDrain();
 }
+#ifdef MAIZO_IGR_RESTORE
+/* Experimental panel readback: use only an idle PATH3 capture without
+ * MFIFO. No borrowed DMA, no pending FINISH may be consumed. The
+ * reverse FIFO is drained in complete quadwords before restoring
+ * BUSDIR and IMR. Internal transfer registers are write-only; do not
+ * claim a complete GS snapshot. */
+#define MZR_BUSDIR ((vu64 *)0x12001040)
+static int __attribute__((noinline)) mzReadLine(u32 *p,int y)
+{
+    u64 q[12] __attribute__((aligned(16)));
+    u32 n=PW*mzSx*mzBpp/16u;
+    u64 imr;
+    int ok=0;
+    if((*MZ_GS_CSR&2u)||!mzOverlayDrain()||(*MZ_VIF1_STAT&0x1f803f0fu))return 0;
+    imr=GsGetIMR();
+    GsPutIMR(imr|0x200u);
+    q[0]=5u|(1ull<<15)|(1ull<<60);q[1]=0xe;
+    q[2]=(u64)mzBp|((u64)mzBw<<16)|((u64)mzPsm<<24);q[3]=0x50;
+    q[4]=(u64)mzX|((u64)(mzY+y)<<16);q[5]=0x51;
+    q[6]=(u64)(PW*mzSx)|(1ull<<32);q[7]=0x52;
+    q[8]=0;q[9]=0x61;
+    q[10]=1;q[11]=0x53;
+    if(!mzGifFifo((u32 *)q,6))goto done;
+    for(u32 i=0;i<2000000u;i++)if(*MZ_GS_CSR&2u){ok=1;break;}
+    if(!ok)goto done;
+    *MZ_VIF1_STAT=0x800000u;*MZR_BUSDIR=1;
+    asm volatile("sync.l");
+    for(u32 i=0;i<n;i++,p+=4){
+        u32 k;
+        for(k=0;k<2000000u;k++)if(*MZ_VIF1_STAT&0x1f000000u)break;
+        if(k==2000000u){ok=0;break;}
+        asm volatile("lq $8,0(%0)\n\tsq $8,0(%1)\n\tsync.l"::"r"(0x10005000u),"r"(p):"$8","memory");
+    }
+    *MZ_VIF1_STAT=0;*MZR_BUSDIR=0;
+done:
+    if(*MZ_GS_CSR&2u)*MZ_GS_CSR=2u; /* only our event; none present on entry */
+    GsPutIMR(imr);
+    asm volatile("sync.l");
+    return ok;
+}
+static int mzBackup(u32 *p)
+{
+    u32 len=PW*mzSx*mzBpp, h=PH*mzSy;
+    if(mzOverlayPath!=3 || (*MZ_D_CTRL&12u) || !mzRestoreBegin(len*h))return 0;
+    for(u32 y=0;y<h;y++){
+        if(!mzReadLine(p,y)||!mzRestoreWrite(y*len,p,len)){
+            mzRestoreEnd();return -1;
+        }
+        mzRestoreKeep();
+    }
+    return 1;
+}
+static int mzRestorePixels(u32 *p)
+{
+    u32 len=PW*mzSx*mzBpp,h=PH*mzSy;
+    for(u32 y=0;y<h;y++){
+        if(!mzRestoreRead(y*len,p+28,len)||!mzSendLine(p,y))return 0;
+    }
+    return mzOverlayDrain();
+}
+#endif
 /* Writable GS DISPLAY parameters are not free-form resampling. Keep small
  * offsets, clamp fields, and preserve the original MAGH/MAGV / mode bits. */
 static u64 mzDisplayEdit(u64 base,const maizo_igr_state_t *s)
@@ -836,6 +900,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     int haveFrame=0,armed=0;
     int result=MAIZO_IGR_RESUME;
     int first;
+#ifdef MAIZO_IGR_RESTORE
+    int backup=0;
+#endif
     if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
     mzGameHasGsm=!!config->EnableGSMOp;
     if(!mzStateReady){
@@ -885,8 +952,15 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         mzState.frame480i_mode=0;
     }
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
+#ifdef MAIZO_IGR_RESTORE
+    backup=mzBackup(p);
+    if(backup<0){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+#endif
     first=mzDraw(p,&mzState);
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+#ifdef MAIZO_IGR_RESTORE
+    mzRestoreHush();
+#endif
     if(!mzGameHasGsm && !mzState.native_field_caps)MaizoNativeFieldInvert=0;
     /* Restore saved settings only AFTER the first complete draw. A
      * failed opening must not activate a saved native override. */
@@ -928,6 +1002,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzDisplayRequestSync();
     for(;;){
         int action,oldPage=mzState.page,oldSelected=mzState.selected;
+#ifdef MAIZO_IGR_RESTORE
+        mzRestoreKeep();
+#endif
         yield();
         if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame && now==prev)){
             /* A dead pad stream must not strand the game in suspended
@@ -1042,6 +1119,12 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         }
     }
 cleanup:
+#ifdef MAIZO_IGR_RESTORE
+    if(backup>0 && (result==MAIZO_IGR_RESUME || result==MAIZO_IGR_UNAVAILABLE)){
+        if(!mzRestorePixels(p))result=MAIZO_IGR_UNAVAILABLE;
+    }
+    mzRestoreEnd();
+#endif
     /* No DMA channel or D_STAT bits were modified. PATH2 changes
      * VIF CODE; every submitted packet is complete. */
     if(!mzOverlayDrain())result=MAIZO_IGR_UNAVAILABLE;

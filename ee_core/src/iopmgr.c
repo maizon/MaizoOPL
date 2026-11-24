@@ -19,6 +19,9 @@
 #ifdef MAIZO_IGR_MENU
 #include "padhook.h"
 #endif
+#ifdef MAIZO_IGR_RESTORE
+#include "maizo_restore.h"
+#endif
 
 extern int _iop_reboot_count;
 static int imgdrv_offset_ioprpimg = 0;
@@ -223,6 +226,9 @@ int New_Reset_Iop(const char *arg, int arglen)
     }
 #endif
 
+    #ifdef MAIZO_IGR_RESTORE
+    mzRestoreLink(iop_reboot_count>=2 && config->EnableMaizoIgrMenu);
+    #endif
     DPRINTF("Exiting services...\n");
     SifExitIopHeap();
     LoadFileExit();

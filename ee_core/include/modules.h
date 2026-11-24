@@ -39,6 +39,7 @@ enum OPL_MODULE_ID {
     // Special patches
     OPL_MODULE_ID_IOP_PATCH,
 
+    OPL_MODULE_ID_MAIZO_RESTORE,
     OPL_MODULE_ID_COUNT
 };
 

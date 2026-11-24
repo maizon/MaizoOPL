@@ -221,6 +221,10 @@ ifneq ($(DEBUG),1)
 ifneq ($(DTL_T10000),1)
   EE_CFLAGS += -DMAIZO_IGR_MENU
   EECORE_OBJS += ee_core_fallback.o
+  ifeq ($(MAIZO_IGR_RESTORE_EXPERIMENTAL),1)
+    EE_CFLAGS += -DMAIZO_IGR_RESTORE
+    EECORE_OBJS += maizo_restore.o
+  endif
 endif
 endif
 endif
@@ -303,6 +307,7 @@ clean:	download_lwNBD
 	$(MAKE) -C modules/iopcore/cdvdfsv clean
 	echo " -resetspu"
 	$(MAKE) -C modules/iopcore/resetspu clean
+	$(MAKE) -C modules/iopcore/maizo_restore clean
 	echo "  -patches"
 	echo "   -iremsnd"
 	$(MAKE) -C modules/iopcore/patches/iremsndpatch clean
@@ -498,6 +503,12 @@ modules/iopcore/patches/cleareffects/cleareffects.irx: modules/iopcore/patches/c
 
 $(EE_ASM_DIR)cleareffects.c: modules/iopcore/patches/cleareffects/cleareffects.irx | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ $(*F)_irx
+
+modules/iopcore/maizo_restore/maizo_restore.irx: $(wildcard modules/iopcore/maizo_restore/*) modules/iopcore/common/maizo_restore.h
+	$(MAKE) -C modules/iopcore/maizo_restore
+
+$(EE_ASM_DIR)maizo_restore.c: modules/iopcore/maizo_restore/maizo_restore.irx | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ maizo_restore_irx
 
 modules/iopcore/resetspu/resetspu.irx: modules/iopcore/resetspu
 	$(MAKE) -C $<
