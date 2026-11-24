@@ -41,7 +41,12 @@ int main(void)
     assert(!mzIgrMonitorFrame(&f,1u,fb|((uint64_t)31u<<15),0,
                               disp(640,224,4),0,1,0));
     assert(!mzIgrMonitorFrame(&f,1u,fb,0,disp(640,100,4),0,1,0));
-    assert(!mzIgrMonitorFrame(&f,1u,fb,0,disp(640,224,4),0,3,1));
+    assert(mzIgrMonitorFrame(&f,1u,fb,0,disp(640,224,4),0,3,1));
+    assert(f.height==224 && f.y==49);
+    assert(mzIgrMonitorFrame(&f,1u,fb,0,disp(640,448,4),0,3,0));
+    assert(f.height==224 && f.y==49);
+    assert(mzIgrMonitorFrame(&f,1u,fb,0,disp(640,480,4),0,3,0));
+    assert(f.height==240 && f.y==57);
     assert(mzIgrMonitorFrame(&f,1u,fb,0,disp(640,224,4),0,3,0));
     assert(f.height==224 && f.y==49);
     assert(!mzIgrMonitorFrame(&f,1u,fb|500u,0,disp(640,224,4),0,1,0));

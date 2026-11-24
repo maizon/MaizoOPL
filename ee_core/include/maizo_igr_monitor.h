@@ -69,9 +69,12 @@ MZ_IGR_FN int mzIgrMonitorFrame(mz_igr_frame_t *out,
     magv=(uint32_t)((display>>27)&3ULL)+1u;
     w=((uint32_t)((display>>32)&4095ULL)+1u)/magh;
     h=((uint32_t)((display>>44)&2047ULL)+1u)/magv;
-    /* Preserve old GSM overlay coordinates. Passive monitor uses the
-     * true DISPLAY.DH (a 224-line FRAME must not become 112 lines). */
-    if(legacy_gsm_height && (smode2&3ULL)==3ULL)h/=2u;
+    /* DISPLAY.DH is the *output* field raster. Interlaced FRAME
+     * scanout commonly reports 448/480 output lines while its VRAM
+     * buffer is 224/240: halve only those full-height readouts.
+     * Some games already program DH=224; never halve it to 112. */
+    (void)legacy_gsm_height;
+    if((smode2&3ULL)==3ULL && h>=260u)h/=2u;
     if(!fbw || dbx>=fbw*64u || dby>2047u || !h)return 0;
     if(w>fbw*64u-dbx)w=fbw*64u-dbx;
     if(w<168u || h<130u || h>1024u)return 0;
