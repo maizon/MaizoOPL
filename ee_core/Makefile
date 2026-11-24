@@ -44,15 +44,19 @@ EE_CFLAGS += -D__LOAD_DEBUG_MODULES
     endif
 endif
 
-# IGS and the overlay each need scarce protected EE-core RAM.
-# Keep IGS variants unmodified; use the overlay in the standard build.
-# EESIO debugging adds enough tracing code to overflow ram84 if the
-# experimental overlay is also linked. Fall back to stock IGR ONLY for
-# this diagnostic variant; release, normal debug and PADEMU retain menu.
+# Hardware regression quarantine: Beta-39 e75bc88 launches games,
+# while Beta-82 855d948 black-screens before gameplay with GSM, PadEmu
+# and In-Game toggled OFF. To isolate the resident EE-core footprint,
+# build the original OPL IGR by default in THIS DIAGNOSTIC BRANCH.
+# Experimental overlay remains available for explicit compiler testing:
+#   make MAIZO_IGR_EXPERIMENTAL=1
+# No feature/UI preference may silently install the overlay otherwise.
+ifeq ($(MAIZO_IGR_EXPERIMENTAL),1)
 ifneq ($(IGS),1)
 ifneq ($(EESIO_DEBUG),1)
 EE_OBJS += maizo_igrmenu.o maizo_gs_runtime.o
 EE_CFLAGS += -DMAIZO_IGR_MENU
+endif
 endif
 endif
 
@@ -86,6 +90,8 @@ $(EE_OBJS_DIR)%.o : $(EE_SRC_DIR)%.s
 
 $(EE_BIN) : $(EE_OBJS)
 	$(EE_CC) $(EE_CFLAGS) $(EE_LDFLAGS) -o $(EE_BIN) $(EE_OBJS) $(EE_LIBS)
+	@echo "=== EE CORE MEMORY MAP (diagnostic) ==="
+	@grep -E '(_end_bss|_stack_size|_stack =)' $(MAPFILE) | tail -n 8 || true
 
 all: $(EE_BIN)
 
