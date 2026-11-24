@@ -40,5 +40,13 @@ jobs:
           /tmp/mage-geometry
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_profile_test.c -o /tmp/mage-profile-geometry
           /tmp/mage-profile-geometry
+      - name: MAEC optional effect capability, restore and arena regression
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_effects_test.c -o /tmp/maec
+          /tmp/maec
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_ee_layout_test.c -o /tmp/maec-arena
+          /tmp/maec-arena
+          python3 tests/check_ee_core_stack_test.py
+          python3 tests/maizo_mage_inspect_test.py
       - name: Existing exact-revision installer
         run: python3 tests/maizo_gs_install_elf_test.py

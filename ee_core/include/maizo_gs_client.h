@@ -6,6 +6,7 @@
 #define MZ_GS_CLIENT 1
 #include "maizo_gs_shadow.h"
 #include "maizo_gs_scanlines.h"
+#include "maizo_ee_layout.h"
 
 static inline int mzGsClientBindRange(void *base,size_t bytes)
 {
@@ -27,7 +28,7 @@ static inline int mzGsClientBindRange(void *base,size_t bytes)
 #ifdef __mips__
 static inline int mzGsClientBind(void)
 {
-    return mzGsClientBindRange((void *)0x84000u,0x9b800u-0x84000u);
+    return mzGsClientBindRange((void *)0x84000u,MZ_EE_EXP_TOP-0x84000u);
 }
 #endif
 static inline int mzGsClientAttach(unsigned int caps)

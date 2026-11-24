@@ -17,5 +17,18 @@ int main(void)
     for(unsigned i=2;i<6;i++)table[i]=mzSkyTarget(state,i,0);
     assert(mzSkyTableOK(table,state,0));
     assert(mzSkyHash(2166136261u,table,6)==mzSkyHash(2166136261u,original,6));
+    {
+        /* Synthetic immutable branch body; acceptance must cover all
+         * 14 words, normalize ONLY the known first branch. */
+        uint32_t code[14]={MZ_SKY_FOG_ORIGINAL};
+        for(unsigned i=1;i<14;i++)code[i]=0x01234567u+i;
+        uint32_t h=mzSkyHash(2166136261u,code,14);
+        assert(mzSkyFogCodeOK(code,h));
+        code[0]=MZ_SKY_FOG_OFF;
+        assert(mzSkyFogCodeOK(code,h));
+        code[2]^=1u;assert(!mzSkyFogCodeOK(code,h));code[2]^=1u;
+        code[0]^=1u;assert(!mzSkyFogCodeOK(code,h));
+        code[0]=MZ_SKY_FOG_ORIGINAL;assert(mzSkyFogCodeOK(code,h));
+    }
     return 0;
 }

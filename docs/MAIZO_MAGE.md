@@ -204,3 +204,50 @@ mode. A failed native edit also restores the previous geometry version.
 New GSM window range is intentionally limited to +/-32 logical units
 rather than the old larger coarse range. Native cropping does not resample.
 No change to the protected EE memory boundary or stack requirement.
+
+## MAEC optional effects and captured runtime evidence
+
+Four supplied PCSX2 2.8.2 captures each include a GS dump and a gameplay
+save state. The 32 MiB EE RAM snapshots confirm the complete original
+Sky fingerprints, dispatch entries and texture tables for SA, BLACK,
+Burnout 3 and The Warriors. A dump's transfer index is not a measured
+physical GIF/DMA path. Counts are observed register writes, not FPS or
+compatibility. See profiles/mage/capture_evidence.json.
+
+MAEC exposes 14 effect rows on two pages: Motion Blur, Screen Blur,
+Bloom, Glow, Depth of Field, Film Grain, Fog, Heat Haze, Color Filter,
+Lens Flare, Screen Distortion, Shadows, Particles and Reflections.
+Each has Original/Off and optionally Reduced if a verified adapter
+registers it. Unsupported entries are N/D and immutable. The ABI 4
+mailbox separates draw filters and effects. Cooperative effect adapters
+must identify an optional renderer-owned pass *before* work is emitted,
+never skip a generic GIF packet based on alpha, texture or sprite shape.
+Restoration uses the original current engine strength, not a stale
+value from a previous scene. Critical cleanup and gameplay state remain
+the engine's responsibility. The adapter passes certified_optional=0
+for UI, unknown or dependent work. New ELF or repeated malformed draw
+submissions clear capabilities and requests. Existing clients must
+rebuild for ABI 4.
+
+The Sky opt-in build contains a real, experimental Fog control for
+four exact revisions. State-14's 14-word body matched the supplied
+ELF and gameplay RAM in each case. The validated conditional branch
+is replaced only with the unconditional branch to the *existing*
+fog-off path, while paused, and the data/instruction caches are flushed.
+Original restores the original instruction. No arbitrary NOP, global
+blend disable, GS state guess, or frame packet suppression. This affects
+future state-14 calls; it cannot promise immediate removal of cached
+or custom fog or change visibility-dependent gameplay safely in every
+scene. Other effects need title-specific optional-pass hooks; candidate
+feedback passes are not certified effect IDs. No commercial adapter
+for the other 13 effects is claimed.
+
+The guarded experimental core now borrows 10 KiB from the low module
+arena (0x9B800 -> 0x9E000); the upper limit stays 0xD0000 and the
+legacy arena remains unchanged. The frontend uses the same constant,
+checks the complete aligned module footprint against 200 KiB, and
+falls back to the unchanged legacy EE core if it does not fit. The
+linker and independent map check still require 8 KiB stack; clients
+use the matching shared layout bound. No growth into ramD0. CI tests
+and physical boot with USB/SMB/HDD/VMC/PadEmu are required before
+declaring the experimental variant stable.

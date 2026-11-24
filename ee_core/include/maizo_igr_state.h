@@ -1,7 +1,8 @@
 /* MAIZO In-Game PRO state model, fixed footprint, host-testable. */
 #ifndef MAIZO_IGR_STATE_H
 #define MAIZO_IGR_STATE_H
-enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS, MZ_PAGE_CHEATS };
+#include "maizo_effects.h"
+enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS, MZ_PAGE_CHEATS, MZ_PAGE_EFFECTS_1, MZ_PAGE_EFFECTS_2 };
 enum { MZ_VIDEO_NONE=0, MZ_VIDEO_GSM=1, MZ_VIDEO_NATIVE=2 };
 enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF, MZ_ACTION_SAVE_EXIT };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
@@ -9,6 +10,7 @@ enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x
 typedef struct { int page, selected, confirm, field_fix; int width, height, x, y, changed, legacy_geometry;
              int filter_mode, filter_caps, filter_changed;
              unsigned int draw_caps, draw_modes, draw_changed;
+             unsigned int effect_caps, effect_reduced, effect_modes, effect_choice;
              unsigned int frame480i_caps, frame480i_mode, frame480i_changed;
              unsigned int video_caps, native_field_caps, field_changed, save_caps, cheat_caps, cheat_paused, cheat_changed, live_count, live_choice; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
@@ -17,6 +19,7 @@ static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
     s->width=s->height=s->x=s->y=0;s->changed=s->legacy_geometry=0;
     s->filter_mode=s->filter_caps=s->filter_changed=0;
     s->draw_caps=s->draw_modes=s->draw_changed=0;
+    s->effect_caps=s->effect_reduced=s->effect_modes=s->effect_choice=0;
     s->frame480i_caps=s->frame480i_mode=s->frame480i_changed=0;
     s->video_caps=s->native_field_caps=s->field_changed=s->save_caps=0;
     s->cheat_caps=s->cheat_paused=s->cheat_changed=s->live_count=s->live_choice=0;
@@ -30,7 +33,8 @@ static int maizoIgrPageCount(int page)
     case MZ_PAGE_GAME: return 3;
     case MZ_PAGE_SYSTEM: return 5;
     case MZ_PAGE_FILTERS: return 9;
-    case MZ_PAGE_GS_STATUS: return 3;
+    case MZ_PAGE_GS_STATUS: return 4;
+    case MZ_PAGE_EFFECTS_1: case MZ_PAGE_EFFECTS_2: return 9;
     default: return 1;
     }
 }
@@ -44,6 +48,7 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         if(s->page==MZ_PAGE_MAIN)return MZ_ACTION_RESUME;
         if(s->page==MZ_PAGE_CHEATS){s->page=MZ_PAGE_GAME;s->selected=1;return MZ_ACTION_NONE;}
         if(s->page==MZ_PAGE_GS_STATUS){s->page=MZ_PAGE_FILTERS;s->selected=6;return MZ_ACTION_NONE;}
+        if(s->page==MZ_PAGE_EFFECTS_1||s->page==MZ_PAGE_EFFECTS_2){s->page=MZ_PAGE_GS_STATUS;s->selected=3;return MZ_ACTION_NONE;}
         s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;return MZ_ACTION_NONE;
     }
     if(pressed&(MZ_KEY_UP|MZ_KEY_DOWN)) {
@@ -152,7 +157,20 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
                 s->draw_modes=(s->draw_modes&~(3u<<8))|(next<<8);
                 s->draw_changed|=16u;
             }
-        }else{s->page=MZ_PAGE_FILTERS;s->selected=6;}
+        }else if(s->selected==3){s->page=MZ_PAGE_EFFECTS_1;s->selected=0;}
+        else{s->page=MZ_PAGE_FILTERS;s->selected=6;}
+    }else if(s->page==MZ_PAGE_EFFECTS_1||s->page==MZ_PAGE_EFFECTS_2){
+        if(s->selected<7){
+            unsigned id=s->selected+(s->page==MZ_PAGE_EFFECTS_2?7:0),bit=1u<<id;
+            if(s->effect_caps&bit){
+                unsigned next=mzEffectNext(mzEffectMode(s->effect_modes,id),s->effect_reduced&bit);
+                s->effect_modes=mzEffectPut(s->effect_modes,id,next);
+                s->effect_choice=id+1;
+            }
+        }else if(s->selected==7){
+            s->page=s->page==MZ_PAGE_EFFECTS_1?MZ_PAGE_EFFECTS_2:MZ_PAGE_EFFECTS_1;
+            s->selected=0;
+        }else{s->page=MZ_PAGE_GS_STATUS;s->selected=3;}
     }else if(s->page==MZ_PAGE_PADS){
         if(s->selected==1){s->page=MZ_PAGE_MAIN;s->selected=2;}
     }else if(s->page==MZ_PAGE_GAME){

@@ -35,7 +35,8 @@ enum {
  */
 #define MZ_GS_SHARED_MAGIC0 0x4d5a4753u
 #define MZ_GS_SHARED_MAGIC1 0x92a5b8acu
-#define MZ_GS_SHARED_ABI 3u
+#include "maizo_effects.h"
+#define MZ_GS_SHARED_ABI 4u
 typedef struct {
     uint32_t magic0, magic1, abi, bytes;
     volatile unsigned int enabled, capabilities, modes;
@@ -43,6 +44,7 @@ typedef struct {
     mz_gs_gif_state_t state;
     mz_gs_dma_metrics_t metrics;
     unsigned int requested_modes;
+    volatile uint32_t effect_caps, effect_reduced, effect_modes;
 } mz_gs_shared_t;
 #ifdef MZ_GS_CLIENT
 extern mz_gs_shared_t *mzGsShared;
@@ -81,6 +83,7 @@ static inline unsigned int mzGsRuntimeShift(unsigned int feature)
 static inline void mzGsRuntimeReset(void)
 {
     mzGsShared->requested_modes = 0;
+    mzGsShared->effect_caps = mzGsShared->effect_reduced = mzGsShared->effect_modes = 0;
     mzRuntimeCapabilities = 0;
     mzRuntimeModes = 0;
     mzRuntimeFailures = 0;
@@ -95,15 +98,44 @@ static inline void mzGsRuntimeReset(void)
 static inline int mzGsRuntimeAttach(unsigned int capabilities)
 {
     unsigned int requested = mzGsShared->requested_modes;
+    unsigned ec=mzGsShared->effect_caps, er=mzGsShared->effect_reduced, em=mzGsShared->effect_modes;
     if (!capabilities || (capabilities & ~MZ_DRAW_ALL)) return 0;
     if (!mzRuntimeCapabilities && mzRuntimeFailures >= 3u) return 0;
     mzGsRuntimeReset();
     mzGsShared->requested_modes = requested;
+    mzGsShared->effect_reduced=er; mzGsShared->effect_modes=em; mzGsShared->effect_caps=ec;
     mzRuntimeModes = mzMageModesForCaps(requested, capabilities);
     mzRuntimeCapabilities = capabilities;
     return 1;
 }
 
+/* Register effects separately from drawing filters. A fresh registration
+ * starts from original; new ELF and fail-closed reset revoke the request.
+ * Reduced is a subset of independently certified optional effects. */
+static inline int mzGsEffectsAttach(unsigned caps,unsigned reduced)
+{
+    if((caps&~MZ_EFFECT_ALL)||(reduced&~caps)||!mzGsShared->enabled||
+       mzRuntimeFailures>=3u)return 0;
+    mzGsShared->effect_caps=0;
+    mzGsShared->effect_modes=0;
+    mzGsShared->effect_reduced=reduced;
+    mzGsShared->effect_caps=caps;
+    return 1;
+}
+static inline int mzGsEffectSet(unsigned id,unsigned mode)
+{
+    if(id>=MZ_EFFECT_COUNT||mode>MZ_EFFECT_OFF||
+       !(mzGsShared->effect_caps&(1u<<id))||
+       (mode==MZ_EFFECT_REDUCED&&!(mzGsShared->effect_reduced&(1u<<id))))return 0;
+    mzGsShared->effect_modes=mzEffectPut(mzGsShared->effect_modes,id,mode);
+    return 1;
+}
+static inline unsigned mzGsEffectGet(unsigned id)
+{
+    if(!mzGsShared->enabled)return MZ_EFFECT_ORIGINAL;
+    return mzEffectAllowed(mzGsShared->effect_caps,mzGsShared->effect_reduced,
+                           mzGsShared->effect_modes,id);
+}
 static inline unsigned int mzGsRuntimeMode(unsigned int feature)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
@@ -167,6 +199,7 @@ static inline void mzGsRuntimeRecord(int result)
              * A new game launch or explicit reset clears the counters. */
             mzRuntimeCapabilities = 0;
             mzRuntimeModes = 0;
+            mzGsShared->effect_caps = mzGsShared->effect_reduced = mzGsShared->effect_modes = 0;
             mzRuntimeConsecutiveFailures = 0;
         }
     }

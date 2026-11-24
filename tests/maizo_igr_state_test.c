@@ -135,5 +135,18 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.live_choice==1);
     maizoIgrStep(&s,MZ_KEY_UP);assert(s.selected==2);
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_GAME);
+    maizoIgrStateInit(&s,0);s.page=MZ_PAGE_GS_STATUS;s.selected=3;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_EFFECTS_1&&s.selected==0);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.effect_choice&&!s.effect_modes);
+    s.effect_caps=(1u<<MZ_EFFECT_MOTION_BLUR)|(1u<<MZ_EFFECT_FOG)|(1u<<MZ_EFFECT_REFLECTIONS);
+    s.effect_reduced=1u<<MZ_EFFECT_MOTION_BLUR;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.effect_choice==1&&mzEffectMode(s.effect_modes,0)==MZ_EFFECT_REDUCED);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,0)==MZ_EFFECT_OFF);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,0)==MZ_EFFECT_ORIGINAL);
+    s.selected=6;maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,MZ_EFFECT_FOG)==MZ_EFFECT_OFF);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(mzEffectMode(s.effect_modes,MZ_EFFECT_FOG)==0);
+    s.selected=7;maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_EFFECTS_2);
+    s.selected=6;maizoIgrStep(&s,MZ_KEY_OK);assert(s.effect_choice==14&&mzEffectMode(s.effect_modes,13)==MZ_EFFECT_OFF);
+    maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_GS_STATUS&&s.selected==3);
     puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;
 }

@@ -4,6 +4,7 @@
 #include <stdint.h>
 typedef struct {
     uint32_t set,state,dispatch,table,device,hash;
+    uint32_t fog,fog_hash;
 } mz_sky_record_t;
 static inline unsigned mzSkyLimit(unsigned start,unsigned end)
 {

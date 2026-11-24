@@ -1,0 +1,143 @@
+{
+  "source": "User-supplied PCSX2 2.8.2 software captures; one gameplay scene per game",
+  "limitations": [
+    "Frozen initial GS state not decoded",
+    "Replay stream index 3 does not identify physical DMA path",
+    "Feedback candidates are vertex records with an observed framebuffer-base reuse and blending, not draws or proof of an effect",
+    "No gameplay or console validation of modified code"
+  ],
+  "games": [
+    {
+      "game": "GTA-SA",
+      "serial": "SLUS-20946",
+      "crc": "9DBFB002",
+      "dump_sha256": "5d185b96dcc57394c6033cfa1d15578677dae11be5ddc7cad12e7f380d019e25",
+      "ram_sha256": "a0fe92b3fd598c9ef161701c62f50b122fa3fb75988f4e03aac9a4f94538aa54",
+      "dump_bytes": 13198317,
+      "transfer_records": 7357,
+      "vsync_records": 4,
+      "replay_indices": [
+        3
+      ],
+      "gif_tags": 8126,
+      "aa1_writes_off_on": [
+        1818,
+        1
+      ],
+      "dthe_writes_off_on": [
+        14,
+        2
+      ],
+      "tex1_writes": 1790,
+      "tex1_lod_eligible": 0,
+      "tex1_mip_filter_mxl0": 318,
+      "feedback_vertex_candidates": 404,
+      "sky_hash": "0x7fd09a3b",
+      "tex1_shadow_observed": "0xfc000000000",
+      "original_sky_table_match": true,
+      "original_sky_dispatch_match": true,
+      "fog_address": "0x35056c",
+      "fog_hash": "0x23909aa",
+      "fog_elf_ram_bytes_match": true
+    },
+    {
+      "game": "BLACK",
+      "serial": "SLUS-21376",
+      "crc": "5C891FF1",
+      "dump_sha256": "350cda5c7bf90989dd5bedaf8623532657a267e13ba6e81ca56b66c86c5cfc61",
+      "ram_sha256": "176fe024b1c7964062718c14d65094c6737bc2eb020ca5f2b07e907a6bf1e2ce",
+      "dump_bytes": 19778037,
+      "transfer_records": 5337,
+      "vsync_records": 4,
+      "replay_indices": [
+        3
+      ],
+      "gif_tags": 13860,
+      "aa1_writes_off_on": [
+        5202,
+        0
+      ],
+      "dthe_writes_off_on": [
+        12,
+        2
+      ],
+      "tex1_writes": 520,
+      "tex1_lod_eligible": 434,
+      "tex1_mip_filter_mxl0": 56,
+      "feedback_vertex_candidates": 8840,
+      "sky_hash": "0xb5784ba3",
+      "tex1_shadow_observed": "0xfc000000120",
+      "original_sky_table_match": true,
+      "original_sky_dispatch_match": true,
+      "fog_address": "0x2b5894",
+      "fog_hash": "0x4774caaa",
+      "fog_elf_ram_bytes_match": true
+    },
+    {
+      "game": "Burnout3",
+      "serial": "SLES-52584",
+      "crc": "FCC72D87",
+      "dump_sha256": "931c66f860c78886c15dd5478237f5c1fcbff3b63bdc369ad94790a9bbc5233d",
+      "ram_sha256": "2c23ec7ae1bd35e40d97607d98bf6a2db01a4441c07ba610df4a47fe7dd5050c",
+      "dump_bytes": 30687615,
+      "transfer_records": 10312,
+      "vsync_records": 4,
+      "replay_indices": [
+        3
+      ],
+      "gif_tags": 16033,
+      "aa1_writes_off_on": [
+        6009,
+        8
+      ],
+      "dthe_writes_off_on": [
+        24,
+        4
+      ],
+      "tex1_writes": 607,
+      "tex1_lod_eligible": 412,
+      "tex1_mip_filter_mxl0": 123,
+      "feedback_vertex_candidates": 25915,
+      "sky_hash": "0x17cbed3f",
+      "tex1_shadow_observed": "0xfc000000120",
+      "original_sky_table_match": true,
+      "original_sky_dispatch_match": true,
+      "fog_address": "0x1f4e5c",
+      "fog_hash": "0x3c39041a",
+      "fog_elf_ram_bytes_match": true
+    },
+    {
+      "game": "TheWarriors",
+      "serial": "SLUS-21215",
+      "crc": "B99A75DE",
+      "dump_sha256": "c6549686be83f0e348e38d563a26e680fea42b835dede57de1786381167fc26d",
+      "ram_sha256": "d3d50158300ef07eafa2828126a97cdc05cbcd773c05d212b223061403d5f579",
+      "dump_bytes": 12872957,
+      "transfer_records": 4549,
+      "vsync_records": 4,
+      "replay_indices": [
+        3
+      ],
+      "gif_tags": 7440,
+      "aa1_writes_off_on": [
+        2134,
+        0
+      ],
+      "dthe_writes_off_on": [
+        38,
+        0
+      ],
+      "tex1_writes": 1268,
+      "tex1_lod_eligible": 36,
+      "tex1_mip_filter_mxl0": 1152,
+      "feedback_vertex_candidates": 6,
+      "sky_hash": "0x2107049f",
+      "tex1_shadow_observed": "0x0",
+      "original_sky_table_match": true,
+      "original_sky_dispatch_match": true,
+      "fog_address": "0x48ea54",
+      "fog_hash": "0x6b1cb7a",
+      "fog_elf_ram_bytes_match": true
+    }
+  ]
+}

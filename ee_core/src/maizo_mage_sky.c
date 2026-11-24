@@ -6,6 +6,7 @@
 #include "util.h"
 #include <kernel.h>
 static int skyMode=-1;
+static int skyFogReady;
 static int skyValid(const mz_sky_record_t *p,unsigned mode)
 {
     uint32_t h=mzSkyHash(2166136261u,(const volatile uint32_t *)(uintptr_t)p->set,16);
@@ -21,12 +22,18 @@ void maizoSkySelect(const char *path)
     const mz_sky_record_t *p=&config->MaizoSky;
     unsigned limit=mzSkyLimit((unsigned)config->ModStorageStart,(unsigned)config->ModStorageEnd);
     skyMode=-1;
+    skyFogReady=0;
     if(!p->state || !mzGsResident.enabled ||
        _strncmp(path,"cdrom0:\\",8) || _strncmp(path+8,config->GameID,11) ||
        (path[19] && _strcmp(path+19,";1")))return;
     if(mzSkyRange(p->set,64,limit) && mzSkyRange(p->state,212,limit) &&
        mzSkyRange(p->dispatch,36,limit) && mzSkyRange(p->table,24,limit) &&
        mzSkyRange(p->device-16u,24,limit) && skyValid(p,0))skyMode=0;
+    if(skyMode>=0 && p->fog_hash && mzSkyRange(p->dispatch,56,limit) &&
+       mzSkyRange(p->fog,56,limit) &&
+       *(const volatile uint32_t *)(uintptr_t)(p->dispatch+52u)==p->fog &&
+       *(const volatile uint32_t *)(uintptr_t)p->fog==MZ_SKY_FOG_ORIGINAL &&
+       mzSkyFogCodeOK((const volatile uint32_t *)(uintptr_t)p->fog,p->fog_hash))skyFogReady=1;
 }
 int maizoSkyAvailable(void)
 {
@@ -45,6 +52,35 @@ int maizoSkySetMode(unsigned mode)
         for(unsigned i=2;i<6;i++)table[i]=mzSkyTarget(p->state,i,mode);
         FlushCache(0);
         skyMode=mode;
+    }
+    return 1;
+}
+
+/* Only called at the paused IGR boundary. Do not skip a whole render
+ * pass, modify a global blend flag, or guess a GS register value.
+ * The next state-14 request uses the title's own normal OFF path.
+ * Original means release the override, not force fog back on. */
+int maizoSkyFogAvailable(void)
+{
+    const mz_sky_record_t *p=&g_ee_core_config.MaizoSky;
+    return skyFogReady && skyMode>=0 &&
+           *(const volatile uint32_t *)(uintptr_t)(p->dispatch+52u)==p->fog &&
+           mzSkyFogCodeOK((const volatile uint32_t *)(uintptr_t)p->fog,p->fog_hash);
+}
+unsigned maizoSkyFogMode(void)
+{
+    return maizoSkyFogAvailable() &&
+           *(const volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.fog==MZ_SKY_FOG_OFF?2u:0u;
+}
+int maizoSkyFogSet(unsigned mode)
+{
+    volatile uint32_t *code=(volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.fog;
+    uint32_t desired=mode==2u?MZ_SKY_FOG_OFF:MZ_SKY_FOG_ORIGINAL;
+    if((mode!=0u && mode!=2u)||!maizoSkyFogAvailable())return 0;
+    if(*code!=desired){
+        *code=desired;
+        FlushCache(0);
+        FlushCache(2);
     }
     return 1;
 }

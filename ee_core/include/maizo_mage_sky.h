@@ -31,8 +31,22 @@ static inline int mzSkyTableOK(const volatile uint32_t *table, uint32_t state, u
         if (table[i] != mzSkyTarget(state,i,mode)) return 0;
     return 1;
 }
+/* Four snapshots and matching executable bytes verify this state-14
+ * routine. Original branch tests s0; forced branch follows its normal
+ * fog-disabled code path. Never change delay slot or other words. */
+#define MZ_SKY_FOG_ORIGINAL 0x12000006u
+#define MZ_SKY_FOG_OFF      0x10000006u
+static inline int mzSkyFogCodeOK(const volatile uint32_t *code,uint32_t hash)
+{
+    uint32_t first=code[0];
+    if(first!=MZ_SKY_FOG_ORIGINAL && first!=MZ_SKY_FOG_OFF)return 0;
+    return mzSkyHash((2166136261u^MZ_SKY_FOG_ORIGINAL)*16777619u,code+1,13)==hash;
+}
 void maizoSkySelect(const char *path);
 int maizoSkyAvailable(void);
 unsigned maizoSkyMode(void);
 int maizoSkySetMode(unsigned mode);
+int maizoSkyFogAvailable(void);
+unsigned maizoSkyFogMode(void);
+int maizoSkyFogSet(unsigned mode);
 #endif

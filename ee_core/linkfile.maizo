@@ -14,9 +14,9 @@
 ENTRY(_start);
 
 MEMORY {
-	ram84	: ORIGIN = 0x00084000, LENGTH = 95744 /* 0x00084000 - 0x0009B600: guarded experimental core */
-	stack	: ORIGIN = 0x0009B600, LENGTH = 512   /* 0x0009B600 - 0x0009B800: free */
-	modules	: ORIGIN = 0x0009B800, LENGTH = 210K  /* shifted module arena, same upper limit */
+	ram84	: ORIGIN = 0x00084000, LENGTH = 105984 /* 0x00084000 - 0x0009DE00: guarded experimental core */
+	stack	: ORIGIN = 0x0009DE00, LENGTH = 512   /* 0x0009DE00 - 0x0009E000: free */
+	modules	: ORIGIN = 0x0009E000, LENGTH = 200K  /* shifted module arena, same upper limit */
 	ramD0	: ORIGIN = 0x000D0000, LENGTH = 192K  /* 0x000D0000 - 0x00100000: usually free, but some games use it. */
 }
 
@@ -106,10 +106,10 @@ SECTIONS {
 	/* Symbols needed by crt0.s.  */
 	PROVIDE(_heap_size = -1);
 	PROVIDE(_stack = .);
-	PROVIDE(_stack_size = 0x0009B800 - _stack);	/* Any remaining space up to the module storage region, is available for the stack. */
+	PROVIDE(_stack_size = 0x0009E000 - _stack);	/* Any remaining space up to the module storage region, is available for the stack. */
 
 	_end = _stack + _stack_size ;
 	PROVIDE(end = _end);
 	ASSERT(_stack_size >= 8192, "MAIZO: resident EE stack below 8 KiB")
-	ASSERT(_end == 0x0009B800, "MAIZO: module boundary mismatch")
+	ASSERT(_end == 0x0009E000, "MAIZO: module boundary mismatch")
 }

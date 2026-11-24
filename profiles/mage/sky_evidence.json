@@ -24,6 +24,18 @@
         "show_raster": "0x1ffaa8",
         "raster_mip_levels": "0x1ffd08",
         "verified_runtime": false
+      },
+      "runtime_evidence": {
+        "sky_signature_matches_ram": true,
+        "original_table_matches_ram": true,
+        "fog_state14": {
+          "address": "0x001f4e5c",
+          "normalized_fnv": "0x3c39041a",
+          "original_branch": "0x12000006",
+          "experimental_off_branch": "0x10000006",
+          "elf_ram_match": true,
+          "validated_on_console": false
+        }
       }
     },
     {
@@ -117,6 +129,18 @@
         "show_raster": "0x35b198",
         "raster_mip_levels": "0x35b3f8",
         "verified_runtime": false
+      },
+      "runtime_evidence": {
+        "sky_signature_matches_ram": true,
+        "original_table_matches_ram": true,
+        "fog_state14": {
+          "address": "0x0035056c",
+          "normalized_fnv": "0x023909aa",
+          "original_branch": "0x12000006",
+          "experimental_off_branch": "0x10000006",
+          "elf_ram_match": true,
+          "validated_on_console": false
+        }
       }
     },
     {
@@ -140,6 +164,18 @@
         "show_raster": "0x498890",
         "raster_mip_levels": "0x498af0",
         "verified_runtime": false
+      },
+      "runtime_evidence": {
+        "sky_signature_matches_ram": true,
+        "original_table_matches_ram": true,
+        "fog_state14": {
+          "address": "0x0048ea54",
+          "normalized_fnv": "0x6b1cb7a",
+          "original_branch": "0x12000006",
+          "experimental_off_branch": "0x10000006",
+          "elf_ram_match": true,
+          "validated_on_console": false
+        }
       }
     },
     {
@@ -186,6 +222,18 @@
         "show_raster": "0x2c0298",
         "raster_mip_levels": "0x2c04f8",
         "verified_runtime": false
+      },
+      "runtime_evidence": {
+        "sky_signature_matches_ram": true,
+        "original_table_matches_ram": true,
+        "fog_state14": {
+          "address": "0x002b5894",
+          "normalized_fnv": "0x4774caaa",
+          "original_branch": "0x12000006",
+          "experimental_off_branch": "0x10000006",
+          "elf_ram_match": true,
+          "validated_on_console": false
+        }
       }
     },
     {

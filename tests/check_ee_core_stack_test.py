@@ -19,6 +19,7 @@ except ValueError:
 else:
     raise AssertionError("expanded stack overflow accepted")
 assert module.check_map("0x0009905c _end_bss = .",8192,0x9B800)==(0x9905c,0x27a4)
+assert module.check_map("0x00099e88 _end_bss = .",8192,0x9E000)==(0x99e88,0x4178)
 for text in ["", "0x00097004 _end_bss = .", "0x00080000 _end_bss = ."]:
     try:
         module.check_map(text)

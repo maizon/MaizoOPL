@@ -86,7 +86,7 @@ static int mzOverlayPath;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-static int mzSkyMenu;
+static int mzSkyMenu,mzSkyFogMenu;
 #endif
 static u64 mzOriginalDisp[2];
 static int mzGameHasGsm;
@@ -107,6 +107,24 @@ static int mzProfileExitOK(const char *path)
         (base[2]|32)=='i' && (base[3]|32)=='z' && (base[4]|32)=='o';
 }
 
+/* Snapshot only capabilities actually registered or validated in RAM.
+ * A patched Sky fog branch owns fog until the original word is restored;
+ * do not also send fog requests to another adapter. */
+static void __attribute__((noinline)) mzEffectsSync(void)
+{
+    mzState.effect_caps=mzGsShared->effect_caps;
+    mzState.effect_reduced=mzGsShared->effect_reduced;
+    mzState.effect_modes=mzGsShared->effect_modes;
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+    mzSkyFogMenu=maizoSkyFogAvailable() &&
+        (!(mzState.effect_caps&(1u<<MZ_EFFECT_FOG)) || maizoSkyFogMode()==MZ_EFFECT_OFF);
+    if(mzSkyFogMenu){
+        mzState.effect_caps|=1u<<MZ_EFFECT_FOG;
+        mzState.effect_reduced&=~(1u<<MZ_EFFECT_FOG);
+        mzState.effect_modes=mzEffectPut(mzState.effect_modes,MZ_EFFECT_FOG,maizoSkyFogMode());
+    }
+#endif
+}
 static const u8 mzColors[6][3] = {
     {9, 15, 27},      /* panel */
     {73, 104, 168},   /* border */
@@ -239,10 +257,10 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
             !(s->draw_caps&MZ_DRAW_LOD)?"LOD: N/D":
             ((s->draw_modes>>8)&3u)==1?"LOD: QUALIDADE":
             ((s->draw_modes>>8)&3u)==2?"LOD: DESEMPENHO":"LOD: JOGO");
-        mzValue(3,"PATH1",mzGsProbe.path1_active,0);
-        mzValue(4,"PATH2",mzGsProbe.path2_active,0);
-        mzValue(5,"PATH3",mzGsProbe.path3_active,0);
-        mzValue(6,"GIF DMA",mzGsProbe.gif_dma_active,0);
+        mzLine(55,11,4,"EFEITOS GRAFICOS >");
+        mzValue(4,"PATH1",mzGsProbe.path1_active,0);
+        mzValue(5,"PATH2",mzGsProbe.path2_active,0);
+        mzValue(6,"PATH3",mzGsProbe.path3_active,0);
         /* Visibility is evidence-based: count only actual GS writes
          * changed by a verified pre-DMA adapter, NOT mere hook presence. */
         mzValue(7,"GS ALTERADOS",
@@ -253,6 +271,20 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(105,8,5,mzGsRuntimeCaps()?
             (mzOverlayPath==3?"HOOK ON / MENU GIF":"HOOK ON / MENU VIF"):
             (mzOverlayPath==3?"HOOK N/D / MENU GIF":"HOOK N/D / MENU VIF"));
+    }else if(s->page==MZ_PAGE_EFFECTS_1||s->page==MZ_PAGE_EFFECTS_2){
+        static const char *const effects[MZ_EFFECT_COUNT]={
+            "MOTION BLUR","SCREEN BLUR","BLOOM","GLOW","DEPTH OF FIELD","FILM GRAIN","FOG",
+            "HEAT HAZE","COLOR FILTER","LENS FLARE","DISTORTION","SOMBRAS","PARTICULAS","REFLEXOS"
+        };
+        unsigned start=s->page==MZ_PAGE_EFFECTS_2?7u:0u;
+        for(i=0;i<7;i++){
+            unsigned id=start+i,cap=s->effect_caps&(1u<<id),mode=mzEffectMode(s->effect_modes,id);
+            char label[CHARS+1],*p=mzCopy(label,effects[id]);
+            mzCopy(p,!cap?" N/D":mode==MZ_EFFECT_OFF?" OFF":mode==MZ_EFFECT_REDUCED?" REDUZIDO":" JOGO");
+            mzLine(25+i*10,11,cap?4:5,label);
+        }
+        mzLine(95,11,4,start?"< EFEITOS 1/2":"EFEITOS 2/2 >");
+        mzLine(105,11,4,"VOLTAR");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG.");
         mzLine(35,11,4,"VOLTAR");
@@ -761,6 +793,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.draw_modes=mzRuntimeModes;
 #endif
     mzState.draw_changed=0;
+    mzState.effect_choice=0;
+    mzEffectsSync();
     mzState.cheat_caps=!!config->gCheatList && MaizoCheatHookActive && numcodes>0;
     mzState.cheat_paused=!!MaizoCheatPaused;
     mzState.cheat_changed=0;
@@ -870,6 +904,16 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzState.changed=0;
                 mzState.filter_caps=mzFilterCapabilities();
             }
+        }
+        if(mzState.effect_choice){
+            unsigned id=mzState.effect_choice-1,mode=mzEffectMode(mzState.effect_modes,id);
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+            if(id==MZ_EFFECT_FOG&&mzSkyFogMenu)maizoSkyFogSet(mode);
+            else
+#endif
+                mzGsEffectSet(id,mode);
+            mzState.effect_choice=0;
+            mzEffectsSync();
         }
         if(mzState.live_choice){
             if(MaizoLiveCount&&mzState.cheat_caps&&MaizoCheatHookActive){
