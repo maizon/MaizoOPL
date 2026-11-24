@@ -111,3 +111,13 @@ SECTIONS {
 	_end = _stack + _stack_size ;
 	PROVIDE(end = _end);
 }
+
+/*
+ * Startup stack is passed directly to SetupThread() in crt0.S.
+ * A full .text/.bss region can LINK SUCCESSFULLY even when only
+ * a few hundred bytes remain for the EE core's actual C stack.
+ * The observed Beta-82 regression left 0x2C0 (704 B), compared
+ * with Beta-39's 0x3700 (14,080 B). Prevent that silent failure.
+ */
+ASSERT((0x00097000 - _end_bss) >= 0x2000,
+       "MAIZO: EE core stack below 8192 bytes - reduce resident code");
