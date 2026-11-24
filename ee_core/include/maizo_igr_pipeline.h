@@ -11,4 +11,18 @@ static inline int mzIgrPipelineIdle(uint32_t ch1,uint32_t ch2,
            (vif&0x1f800f0fu)==0u &&
            (gif&0x1f000fc0u)==0u;
 }
+/* GIF_STAT M3R/M3P/PSE: do not use PATH3 if masked or paused.
+ * D_STAT bits 0..15 are W1C events; upper bits are IRQ masks.
+ * Borrow only a channel with no enabled pending completion or error. */
+static inline int mzIgrDmaBorrowable(uint32_t stat,unsigned int channel)
+{
+    return channel<10u && !(stat&0xe000u) &&
+           !((stat&(1u<<channel))&&(stat&(1u<<(channel+16u))));
+}
+static inline int mzIgrSelectPath(uint32_t stat,uint32_t gif)
+{
+    if(!(gif&0xbu)&&mzIgrDmaBorrowable(stat,2))return 3;
+    if(mzIgrDmaBorrowable(stat,1))return 2;
+    return 0;
+}
 #endif

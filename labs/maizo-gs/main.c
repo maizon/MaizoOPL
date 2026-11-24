@@ -58,8 +58,10 @@ static int mzLabSetup(unsigned depth)
     graph_set_screen(0,0,W,H);
     graph_set_bgcolor(0,0,0);
     graph_set_framebuffer(0,0,W,psm,0,0);
+    graph_set_framebuffer(1,0,W,psm,0,0);
+    /* graph_enable_output() would select RC2 when filter is off.
+     * Explicitly keep RC1 enabled after initializing BOTH readouts. */
     graph_set_output(1,0,1,0,0,0x80);
-    graph_enable_output();
     memset(&frame,0,sizeof(frame));
     frame.width=W;frame.height=H;frame.complete_frame=1;frame.exclusive_frame_end=1;
     frame.frame=((uint64_t)(W/64u)<<16)|((uint64_t)psm<<24);
@@ -196,7 +198,7 @@ int main(void)
         /* Square switches actual PSMCT32/16. Cross cycles filters when
          * the MAIZO ABI is present; IGR also controls the same ABI. */
         if((now&~prev)&PAD_SQUARE){
-            if(!mzLabSetup(psm==GS_PSM_32?GS_PSM_16:GS_PSM_32))goto stop;
+            if(!mzLabSetup(psm==GS_PSM_32?GS_PSM_16:GS_PSM_32)||!texture())goto stop;
         }
         if((now&~prev)&PAD_CROSS && mzGsShared){
             phase=(phase+1u)&3u;

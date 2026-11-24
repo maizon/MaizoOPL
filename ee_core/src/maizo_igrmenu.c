@@ -77,6 +77,8 @@ static mz_line_t mzLines[MAX_LINES];  /* ~600 bytes, no heap */
 static u8 mzLineCount, mzSelectedY, mzBpp, mzSx, mzSy, mzPsm;
 static int mzX, mzY, mzBw;
 static u32 mzBp;
+static vu32 *mzDmaRegs;
+static int mzOverlayPath;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
 static u64 mzOriginalDisp[2];
@@ -337,7 +339,7 @@ static int mzFrame(void)
 int maizoIGR_Preflight(void)
 {
     return !(*MZ_D_CTRL&0xcu) &&
-           !(*MZ_D_STAT&0x4002u) &&
+           mzIgrSelectPath(*MZ_D_STAT,*MZ_GIF_STAT) &&
            mzFrame() &&
            mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                              *MZ_VIF1_STAT,*MZ_GIF_STAT);
@@ -352,12 +354,12 @@ static int mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
 }
 static int mzDma(void *src,u32 qwc,u32 chcr)
 {
-    *MZ_D1_QWC=qwc;
-    *MZ_D1_MADR=(u32)src;
-    *MZ_D1_CHCR=chcr;
+    mzDmaRegs[8]=qwc;
+    mzDmaRegs[4]=(u32)src;
+    mzDmaRegs[0]=chcr;
     asm volatile("sync.l");
-    if(mzWait(MZ_D1_CHCR,CHCR_STR,0,0))return 1;
-    *MZ_D1_CHCR=0;return 0;
+    if(mzWait(mzDmaRegs,CHCR_STR,0,0))return 1;
+    mzDmaRegs[0]=0;return 0;
 }
 static int mzSendLine(u32 *p,int line)
 {
@@ -375,7 +377,9 @@ static int mzSendLine(u32 *p,int line)
     q[10]=(u64)qw|((u64)1<<15)|((u64)2<<58);
     q[11]=0;
     SyncDCache(p,(u8 *)p+(7+qw)*16u);
-    return mzDma(p,7+qw,0x101);
+    /* The exact same A+D/IMAGE GIF list can be sent without the
+     * VIF header when PATH3 is not masked by the game. */
+    return mzOverlayPath==3?mzDma(p+4,6+qw,0x101):mzDma(p,7+qw,0x101);
 }
 static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t *s)
 {
@@ -663,12 +667,12 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     /* One VIF1 packet and a line's pixels: no full-screen framebuffer. */
     u32 packet[(112+PW*2*4+64)/4];
     u32 *p=(u32 *)(((u32)packet+63)&~63);
-    u32 chcr,madr,qwc,tadr,ctrl,statOld,suspend,oldBpc;
+    u32 chcr,madr,qwc,tadr,statOld,statBit,oldBpc;
     u16 prev=0,now,pressed;
     u32 frame,lastFrame=0;
     unsigned int stale=0;
     int haveFrame=0,armed=0;
-    int mfifo,result=MAIZO_IGR_RESUME;
+    int result=MAIZO_IGR_RESUME;
     int first;
     if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
     mzGameHasGsm=!!config->EnableGSMOp;
@@ -710,12 +714,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     if(!mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                            *MZ_VIF1_STAT,*MZ_GIF_STAT))
         return MAIZO_IGR_UNAVAILABLE;
-    ctrl=*MZ_D_CTRL;
-    mfifo=(ctrl>>2)&3;
-    if(mfifo || (*MZ_D_STAT&0x4002u))return MAIZO_IGR_UNAVAILABLE;
-    if(!mzWait(MZ_D1_CHCR,CHCR_STR,0,mfifo==2) ||
-       !mzWait(MZ_D2_CHCR,CHCR_STR,0,mfifo==3) ||
-       (*MZ_VIF1_STAT & VIF_STALLED))return MAIZO_IGR_UNAVAILABLE;
+    if(*MZ_D_CTRL&0xcu)return MAIZO_IGR_UNAVAILABLE;
+    mzOverlayPath=mzIgrSelectPath(*MZ_D_STAT,*MZ_GIF_STAT);
+    if(!mzOverlayPath)return MAIZO_IGR_UNAVAILABLE;
+    mzDmaRegs=mzOverlayPath==3?MZ_D2_CHCR:MZ_D1_CHCR;
+    statBit=mzOverlayPath==3?4u:2u;
     oldBpc=mzBpcOff();
     /* If a game changed its readout layout without SetGsCrt, restore
      * before touching more VRAM. Fail closed instead of pretending
@@ -751,18 +754,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             mzState.frame480i_caps=mzFrame480iCaps();
         }
     }
-    suspend=0;
-    if(mfifo==2){
-        suspend=*MZ_D_ENABLER;
-        *MZ_D_ENABLEW=suspend|0x10000;
-    }
-    statOld=*MZ_D_STAT&0x4002;
-    chcr=*MZ_D1_CHCR;madr=*MZ_D1_MADR;qwc=*MZ_D1_QWC;tadr=*MZ_D1_TADR;
-    if(mfifo==2){
-        *MZ_D1_CHCR=chcr & ~CHCR_STR;
-        *MZ_D_ENABLEW=suspend;
-        *MZ_D_CTRL=ctrl & ~0xc;
-    }
+    statOld=*MZ_D_STAT&statBit;
+    chcr=mzDmaRegs[0];madr=mzDmaRegs[4];qwc=mzDmaRegs[8];tadr=mzDmaRegs[12];
 
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
     first=mzDraw(p,&mzState);
@@ -862,10 +855,11 @@ cleanup:
     if(!mzWait(MZ_VIF1_STAT,VIF_FQC,0,0) ||
        !mzWait(MZ_GIF_STAT,GIF_BUSY,0,0))
         result=MAIZO_IGR_UNAVAILABLE;
-    *MZ_D1_MADR=madr;*MZ_D1_QWC=qwc;*MZ_D1_TADR=tadr;
-    *MZ_D_CTRL=ctrl;*MZ_D1_CHCR=chcr;
+    mzDmaRegs[4]=madr;mzDmaRegs[8]=qwc;mzDmaRegs[12]=tadr;
+    mzDmaRegs[0]=chcr;
     asm volatile("sync.l");
     mzBpcRestore(oldBpc);
-    *MZ_D_STAT=(*MZ_D_STAT&0x4002)&~statOld;
+    /* Acknowledge ONLY our own completion, never another channel. */
+    *MZ_D_STAT=(*MZ_D_STAT&statBit)&~statOld;
     return result;
 }

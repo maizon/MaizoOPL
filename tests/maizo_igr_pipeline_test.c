@@ -18,6 +18,14 @@ int main(void)
     assert(!mzIgrPipelineIdle(0,0,0x800000,0));
     assert(!mzIgrPipelineIdle(0,0,0,0x200));
     assert(mzIgrPipelineIdle(0,0,0x1000,0));
+    assert(mzIgrSelectPath(0,0)==3);
+    assert(mzIgrSelectPath(0,1)==2);
+    assert(mzIgrSelectPath(0,2)==2);
+    assert(mzIgrSelectPath(0,8)==2);
+    assert(mzIgrSelectPath(4,0)==3); /* masked IRQ pending is preserved */
+    assert(mzIgrSelectPath(0x40004,0)==2);
+    assert(!mzIgrSelectPath(0x60006,0));
+    assert(!mzIgrSelectPath(0x8000,0));
     puts("MAIZO In-Game VIF1/GIF pipeline preflight PASS");
     return 0;
 }
