@@ -156,10 +156,15 @@ static void maizoIgrHold(void)
 static void maizoIgrUnhold(void)
 {
     int i;
+    /* Restore exact previous masks once, with IRQ dispatch disabled.
+     * The menu never acknowledges a game's pending DMA/INTC event. */
+    DI();
     for (i = 0; i < 15; i++) {
         if (MaizoIgrDmacMask & (1u << i)) EnableDmac(i);
         if (MaizoIgrIntcMask & (1u << i)) EnableIntc(i);
     }
+    MaizoIgrDmacMask=MaizoIgrIntcMask=0;
+    EI();
 }
 static int maizoIgrPauseThreads(void)
 {
@@ -561,6 +566,9 @@ maizo_igr_poll_again:
                             if(maizoIgrPadReady() &&
                                maizoIGR_Preflight(MaizoIgrDmacMask)){
                                 choice=maizoIGR_MenuRun(maizoIgrMenuButtons,maizoIgrYield,MaizoIgrDmacMask);
+                                /* Finish recorder teardown before a restored
+                                 * graphics IRQ can enter the old vector. */
+                                if(!config->EnableGSMOp)MaizoGsMonitorEnd(0);
                                 maizoIgrUnhold();
                                 goto mz_capture_done;
                             }

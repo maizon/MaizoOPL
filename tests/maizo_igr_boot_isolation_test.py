@@ -62,3 +62,13 @@ assert "if(now&MZ_KEY_START)" in menu
 assert "mzPadMenuStep(now,&prev,&held)" in menu
 assert "MZ_EE_EXP_TOP-64u" in read("modules/pademu/pademu.c")
 print("Request-scoped capture window and independent menu navigation PASS")
+
+# No interrupted VIF DIRECT payload, no channel reset or IRQ acknowledge.
+assert "mzIgrSafePath(" in menu
+assert "mzIgrFifoFits(*MZ_GIF_STAT,qwc)" in menu
+assert "mzDmaRegs" not in menu
+assert "MZ_D_ENABLEW=" not in menu and "*MZ_D_STAT=" not in menu
+assert "x+=32u" in menu
+close = pad.split("choice=maizoIGR_MenuRun(",1)[1].split("goto mz_capture_done;",1)[0]
+assert close.index("MaizoGsMonitorEnd(0)") < close.index("maizoIgrUnhold()")
+print("Menu recovery: complete FIFO packets, no VIF DMA borrowing PASS")

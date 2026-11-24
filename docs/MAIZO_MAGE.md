@@ -429,3 +429,25 @@ cannot guarantee menu availability in such titles. No guessing of
 write-only registers, no new permanent hook, and no claimed game
 reproduction. Host regressions cover simultaneous held buttons,
 stick mapping, repeat and split-chord rejection.
+
+## Repeated menu open/close recovery
+
+The previous overlay's VIF1 DMA timeout forcibly cleared CHCR. A
+partially consumed DIRECT command can leave VIF waiting for payload
+after channel registers have been restored. The GS FIFO route also
+previously timed out mid-IMAGE. The recovery removes VIF1 borrowing
+from the overlay, uses self-contained 32-pixel GIF packets (10, 12
+or 14 QW including headers), and reserves room for an entire packet
+before emitting its first tag. No DMA registers, D_STAT events or VIF
+commands are written by the overlay. Reject VIF errors and live VU1,
+retain the native boot isolation, and tear down temporary GS capture
+before restoring graphics IRQ masks. PATH3-masked games may refuse
+the menu rather than fall back to unsafe VIF injection.
+
+This fixes identifiable incomplete-packet failure paths, not every
+possible cause of a game freeze. Internal GS transfer state
+(BITBLTBUF/TRXPOS/TRXREG/TRXDIR) is still modified, with no universal
+readback or restoration; games that split transfers across packets
+remain a risk. VRAM contents behind the overlay are not saved. A true
+fully isolated menu needs verified GS transfer-state ownership and
+restoration. Hardware reference: https://psi-rockin.github.io/ps2tek/
