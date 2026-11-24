@@ -12,6 +12,7 @@
 #include "thbase.h"
 #include "thsemap.h"
 #include "ds34bt.h"
+#include "../../ee_core/include/maizo_igr_input.h"
 #include "sys_utils.h"
 #include "padmacro.h"
 
@@ -1479,7 +1480,8 @@ int ds34bt_igr_snapshot(int port,u16 *keys)
     int ok;
     if(PollSema(bt_dev.hid_sema)<0)return 0;
     ok=ds34pad[port].enabled&&(ds34pad[port].status&DS34BT_STATE_RUNNING);
-    if(ok)*keys=(u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8);
+    if(ok)*keys=(u16)mzPadMenuAnalog((u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8),
+                                    ds34pad[port].data[4],ds34pad[port].data[5]);
     SignalSema(bt_dev.hid_sema);
     return ok;
 }

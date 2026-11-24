@@ -71,11 +71,10 @@ volatile u32 MaizoPadMailbox[16] __attribute__((aligned(64)));
 static u8 *mzPadSlots[8];
 static u32 mzPadFrames[9],mzPadEpoch;
 static u8 mzPadAge[9];
-static u16 mzMenuPrev[12];
 
 /* Padman updates this area asynchronously via SIF DMA, not EE code.
  * UNCACHED alone does not stop LTO from caching ordinary C loads. */
-static int mzPadSample(const u8 *addr,u16 *buttons,u32 *frame)
+static int mzPadSample(const u8 *addr,u16 *buttons,u32 *frame,int menu)
 {
     const volatile u8 *b=(const volatile u8 *)UNCACHED_SEG(addr);
     u32 best=0;
@@ -87,10 +86,16 @@ static int mzPadSample(const u8 *addr,u16 *buttons,u32 *frame)
         u32 f=*(const volatile u32 *)(b+Pad_Data.pos_frame);
         u8 state=b[Pad_Data.pos_state];
         u8 lo=b[Pad_Data.pos_combo2],hi=b[Pad_Data.pos_combo1];
+        unsigned keys=(u16)~(lo|hi<<8);
+        if(menu){
+            unsigned mode=b[Pad_Data.pos_combo2-1];
+            if(mode==0x73u||mode==0x79u)
+                keys=mzPadMenuAnalog(keys,b[Pad_Data.pos_combo2+4],b[Pad_Data.pos_combo2+5]);
+        }
         if(f==*(const volatile u32 *)(b+Pad_Data.pos_frame) &&
            state==(Pad_Data.libpad==IGR_LIBPAD?IGR_PAD_STABLE_V1:IGR_PAD_STABLE_V2) &&
            (!valid||(s32)(f-best)>0)){
-            best=f;*buttons=(u16)~(lo|hi<<8);valid=1;
+            best=f;*buttons=(u16)keys;valid=1;
         }
         b+=Pad_Data.libversion>=0x0160?128:64;
     }
@@ -107,23 +112,21 @@ static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,in
 {
     const volatile u32 *mb=(const volatile u32 *)UNCACHED_SEG(MaizoPadMailbox);
     uint32_t p[4];
-    unsigned k,valid=0,keys=0,rank=0;
+    unsigned k,valid=0,keys=0;
     /* Prefer independent live PadEmu input, then all opened game slots.
      * A stale/disconnected slot cannot monopolize navigation. */
     for(k=0;k<4;k++)p[k]=mb[k];
     if(p[0]==mb[0]&&mzPadPacketOK(p)&&mzPadFresh(8,p[0])){
         for(k=0;k<4;k++)if(p[3]&(1u<<k)){
             unsigned v=(p[1+k/2]>>((k&1u)*16u))&65535u;
-            keys=menu?mzPadMenuChoose(keys,&rank,v,mzMenuPrev[8+k]):mzPadPick(keys,v);
-            if(menu)mzMenuPrev[8+k]=(u16)v;
+            keys=menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
             valid=1;
         }
     }
     for(k=0;k<8;k++){
         u16 v;u32 f;
-        if(mzPadSample(mzPadSlots[k],&v,&f)&&mzPadFresh(k,f)){
-            keys=menu?mzPadMenuChoose(keys,&rank,v,mzMenuPrev[k]):mzPadPick(keys,v);
-            if(menu)mzMenuPrev[k]=v;
+        if(mzPadSample(mzPadSlots[k],&v,&f,menu)&&mzPadFresh(k,f)){
+            keys=menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
             valid=1;
         }
     }
@@ -539,15 +542,24 @@ maizo_igr_poll_again:
              * Never wait for a stalled chain with its completion IRQ
              * masked, and always release failed captures. */
             int retries,attempt;
-            for(attempt=0;attempt<32;attempt++){
-                if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE)){
+            /* A short request-scoped window covers many more frame flips
+             * without enabling the GS recorder at boot. */
+            for(attempt=0;attempt<180;attempt++){
+                /* Check the real DMA boundary while producers are still
+                 * runnable. Avoid suspending a game in the middle of
+                 * constructing a VIF/GIF command. A short bounded sample
+                 * increases chances of catching the end-of-frame gap. */
+                int ready=0;
+                if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE))
+                    for(retries=0;retries<16;retries++)
+                        if(maizoIGR_Preflight(0)){ready=1;break;}
+                if(ready){
                     int suspended=maizoIgrPauseThreads();
                     for(retries=0;suspended&&retries<8;retries++){
                         if(maizoIGR_Preflight(0)){
                             maizoIgrHold();
                             if(maizoIgrPadReady() &&
                                maizoIGR_Preflight(MaizoIgrDmacMask)){
-                                for(unsigned k=0;k<12;k++)mzMenuPrev[k]=0;
                                 choice=maizoIGR_MenuRun(maizoIgrMenuButtons,maizoIgrYield,MaizoIgrDmacMask);
                                 maizoIgrUnhold();
                                 goto mz_capture_done;
@@ -562,7 +574,7 @@ maizo_igr_poll_again:
                  * another short capture. Never leave the title paused
                  * while sleeping on an alarm. */
                 ChangeThreadPriority(TH_SELF,pollPriority);
-                alarm_id=SetAlarm(97,IGR_Poll_Alarm,&IGR_Thread_ID);
+                alarm_id=SetAlarm(256,IGR_Poll_Alarm,&IGR_Thread_ID);
                 if(alarm_id>=0)SleepThread();else{
                     ChangeThreadPriority(TH_SELF,127);
                     nopdelay();

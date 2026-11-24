@@ -29,6 +29,7 @@
 #include "maizo_igr_monitor.h"
 #include "maizo_igr_gsm_layout.h"
 #include "maizo_igr_pipeline.h"
+#include "maizo_igr_input.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -801,7 +802,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     u32 packet[(112+PW*2*4+64)/4];
     u32 *p=(u32 *)(((u32)packet+63)&~63);
     u32 chcr,madr,qwc,tadr,statOld,statBit,oldBpc;
-    u16 prev=0,now,pressed;
+    u16 now;
+    unsigned prev=0,pressed,held=0;
     u32 frame,lastFrame=0;
     unsigned int stale=0;
     int haveFrame=0,armed=0;
@@ -916,17 +918,13 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         lastFrame=frame;
         stale=0;
         if(!armed){
-            /* Ignore the opening chord until its buttons are released.
-             * Direction/confirm edges then start from a fresh sample. */
-            if((now&0x0f09u)==0x0f09u){prev=now;continue;}
+            /* Wait for START release, not merely a partially released
+             * chord. A fresh direction must not be consumed by arming. */
+            if(now&MZ_KEY_START){prev=now;continue;}
             armed=1;
-            prev=now;
-            continue;
+            prev=now&~0xf0u;
         }
-        pressed=now&~prev;
-        if(!pressed && mzState.page==MZ_PAGE_VIDEO && mzState.selected<4 &&
-           (frame&7u)==0u)pressed=now&(MZ_KEY_LEFT|MZ_KEY_RIGHT);
-        prev=now;
+        pressed=mzPadMenuStep(now,&prev,&held);
         if(!pressed)continue;
         /* Repeating the original six-button chord is always a
          * non-destructive resume, even deep inside a submenu. */

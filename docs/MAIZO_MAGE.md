@@ -402,3 +402,30 @@ is also torn down at a new ELF transition. No new IOP/SMB changes.
 This isolates the persistent GS trap, a concrete difference from the
 stable baseline; it is not a reproduced root cause for Crash Twinsanity,
 BLACK, GTA or other commercial titles. Host assertions are not game tests.
+
+## Request-scoped capture and menu input recovery
+
+The user reports Justiceiro League starts after c91dccd, but the menu
+does not open; Ben 10 can open only in low-load scenes and X/O respond
+while directional navigation does not. Preserve the no-default-GS-trap
+boot policy. Extend the bounded capture opportunity from 32 x 97
+horizontal ticks to 180 x 256 ticks (nominally about 3 seconds, plus
+scheduler/capture overhead). Seek an idle VIF/GIF boundary before
+suspending game threads and revalidate after the IRQ hold. Never force
+a busy DMA channel to stop to open the menu.
+
+The menu merges only navigation/action bits from fresh valid sources
+instead of picking one entire controller report. Opening/resume chords
+must still come from a single controller. Wait for START release, not
+only a partially released opening chord. Directional hold repeats;
+confirmation and exit do not repeat. Left-stick navigation is derived
+from normalized PadEmu reports or a recognized analog libpad report.
+Game input reports are untouched. Fix the stale IOP mailbox upper
+limit to use the current shared EE arena constant.
+
+The complete verified CRTC snapshot requirement remains: some games
+do not rewrite all scanout registers during a request. This change
+cannot guarantee menu availability in such titles. No guessing of
+write-only registers, no new permanent hook, and no claimed game
+reproduction. Host regressions cover simultaneous held buttons,
+stick mapping, repeat and split-chord rejection.

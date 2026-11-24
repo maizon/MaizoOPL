@@ -51,3 +51,14 @@ for op in ("sq","sb","sh","sw","swl","swr","sdl","sdr"):
     assert re.search(r"^\s+"+op+r"\s+\$\w+, 0\(\$a3\)",other,re.M), op
 assert "MaizoGsSeen" in other
 print("Native GS: on-demand capture, exact store widths, no default boot trap PASS")
+
+# The recovery must not bring the permanent boot observer back.
+request=pad.split("config->EnableGSMOp || EnableMaizoGsMonitor()",1)[1].split("mz_capture_done:",1)[0]
+assert "attempt<180" in request
+assert "SetAlarm(256,IGR_Poll_Alarm" in request
+assert request.index("if(maizoIGR_Preflight(0)){ready=1;break;}") < request.index("maizoIgrPauseThreads()")
+assert "mzPadMenuMerge(keys,v)" in pad
+assert "if(now&MZ_KEY_START)" in menu
+assert "mzPadMenuStep(now,&prev,&held)" in menu
+assert "MZ_EE_EXP_TOP-64u" in read("modules/pademu/pademu.c")
+print("Request-scoped capture window and independent menu navigation PASS")

@@ -10,6 +10,7 @@
 #include "padmacro.h"
 #include "maizo_sio2_guard.h"
 #include "../../ee_core/include/maizo_igr_input.h"
+#include "../../ee_core/include/maizo_ee_layout.h"
 
 #ifdef BT
 
@@ -148,7 +149,7 @@ int _start(int argc, char *argv[])
         pad_options = ((u8)argv[1][2] >> 2) & 1;
         if((u8)argv[1][2]&0x80){
             mips_memcpy(&mzInputAddress,argv[1]+63,4);
-            if(mzInputAddress<0x84000u||mzInputAddress>0x9b800u-64u||(mzInputAddress&63u))mzInputAddress=0;
+            if(mzInputAddress<0x84000u||mzInputAddress>MZ_EE_EXP_TOP-64u||(mzInputAddress&63u))mzInputAddress=0;
         }
         u32 macro_settings = 0xAB;
         mips_memcpy(&macro_settings, argv[1] + 4, 4);

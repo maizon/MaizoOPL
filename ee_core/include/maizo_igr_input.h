@@ -20,24 +20,38 @@ static inline unsigned mzPadPick(unsigned best,unsigned keys)
     if(keys==0x0f06u && best!=MZ_PAD_CHORD)return keys;
     return best?best:keys;
 }
-/* Select a complete controller report, not a synthetic combination.
- * Fresh navigation edges win over an unrelated or held button. */
+/* All live controllers may navigate. Aggregate ONLY the menu keys,
+ * never Select or the full shoulder set. A complete resume chord
+ * must have been observed on one controller. Keeping all held keys
+ * also prevents one source from hiding a new direction on another. */
 #define MZ_PAD_MENU_KEYS 0x68f8u
-static inline unsigned mzPadMenuRank(unsigned keys,unsigned previous)
+static inline unsigned mzPadMenuMerge(unsigned combined,unsigned keys)
 {
-    unsigned edge=(keys&~previous)&MZ_PAD_MENU_KEYS;
-    if((keys&MZ_PAD_CHORD)==MZ_PAD_CHORD)return 5;
-    if(edge&0xf0u)return 4;
-    if(edge&0x6008u)return 3;
-    if(keys&0xf0u)return 2;
-    if(keys&0x6008u)return 1;
-    return 0;
+    if(combined==MZ_PAD_CHORD || (keys&MZ_PAD_CHORD)==MZ_PAD_CHORD)
+        return MZ_PAD_CHORD;
+    return combined|(keys&MZ_PAD_MENU_KEYS);
 }
-static inline unsigned mzPadMenuChoose(unsigned best,unsigned *rank,
-                                      unsigned keys,unsigned previous)
+/* The native D-pad wins over the stick. Deadzone and dominant axis
+ * prevent diagonal jitter; do not change gameplay or opening chords. */
+static inline unsigned mzPadMenuAnalog(unsigned keys,unsigned x,unsigned y)
 {
-    unsigned r=mzPadMenuRank(keys,previous);
-    if(r>*rank){*rank=r;return keys;}
-    return best;
+    if((keys&0xf0u) || (keys&0x0f00u)==0x0f00u)return keys;
+    unsigned dx=x>128?x-128:128-x,dy=y>128?y-128:128-y;
+    if(dx<80u&&dy<80u)return keys;
+    if(dy>=dx)return keys|(y<128?0x10u:0x40u);
+    return keys|(x<128?0x80u:0x20u);
+}
+/* Consume rising edges once. Repeat ONLY directions, after a delay,
+ * from fresh input samples. Never repeat OK, BACK, START or a chord. */
+static inline unsigned mzPadMenuStep(unsigned keys,unsigned *previous,unsigned *held)
+{
+    unsigned edge=keys&~*previous;
+    unsigned dir=keys&0xf0u;
+    if(dir && dir==(*previous&0xf0u)){
+        if(*held<16u)(*held)++;
+        else if(*held==16u){edge|=dir;*held=13u;}
+    }else *held=0;
+    *previous=keys;
+    return edge;
 }
 #endif

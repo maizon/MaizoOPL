@@ -9,6 +9,7 @@
 #include "intrman.h"
 #include "thsemap.h"
 #include "ds34usb.h"
+#include "../../ee_core/include/maizo_igr_input.h"
 #include "maizotwin.h"
 #include "maizohid.h"
 #include "maizohid_usb.h"
@@ -809,7 +810,8 @@ int ds34usb_igr_snapshot(int port,u16 *keys)
     ok=hid_stream_thread_id>0&&ds34pad[port].enabled&&(ds34pad[port].status&DS34USB_STATE_RUNNING)&&
        (ds34pad[port].type==MAIZOHID||ds34pad[port].type==TWINHID||
         ds34pad[port].type==MAIZOX360||ds34pad[port].type==MAIZO_KEYBOARD||mzSonyStream(ds34pad[port].type));
-    if(ok)*keys=(u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8);
+    if(ok)*keys=(u16)mzPadMenuAnalog((u16)~(ds34pad[port].data[0]|ds34pad[port].data[1]<<8),
+                                    ds34pad[port].data[4],ds34pad[port].data[5]);
     CpuResumeIntr(old);
     return ok;
 }
