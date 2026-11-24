@@ -318,30 +318,15 @@ static void mzRenderLine(u8 *dest,int y)
         mzPut(dest,color<0?mzPixelBase(ux,uy):color);
     }
 }
-/*
- * The passive GS write observer can miss CRTC setup done by a title
- * before its first trapped write (or when a game clears the debug
- * breakpoint). Read back the GS privileged CRTC registers only after
- * the recorder fails. No hardware writes or video mode changes.
- *
- * Two enabled read circuits may display independent game buffers;
- * do not reject the entire menu for this common layout. Resolve one
- * actually enabled, VRAM-bounded circuit, preferring read circuit 1.
- */
+/* Only use the CRTC state observed by the resident GS recorder.
+ * A plausible read of a write-only privileged register is not evidence
+ * that the address belongs to the game's displayed framebuffer. */
 static int mzFrame(void)
 {
     const u64 *r=GSMSourceGSRegs;
     mz_igr_frame_t f;
-    if(!mzIgrResolveFrame(&f,r[0],r[7],r[9],r[8],r[10],r[2],mzGameHasGsm)){
-        /* GS privileged registers support MMIO access on a real EE.
-         * Treat an unsupported/zero read as failure, never assume a
-         * guessed framebuffer address. */
-        if(!mzIgrResolveFrame(&f,*(vu64 *)0x12000000,
-                       *(vu64 *)0x12000070,*(vu64 *)0x12000090,
-                       *(vu64 *)0x12000080,*(vu64 *)0x120000a0,
-                       *(vu64 *)0x12000020,mzGameHasGsm))
-            return 0;
-    }
+    if(!mzIgrResolveFrame(&f,r[0],r[7],r[9],r[8],r[10],r[2],mzGameHasGsm))
+        return 0;
     mzPsm=(int)f.psm;
     mzBpp=(int)f.pixel_bytes;
     mzBw=(int)f.fbw;
