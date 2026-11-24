@@ -3,10 +3,10 @@
 #ifndef MZ_OVERLAY_LAYOUT_H
 #define MZ_OVERLAY_LAYOUT_H
 #include <stdint.h>
-#define MZ_OVL_BASE 0x000ca000u
+#define MZ_OVL_BASE 0x000c8000u
 #define MZ_OVL_END  0x000d0000u
 #define MZ_OVL_MAGIC 0x4d5a4f56u
-#define MZ_OVL_ABI 1u
+#define MZ_OVL_ABI 2u /* new fixed load address */
 typedef struct {uint32_t magic,abi,end,preflight,run,profile,api_size;} mz_ovl_header;
 static inline int mzOvlHeaderOK(const mz_ovl_header *h)
 {

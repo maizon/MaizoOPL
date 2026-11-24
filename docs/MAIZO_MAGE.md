@@ -553,3 +553,15 @@ now land in an aligned, permanently resident staging line and are copied
 by the IOP worker after a validated sequence. No EE DMA targets the
 leased dynamic allocation. The overlay ELF loader also verifies the
 file-backed entry point ranges and exact low-arena placement.
+
+### Overlay capacity correction
+
+The de119c0 build linked the resident EE core with 36,408 bytes of
+main stack, but the separately linked menu exceeded the 24 KiB region
+by 6,336 bytes (30,912 bytes total). Reserve 32 KiB from 0xC8000 to
+0xD0000 and compile its code with -Oz. The same layout constant gates
+IRX packing and the frontend loader; the ABI is bumped. The module
+arena is 8 KiB smaller than before, so configurations that cannot fit
+still select the legacy core rather than touching game memory. The
+resident main stack minimum remains 8 KiB. CI verifies the actual
+ELF segment, file-backed entry addresses and header before upload.

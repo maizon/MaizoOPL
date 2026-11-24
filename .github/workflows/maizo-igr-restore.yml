@@ -19,6 +19,8 @@ jobs:
           set -o pipefail
           make clean
           make --trace release MAIZO_IGR_EXPERIMENTAL=1 MAIZO_MAGE_SKY_EXPERIMENTAL=1 MAIZO_IGR_RESTORE_EXPERIMENTAL=1 MAIZO_IGR_OVERLAY_EXPERIMENTAL=1 2>&1 | tee restore.log
+      - name: Validate actual overlay ELF and reserved memory
+        run: python3 scripts/check_maizo_overlay.py
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -32,3 +34,4 @@ jobs:
           path: |
             restore.log
             ee_core/ee_core.map
+            ee_core/overlay/maizo_overlay.map

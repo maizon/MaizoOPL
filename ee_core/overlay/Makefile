@@ -1,6 +1,6 @@
 EE_BIN = maizo_overlay.elf
 EE_INCS = -I.. -I../include -I$(PS2SDK)/ee/include -I$(PS2SDK)/common/include -I$(PS2SDK)/ports/include
-EE_CFLAGS = -D_EE -DMAIZO_IGR_MENU -DMAIZO_IGR_OVERLAY_SIDE -DMZ_GS_CLIENT -Os -G0 -fno-builtin -ffunction-sections -fdata-sections -Wall $(EE_INCS)
+EE_CFLAGS = -D_EE -DMAIZO_IGR_MENU -DMAIZO_IGR_OVERLAY_SIDE -DMZ_GS_CLIENT -Oz -G0 -fno-builtin -ffunction-sections -fdata-sections -Wall $(EE_INCS)
 ifeq ($(MAIZO_MAGE_SKY_EXPERIMENTAL),1)
 EE_CFLAGS += -DMAIZO_MAGE_SKY_EXPERIMENTAL
 endif

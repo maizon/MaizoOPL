@@ -1,5 +1,7 @@
 ENTRY(mzOverlayHeader)
-MEMORY { ovl : ORIGIN = 0x000CA000, LENGTH = 24K }
+/* 30912 bytes measured in de119c0 with -Os; keep 32 KiB below
+ * the existing 0xD0000 low-memory ceiling. Never extend into game RAM. */
+MEMORY { ovl : ORIGIN = 0x000C8000, LENGTH = 32K }
 PHDRS { image PT_LOAD; }
 SECTIONS {
  .text : { KEEP(*(.mzovl.hdr)) *(.text .text.* .gnu.linkonce.t*) } >ovl :image
@@ -8,5 +10,6 @@ SECTIONS {
  .bss ALIGN(64) (NOLOAD) : { *(.bss .bss.* .sbss .sbss.*) *(COMMON) . = ALIGN(16); } >ovl :image
  _mz_overlay_end = .;
  /DISCARD/ : { *(.reginfo) *(.MIPS.abiflags) *(.comment) *(.pdr) *(.mdebug.*) *(.gnu.attributes) *(.eh_frame) }
- ASSERT(_mz_overlay_end <= 0xD0000, "MAIZO: separate overlay exceeds reserved arena")
+ ASSERT(mzOverlayHeader == ORIGIN(ovl), "MAIZO: overlay header must start at reserved base")
+ ASSERT(_mz_overlay_end <= ORIGIN(ovl) + LENGTH(ovl), "MAIZO: separate overlay exceeds reserved arena")
 }
