@@ -77,6 +77,7 @@ extern void GSHandler();
 extern volatile u32 MaizoGsMonitorOnly;
 extern u64 GSMSourceGSRegs[11];
 
+static int gsInstalled;
 static unsigned int KSEG_backup[2]; // Copies of the original words at 0x80000100 and 0x80000104.
 
 /* Update GSM params */
@@ -162,6 +163,7 @@ static void Install_GSHandler(void)
     FlushCache(2);
     DI();
     Enable_GSBreakpoint();
+    gsInstalled=1;
     EI();
 }
 
@@ -171,15 +173,18 @@ static void Remove_GSHandler(void)
 
     Disable_GSBreakpoint();
 
-    // Restore the original stuff at the level 2 exception handler.
+    // Restore only the vector we installed, never replace a newer owner.
     ee_kmode_enter();
-    *(volatile u32 *)0x80000100 = KSEG_backup[0];
-    *(volatile u32 *)0x80000104 = KSEG_backup[1];
+    if(*(volatile u32 *)0x80000100 == MAKE_J((int)GSHandler) &&
+       *(volatile u32 *)0x80000104 == NOP){
+        *(volatile u32 *)0x80000100 = KSEG_backup[0];
+        *(volatile u32 *)0x80000104 = KSEG_backup[1];
+    }
     ee_kmode_exit();
-    EI();
-
+    gsInstalled=0;
     FlushCache(0);
     FlushCache(2);
+    EI();
 }
 
 /*-------------------------------------------*/
@@ -198,29 +203,66 @@ void EnableGSM(void)
  * Menu-only recorder. Does not select or force a CRT video mode; the
  * GS write breakpoint forwards game writes unchanged in this mode.
  */
-void EnableMaizoGsMonitor(void)
+#ifdef MAIZO_IGR_MENU
+volatile u32 MaizoGsSeen;
+extern volatile u32 MaizoNativeMask,MaizoNativeFieldInvert;
+extern volatile u32 MaizoGsFilterMode,MaizoGs480iMode,MaizoGs480iArmed;
+static u32 mzSavedBpc,mzSavedDab,mzSavedDabm;
+
+/* No GS debugging exception or syscall patch exists during ordinary
+ * gameplay unless a user explicitly requests a native video override.
+ * A new capture must not reuse stale write-only scanout values. */
+int EnableMaizoGsMonitor(void)
 {
     int i;
+    u32 bpc;
     volatile u8 *flags=(volatile u8 *)&GSMFlags;
-    for (i=0;i<11;i++)
-        GSMSourceGSRegs[i]=0;
-    for (i=0;i<19;i++)
-        flags[i]=0; /* disable every GSM adaptation and field fix */
+    if(gsInstalled)return MaizoGsMonitorOnly!=0;
+    ee_kmode_enter();
+    asm volatile("mfbpc %0\n\tsync.p":"=r"(bpc));
+    if(bpc&0xe0000000u){ee_kmode_exit();return 0;}
+    mzSavedBpc=bpc;
+    asm volatile("mfdab %0\n\tmfdabm %1\n\tsync.p":"=r"(mzSavedDab),"=r"(mzSavedDabm));
+    ee_kmode_exit();
+    MaizoGsSeen=0;
+    for(i=0;i<11;i++)GSMSourceGSRegs[i]=0;
+    for(i=0;i<19;i++)flags[i]=0;
     MaizoGsMonitorOnly=1;
+    Install_GSHandler(); /* vector is visible before syscall can rearm */
     Install_Hook_SetGsCrt();
-    Install_GSHandler();
+    return 1;
 }
+
+void MaizoGsMonitorEnd(int force)
+{
+    if(!gsInstalled||!MaizoGsMonitorOnly)return;
+    if(!force && (MaizoNativeMask||MaizoNativeFieldInvert||
+        MaizoGsFilterMode||MaizoGs480iMode||MaizoGs480iArmed))return;
+    DisableGSM();
+    /* Restore the idle debug comparator state borrowed for capture. */
+    ee_kmode_enter();
+    asm volatile("mtdab %0\n\tmtdabm %1\n\tsync.p\n\tmtbpc %2\n\tsync.p"::
+        "r"(mzSavedDab),"r"(mzSavedDabm),"r"(mzSavedBpc):"memory");
+    ee_kmode_exit();
+    MaizoGsSeen=0;
+    if(force){
+        MaizoNativeMask=MaizoNativeFieldInvert=MaizoGsFilterMode=0;
+        MaizoGs480iMode=MaizoGs480iArmed=0;
+    }
+}
+#endif
 
 /*--------------------------------------------*/
 /* Disable Graphics Synthesizer Mode Selector */
 /*--------------------------------------------*/
 void DisableGSM(void)
 {
-    MaizoGsMonitorOnly=0;
-    // Remove Hook SetGsCrt
-    Remove_Hook_SetGsCrt();
-    // Remove Display Handler
+    if(!gsInstalled)return;
+    // Disable trapping before changing the mode or restoring the vector.
     Remove_GSHandler();
+    if(GetSyscallHandler(__NR_SetGsCrt)==Hook_SetGsCrt)
+        Remove_Hook_SetGsCrt();
+    MaizoGsMonitorOnly=0;
 }
 
 /*--------------------------------------------*/

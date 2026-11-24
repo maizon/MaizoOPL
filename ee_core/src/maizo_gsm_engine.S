@@ -243,6 +243,10 @@ maizo_480i_setcrt_done:
     la      $t3, MaizoNativeFieldInvert
     sw      $zero, 0($t3)
     # A new CRT mode invalidates the old geometry and recorder values.
+#ifdef MAIZO_IGR_MENU
+    la      $t3, MaizoGsSeen
+    sw      $zero, 0($t3)
+#endif
     la      $t3, MaizoNativeMask
     sw      $zero, 0($t3)
     la      $t3, GSMSourceGSRegs
@@ -610,16 +614,23 @@ swr_op:
 sd_op:
 have_some_write:                                    # Opcode is a write, so we must check further
 
+    # Retain the real opcode and source register address. The legacy
+    # GSM path is unchanged; native capture must preserve store width.
+    srl     $s5, $v0, 26
     jal     get_access_info
     nop
+    move    $s6, $a1
     ld      $a1, 0($a1)                             # a1 = value in rt
 
-    # Passive recorder sends ALL writes unchanged; only save readout
-    # registers for the optional menu framebuffer resolver.
     la      $t3, MaizoGsMonitorOnly
     lw      $t4, 0($t3)
-    bnez    $t4, maizo_monitor_write
+    beqz    $t4, maizo_legacy_write
+    li      $t0, 0x3f
+    beq     $s5, $t0, maizo_monitor_write
     nop
+    b       maizo_monitor_other_store
+    nop
+maizo_legacy_write:
 
     addi    $v1, $v0, -GS_PMODE
     beqz    $v1, have_PMODE_write                   # in case of  dest == GS_reg_PMODE
@@ -658,6 +669,16 @@ maizo_monitor_write:
     addu    $t0, $t0, $s0
     ld      $t6, 0($t0)
     sd      $a1, 0($t0)
+#ifdef MAIZO_IGR_MENU
+    # Record that this exact register was actually written in this capture.
+    srl     $t0, $v0, 4
+    li      $t1, 1
+    sllv    $t1, $t1, $t0
+    la      $t0, MaizoGsSeen
+    lw      $t2, 0($t0)
+    or      $t2, $t2, $t1
+    sw      $t2, 0($t0)
+#endif
     addiu   $t0, $v0, -GS_SMODE2
     bnez    $t0, maizo_native_field_write_done
     nop
@@ -724,6 +745,53 @@ maizo_native_cancel_second:
 maizo_monitor_forward:
     b       exit_GSHandler
     sd      $a1, 0($a3)
+
+# For partial or quadword stores, perform the exact original operation.
+# Do not claim a full 64-bit CRTC snapshot or transform the value.
+maizo_monitor_other_store:
+#ifdef MAIZO_IGR_MENU
+    la      $t0, MaizoGsSeen
+    sw      $zero, 0($t0)
+#endif
+    li      $t0, 0x1f
+    beq     $s5, $t0, maizo_store_sq
+    li      $t0, 0x28
+    beq     $s5, $t0, maizo_store_sb
+    li      $t0, 0x29
+    beq     $s5, $t0, maizo_store_sh
+    li      $t0, 0x2a
+    beq     $s5, $t0, maizo_store_swl
+    li      $t0, 0x2b
+    beq     $s5, $t0, maizo_store_sw
+    li      $t0, 0x2c
+    beq     $s5, $t0, maizo_store_sdl
+    li      $t0, 0x2d
+    beq     $s5, $t0, maizo_store_sdr
+    nop
+    b       exit_GSHandler
+    swr     $a1, 0($a3)
+maizo_store_sq:
+    lq      $t0, 0($s6)
+    b       exit_GSHandler
+    sq      $t0, 0($a3)
+maizo_store_sb:
+    b       exit_GSHandler
+    sb      $a1, 0($a3)
+maizo_store_sh:
+    b       exit_GSHandler
+    sh      $a1, 0($a3)
+maizo_store_swl:
+    b       exit_GSHandler
+    swl     $a1, 0($a3)
+maizo_store_sw:
+    b       exit_GSHandler
+    sw      $a1, 0($a3)
+maizo_store_sdl:
+    b       exit_GSHandler
+    sdl     $a1, 0($a3)
+maizo_store_sdr:
+    b       exit_GSHandler
+    sdr     $a1, 0($a3)
 
 # Active native 480p renderer -> 480i output. Only scanout timing
 # is held; game PMODE and framebuffer flips pass unchanged. Reuse

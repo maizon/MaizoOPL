@@ -33,3 +33,21 @@ assert "if(mzProfilePending)" in menu
 install = api.split("static void Install_GSHandler(", 1)[1].split("static void Remove_GSHandler(", 1)[0]
 assert install.index("FlushCache(2);") < install.index("Enable_GSBreakpoint();")
 print("MAIZO launch isolation: legacy poll priority, deferred live options, vector publication PASS")
+
+# Native games must execute without a permanently installed GS trap.
+assert "EnableMaizoGsMonitor();" not in boot
+assert "config->EnableGSMOp || EnableMaizoGsMonitor()" in pad
+capture = pad.split("mz_capture_done:",1)[1].split("goto maizo_igr_poll_again",1)[0]
+assert capture.index("MaizoGsMonitorEnd(0)") < capture.index("maizoIgrResumeThreads()")
+end = api.split("void MaizoGsMonitorEnd(",1)[1].split("#endif",1)[0]
+assert "if(!gsInstalled||!MaizoGsMonitorOnly)return;" in end
+assert "DisableGSM();" in end and "mtbpc %2" in end
+assert "(MaizoGsSeen&need)!=need" in menu
+assert "MaizoGsMonitorEnd(1)" in read("ee_core/src/syshook.c")
+asm = read("ee_core/src/maizo_gsm_engine.S")
+other = asm.split("\nmaizo_monitor_other_store:",1)[1].split("\nmaizo_native_bridge_write:",1)[0]
+import re
+for op in ("sq","sb","sh","sw","swl","swr","sdl","sdr"):
+    assert re.search(r"^\s+"+op+r"\s+\$\w+, 0\(\$a3\)",other,re.M), op
+assert "MaizoGsSeen" in other
+print("Native GS: on-demand capture, exact store widths, no default boot trap PASS")

@@ -121,12 +121,8 @@ static int eecoreInit(int argc, char **argv)
         /* Saved live geometry is applied only at the first safe menu boundary. */
         EnableGSM();
     }
-#ifdef MAIZO_IGR_MENU
-    else if (config->EnableMaizoIgrMenu) {
-        /* Independent In-Game menu without GSM video-mode forcing. */
-        EnableMaizoGsMonitor();
-    }
-#endif
+    /* GSM OFF: no graphics exception vector or SetGsCrt hook at boot.
+     * The PRO recorder is requested by the explicit menu chord. */
 
     set_ipconfig();
 

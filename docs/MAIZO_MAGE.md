@@ -384,3 +384,21 @@ No new per-frame background polling, memory scanning, graphics
 breakpoints or module arena expansion. Preserve the recovery revision's
 sleeping monitor and guarded capture. This is not evidence that the
 commercial-game freezes have been eliminated.
+
+## Native stability isolation (GSM OFF)
+
+With user-selected GSM disabled, no GS debug exception vector or SetGsCrt
+hook is installed at boot. The six-button menu chord starts a bounded
+capture using existing attempts, then restores the previous comparator
+and exception vector before ordinary play resumes unless an explicit
+native scanout override remains active. Captured PMODE, SMODE2 and both
+registers of each active read circuit must be observed during this
+capture. No guessing, stale records or reads from write-only registers.
+Partial and quadword stores preserve their actual store instruction and
+invalidate the snapshot. This can refuse menu opening in titles that
+do not re-emit complete CRTC settings during the capture window.
+Legacy explicitly enabled GSM retains its own route. Native capture
+is also torn down at a new ELF transition. No new IOP/SMB changes.
+This isolates the persistent GS trap, a concrete difference from the
+stable baseline; it is not a reproduced root cause for Crash Twinsanity,
+BLACK, GTA or other commercial titles. Host assertions are not game tests.

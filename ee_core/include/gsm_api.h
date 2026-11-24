@@ -16,7 +16,9 @@ void Enable_GSBreakpoint(void);
 void Disable_GSBreakpoint(void);
 void EnableGSM(void);
 #ifdef MAIZO_IGR_MENU
-void EnableMaizoGsMonitor(void);
+int EnableMaizoGsMonitor(void);
+void MaizoGsMonitorEnd(int force);
+extern volatile u32 MaizoGsSeen;
 #endif
 void DisableGSM(void);
 void setdve_576P(void);

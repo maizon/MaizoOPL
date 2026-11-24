@@ -18,6 +18,7 @@
 #include "coreconfig.h"
 #ifdef MAIZO_IGR_MENU
 #include "maizo_gs_runtime.h"
+#include "gsm_api.h"
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
 #include "maizo_mage_sky.h"
 #endif
@@ -74,6 +75,11 @@ void sysLoadElf(char *filename, int argc, char **argv)
     USE_LOCAL_EECORE_CONFIG;
     int r;
     t_ExecData elf;
+#ifdef MAIZO_IGR_MENU
+    /* No native capture or previous title video override may leak
+     * into an ELF transition. Explicit legacy GSM remains untouched. */
+    if(!config->EnableGSMOp)MaizoGsMonitorEnd(1);
+#endif
 
     SifInitRpc(0);
 

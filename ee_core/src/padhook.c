@@ -352,7 +352,7 @@ maizo_igr_poll_again:
          * The sample may miss a short-lived transfer; it is telemetry,
          * never a universal-game compatibility claim.
          */
-        if (config->EnableMaizoIgrMenu) {
+        if (config->EnableMaizoIgrMenu && config->EnableGSMOp) {
             mzGsProbeSample(&mzGsProbe,
                             *(vu32 *)0x10003020, /* GIF_STAT */
                             *(vu32 *)0x10009000, /* D1_CHCR */
@@ -531,7 +531,8 @@ maizo_igr_poll_again:
          * trigger the destructive legacy reset path.
          */
         ChangeThreadPriority(TH_SELF, 0);
-        if (config->EnableMaizoIgrMenu) {
+        if (config->EnableMaizoIgrMenu &&
+            (config->EnableGSMOp || EnableMaizoGsMonitor())) {
             /* Stop EE producers first, but leave completion IRQs live
              * while outstanding VIF/GIF work drains. Only acquire the
              * graphics IRQ hold after a valid idle sample, then recheck.
@@ -570,6 +571,9 @@ maizo_igr_poll_again:
             }
         }
 mz_capture_done:
+        /* No always-on GS trap just because PRO is enabled. Release
+         * temporary capture before ordinary game threads resume. */
+        if(!config->EnableGSMOp)MaizoGsMonitorEnd(0);
         choice = maizoIgrSafeChoice(config->EnableMaizoIgrMenu, choice);
         if (choice == MAIZO_IGR_RESUME) {
             if (config->EnableMaizoIgrMenu)

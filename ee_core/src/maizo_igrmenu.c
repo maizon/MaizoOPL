@@ -400,6 +400,12 @@ static int mzFrame(void)
 {
     const u64 *r=GSMSourceGSRegs;
     mz_igr_frame_t f;
+    if(!mzGameHasGsm){
+        unsigned en=r[0]&3u,need=5u; /* PMODE + SMODE2 */
+        if(en&1u)need|=(1u<<7)|(1u<<8);
+        if(en&2u)need|=(1u<<9)|(1u<<10);
+        if(!MaizoGsMonitorOnly||!en||(MaizoGsSeen&need)!=need)return 0;
+    }
     if(!mzIgrResolveFrame(&f,r[0],r[7],r[9],r[8],r[10],r[2],mzGameHasGsm))
         return 0;
     mzPsm=(int)f.psm;
