@@ -104,9 +104,13 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
     maizoIgrStateInit(&s,0);
     s.page=MZ_PAGE_VIDEO;s.video_caps=MZ_VIDEO_NATIVE;
-    maizoIgrStep(&s,MZ_KEY_RIGHT);assert(s.width==1&&s.changed);
-    maizoIgrStep(&s,MZ_KEY_LEFT);maizoIgrStep(&s,MZ_KEY_LEFT);
-    assert(s.width==-1&&s.changed);
+    maizoIgrStep(&s,MZ_KEY_RIGHT);assert(s.width==0&&!s.changed);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==1&&s.changed);
+    maizoIgrStep(&s,MZ_KEY_LEFT);assert(s.width==1);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==0);
+    maizoIgrStep(&s,MZ_KEY_LEFT);assert(s.width==-1&&s.changed);
+    maizoIgrStep(&s,MZ_KEY_RIGHT|0x0800u);assert(s.width==0);
+    maizoIgrStep(&s,MZ_KEY_LEFT);assert(s.width==-1);
     s.selected=5;s.changed=0;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.field_fix&&!s.changed);
     s.native_field_caps=1;
@@ -118,8 +122,8 @@ int main(void) {
     s.selected=4;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height);
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==-12&&s.height==-12);
-    s.selected=7;
-    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height&&!s.x&&!s.y);
+    s.selected=7;s.legacy_geometry=1;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height&&!s.x&&!s.y&&!s.legacy_geometry);
     maizoIgrStateInit(&s,0);s.page=MZ_PAGE_GAME;
     maizoIgrStep(&s,MZ_KEY_OK);assert(!s.cheat_changed&&!s.cheat_paused);
     s.cheat_caps=1;

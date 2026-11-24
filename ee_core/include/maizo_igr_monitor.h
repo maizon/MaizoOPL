@@ -119,7 +119,7 @@ MZ_IGR_FN int mzIgrResolveFrame(mz_igr_frame_t *out,
  * magnifier without increasing the number of source pixels read.
  * CRT timing and framebuffer addressing remain unchanged. */
 MZ_IGR_FN int mzNativeDisplayEdit(uint64_t base,int cropX,int cropY,
-                                      int offsetX,int offsetY,uint64_t *out)
+                                      int offsetX,int offsetY,int legacy,uint64_t *out)
 {
     int dx=base&4095u,dy=(base>>12)&2047u;
     int dw=((base>>32)&4095u)+1,dh=((base>>44)&2047u)+1;
@@ -135,7 +135,7 @@ MZ_IGR_FN int mzNativeDisplayEdit(uint64_t base,int cropX,int cropY,
     else nh+=cropY*mv;
     if(newH>16||newV>4||nw<168*newH||nh<130*newV||
        nw>4096||nh>2048)return 0;
-    dx+=offsetX*mh+(dw-nw)/2;dy+=offsetY*mv+(dh-nh)/2;
+    dx+=offsetX*(legacy?mh:1)+(dw-nw)/2;dy+=offsetY*(legacy?mv:1)+(dh-nh)/2;
     if(dx<0||dx>4095||dy<0||dy>2047||
        dx+nw>4096||dy+nh>2048)return 0;
     *out=(base&~mask)|(uint64_t)dx|((uint64_t)dy<<12)|

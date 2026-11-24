@@ -185,3 +185,22 @@ existing fixed-blend same-image pair with different DBY and matching
 display geometry; FRAME smooth is unchanged. Native scanout may cancel
 the override on subsequent incompatible writes.
 No universal AA1, DTHE, frame hook or arbitrary restoration claim.
+
+## Fine In-Game geometry
+
+New sessions use one DISPLAY clock/line per GSM width, height and position
+step; R1 multiplies the logical step by four. These are output-window
+adjustments, not arbitrary fractional scaling. Native position uses one
+output clock/line, native size arrows crop one source pixel/row and return
+towards the original size, never increase MAGH/MAGV. X on a native size
+row explicitly toggles an integer zoom for that axis; the existing
+all-circuit geometry validation rejects unsupported requests. The original
+crop preset remains separate. No extra VRAM, DMA or timing changes.
+
+Profile V3 uses the same packed size and transport as V2 with a separate
+version tag. V1/V2 profiles keep their previous numeric meaning, including
+integer magnification and GSM clock increments; restore switches to fine
+mode. A failed native edit also restores the previous geometry version.
+New GSM window range is intentionally limited to +/-32 logical units
+rather than the old larger coarse range. Native cropping does not resample.
+No change to the protected EE memory boundary or stack requirement.

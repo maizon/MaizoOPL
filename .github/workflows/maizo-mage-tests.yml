@@ -34,5 +34,11 @@ jobs:
           /tmp/mage-profile
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_filter_test.c -o /tmp/mage-filter
           /tmp/mage-filter
+      - name: Fine geometry and legacy profile regression
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_monitor_test.c -o /tmp/mage-geometry
+          /tmp/mage-geometry
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_profile_test.c -o /tmp/mage-profile-geometry
+          /tmp/mage-profile-geometry
       - name: Existing exact-revision installer
         run: python3 tests/maizo_gs_install_elf_test.py

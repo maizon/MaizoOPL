@@ -6,6 +6,7 @@
 #define MZ_PROFILE_ARG_SIZE 26
 #define MZ_PROFILE_VALID 0x80000000u
 #define MZ_PROFILE_V2 0xa0000000u
+#define MZ_PROFILE_V3 0xc0000000u
 static inline int mzProfileIdOK(const char *id)
 {
     unsigned i;
@@ -21,7 +22,7 @@ static inline int mzProfileIdOK(const char *id)
 }
 static inline int mzProfileValid(uint32_t v)
 {
-    if((v&0xe0000000u)==MZ_PROFILE_V2)
+    if((v&0xe0000000u)==MZ_PROFILE_V2 || (v&0xe0000000u)==MZ_PROFILE_V3)
         return ((v>>25)&3u)<=2u && ((v&(1u<<28)) ||
                ((v&63u)<=34u && ((v>>6)&63u)<=34u));
     return (v&0xf8000000u)==MZ_PROFILE_VALID &&
@@ -39,12 +40,19 @@ static inline uint32_t mzProfilePack(int w,int h,int x,int y,int field,int filte
         ((uint32_t)!!field<<24)|((uint32_t)filter<<25)|
         ((uint32_t)!!bridge<<27)|((uint32_t)!!gsm<<28);
 }
+/* V3 keeps the same storage fields, but GSM size/position and native
+ * position are single DISPLAY clock/line units. V1/V2 are not silently
+ * reinterpreted; they retain their original geometry until reset. */
+static inline uint32_t mzProfileFine(uint32_t v)
+{
+    return v?(v&0x1fffffffu)|MZ_PROFILE_V3:0;
+}
 /* v1 used two-pixel native crops and 12/6 clock/line GSM increments.
  * Upgrade without changing the old effective geometry. */
 static inline uint32_t mzProfileUpgrade(uint32_t v)
 {
     if(!mzProfileValid(v))return 0;
-    if((v&0xe0000000u)==MZ_PROFILE_V2)return v;
+    if((v&0xe0000000u)==MZ_PROFILE_V2 || (v&0xe0000000u)==MZ_PROFILE_V3)return v;
     int gsm=!!(v&(1u<<26)),w=(int)(v&31u)-8,h=(int)((v>>5)&31u)-8;
     w*=gsm?3:(w<0?2:1);h*=gsm?3:(h<0?2:1);
     return mzProfilePack(w,h,(int)((v>>10)&63u)-24,(int)((v>>16)&63u)-24,

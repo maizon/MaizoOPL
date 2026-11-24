@@ -181,27 +181,20 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
                 if(i==5 && s->native_field_caps)
                     mzLine(75,11,4,s->field_fix?"FIELD INV ON":"FIELD INV OFF");
                 else mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
-        }else if(s->video_caps==MZ_VIDEO_NATIVE){
-            mzValue(0,"REC/ZOOM X",s->width,0);
-            mzValue(1,"REC/ZOOM Y",s->height,0);
-            mzValue(2,"POSICAO X",s->x,0);
-            mzValue(3,"POSICAO Y",s->y,0);
-            mzLine(65,11,4,"PRESET RECORTE");
-            mzLine(75,11,s->native_field_caps?4:5,
-                   s->native_field_caps?(s->field_fix?"FIELD INV ON":"FIELD INV OFF"):"FIELD: N/D");
-            mzLine(85,11,4,"FILTROS >");
-            mzLine(95,11,4,"RESTAURAR IMAGEM");
-            mzLine(105,11,4,"VOLTAR");
         }else{
-        mzValue(0,"LARGURA X",s->width*4,0);
-        mzValue(1,"ALTURA Y",s->height*2,0);
-        mzValue(2,"POSICAO X",s->x*2,0);
-        mzValue(3,"POSICAO Y",s->y*2,0);
-        mzLine(65,11,4,"PRESET 4:3/EXPAND.");
-        mzLine(75,11,4,s->field_fix?"FIELD FIX ON":"FIELD FIX OFF");
-        mzLine(85,11,4,"FILTROS >");
-        mzLine(95,11,4,"RESTAURAR IMAGEM");
-        mzLine(105,11,4,"VOLTAR");
+            int native=s->video_caps==MZ_VIDEO_NATIVE,legacy=s->legacy_geometry;
+            mzValue(0,native?(s->width>0?"ZOOM X (X)":"REC X (X ZOOM)"):"JANELA X",
+                s->width*(legacy&&!native?4:1),0);
+            mzValue(1,native?(s->height>0?"ZOOM Y (X)":"REC Y (X ZOOM)"):"JANELA Y",
+                s->height*(legacy&&!native?2:1),0);
+            mzValue(2,"POSICAO X",s->x*(legacy&&!native?2:1),0);
+            mzValue(3,"POSICAO Y",s->y*(legacy&&!native?2:1),0);
+            mzLine(65,11,4,native?"PRESET RECORTE":"PRESET 4:3/EXPAND.");
+            mzLine(75,11,(!native||s->native_field_caps)?4:5,
+                (!native||s->native_field_caps)?(s->field_fix?"FIELD ON":"FIELD OFF"):"FIELD: N/D");
+            mzLine(85,11,4,"FILTROS >");
+            mzLine(95,11,4,legacy?"RESET P/ AJUSTE FINO":"RESTAURAR IMAGEM");
+            mzLine(105,11,4,"VOLTAR");
         }
     }else if(s->page==MZ_PAGE_FILTERS){
         mzLine(25,11,s->filter_caps&2?4:5,
@@ -437,10 +430,11 @@ static u64 mzDisplayEdit(u64 base,const maizo_igr_state_t *s)
 {
     int olddx=base&0xfff,olddy=(base>>12)&0x7ff;
     int olddw=(base>>32)&0xfff,olddh=(base>>44)&0x7ff;
-    int dw=maizoIgrBound(olddw+s->width*4,0,4095);
-    int dh=maizoIgrBound(olddh+s->height*2,0,2047);
-    int dx=maizoIgrBound(olddx+s->x*2-(dw-olddw)/2,0,4095);
-    int dy=maizoIgrBound(olddy+s->y*2-(dh-olddh)/2,0,2047);
+    int step=s->legacy_geometry?2:1;
+    int dw=maizoIgrBound(olddw+s->width*(s->legacy_geometry?4:1),0,4095);
+    int dh=maizoIgrBound(olddh+s->height*step,0,2047);
+    int dx=maizoIgrBound(olddx+s->x*step-(dw-olddw)/2,0,4095);
+    int dy=maizoIgrBound(olddy+s->y*step-(dh-olddh)/2,0,2047);
     u64 clear=((u64)0xfff)|((u64)0x7ff<<12)|
               ((u64)0xfff<<32)|((u64)0x7ff<<44);
     return (base & ~clear)|(u64)dx|((u64)dy<<12)|
@@ -459,7 +453,7 @@ static unsigned int __attribute__((noinline)) mzNativeCaps(void)
         unsigned int bit=1u<<i;
         if(!(en&bit))continue;
         if(!mzIgrMonitorFrame(&f,(r[0]&~3ULL)|bit,r[7],r[9],r[8],r[10],r[2],0) ||
-           !mzNativeDisplayEdit(r[8+i*2],0,0,0,0,&unchanged))return 0;
+           !mzNativeDisplayEdit(r[8+i*2],0,0,0,0,0,&unchanged))return 0;
     }
     return en;
 }
@@ -474,7 +468,7 @@ static int __attribute__((noinline)) mzNativeApply(const maizo_igr_state_t *s)
     for(i=0;i<2;i++){
         if(!(en&(1u<<i)))continue;
         source[i]=GSMSourceGSRegs[8+i*2];
-        if(!mzNativeDisplayEdit(source[i],s->width,s->height,s->x,s->y,&target[i]))return 0;
+        if(!mzNativeDisplayEdit(source[i],s->width,s->height,s->x,s->y,s->legacy_geometry,&target[i]))return 0;
     }
     MaizoNativeMask=0;
     for(i=0;i<2;i++){
@@ -509,13 +503,14 @@ static void mzDecodeGeometry(maizo_igr_state_t *s,u32 v)
     s->width=(int)(v&63u)-32;s->height=(int)((v>>6)&63u)-32;
     s->x=(int)((v>>12)&63u)-32;s->y=(int)((v>>18)&63u)-32;
     s->field_fix=!!(v&(1u<<24));
+    s->legacy_geometry=(v&0xe0000000u)==MZ_PROFILE_V2;
 }
 void maizoIGR_BootProfile(void)
 {
     USE_LOCAL_EECORE_CONFIG;
     u32 v=config->MaizoProfile;
     if(!config->EnableMaizoIgrMenu||!config->EnableGSMOp||
-       !(v&(1u<<28))||(v&0xe0000000u)!=MZ_PROFILE_V2||!mzProfileValid(v))return;
+       !(v&(1u<<28))||!mzProfileValid(v)||!(v&0x60000000u))return;
     mzGameHasGsm=1;
     maizoIgrStateInit(&mzState,config->GsmConfig.FIELD_fix);
     mzOriginalDisp[0]=GSMDestGSRegs[8];mzOriginalDisp[1]=GSMDestGSRegs[10];
@@ -805,13 +800,14 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     if(mzProfilePending){
         u32 v=config->MaizoProfile;
         mzProfilePending=0;
-        if((v&0xe0000000u)==MZ_PROFILE_V2&&mzProfileValid(v)&&!!(v&(1u<<28))==mzGameHasGsm){
+        if((v&0x60000000u)&&mzProfileValid(v)&&!!(v&(1u<<28))==mzGameHasGsm){
             maizo_igr_state_t desired=mzState;
             mzDecodeGeometry(&desired,v);
             if(mzGameHasGsm||mzNativeApply(&desired)){
                 if(mzGameHasGsm)mzApply(&desired,1);
                 mzState.width=desired.width;mzState.height=desired.height;
                 mzState.x=desired.x;mzState.y=desired.y;
+                mzState.legacy_geometry=desired.legacy_geometry;
             }
             if(mzGameHasGsm||mzState.native_field_caps){
                 mzState.field_fix=desired.field_fix;
@@ -862,13 +858,14 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         if((now&0x0f09u)==0x0f09u){result=MAIZO_IGR_RESUME;break;}
         {
             int oldW=mzState.width,oldH=mzState.height;
-            int oldX=mzState.x,oldY=mzState.y;
+            int oldX=mzState.x,oldY=mzState.y,oldLegacy=mzState.legacy_geometry;
             action=maizoIgrStep(&mzState,pressed|(now&0x0800u));
             if(mzState.changed){
                 if(mzGameHasGsm)mzApply(&mzState,1);
                 else if(!mzNativeApply(&mzState)){
                     mzState.width=oldW;mzState.height=oldH;
                     mzState.x=oldX;mzState.y=oldY;
+                    mzState.legacy_geometry=oldLegacy;
                 }
                 mzState.changed=0;
                 mzState.filter_caps=mzFilterCapabilities();
@@ -933,6 +930,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         if(action==MZ_ACTION_SAVE_EXIT){
             u32 v=mzProfilePack(mzState.width,mzState.height,mzState.x,mzState.y,
                 mzState.field_fix,mzState.filter_mode,mzState.frame480i_mode,mzGameHasGsm);
+            if(!mzState.legacy_geometry)v=mzProfileFine(v);
             if(mzState.save_caps&&mzProfileArg(mzProfileReturn,config->MaizoProfileID,v)){
                 result=MAIZO_IGR_EXIT;break;
             }

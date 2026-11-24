@@ -13,6 +13,12 @@ int main(void){
  uint32_t old=0x80000000u|6u|(5u<<5)|(24u<<10)|(24u<<16);
  assert(mzProfileUpgrade(old)==mzProfilePack(-4,-6,0,0,0,0,0,0));
  assert(mzProfileUpgrade(v)==v);
+ uint32_t fine=mzProfileFine(v);
+ assert(mzProfileValid(fine)&&mzProfileUpgrade(fine)==fine);
+ assert((fine&0x1fffffffu)==(v&0x1fffffffu));
+ assert((fine&0xe0000000u)==MZ_PROFILE_V3);
+ assert(mzProfileArg(arg,"SLUS_123.45",fine)&&mzProfileParse(arg,id,&o)&&o==fine);
+ assert(!mzProfileFine(0));
  mz_profile_record_t r={0x4d5a5031u,9,v,mzProfileCheck(9,v)};
  assert(mzProfileRecordOK(&r));r.value^=1;assert(!mzProfileRecordOK(&r));
  return 0;
