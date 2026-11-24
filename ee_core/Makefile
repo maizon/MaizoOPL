@@ -74,6 +74,8 @@ $(EE_OBJS_DIR)%.o : $(EE_SRC_DIR)%.s
 
 $(EE_BIN) : $(EE_OBJS)
 	$(EE_CC) $(EE_CFLAGS) $(EE_LDFLAGS) -o $(EE_BIN) $(EE_OBJS) $(EE_LIBS)
+	@echo 'MAIZO RAM84 MEMORY DIAGNOSTICS (no code changes)'
+	@grep -E '(_end_bss =|_stack_size =|_stack =)' $(MAPFILE) | tail -n 8 || true
 
 all: $(EE_BIN)
 
