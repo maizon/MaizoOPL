@@ -8,15 +8,19 @@
  * No textures, allocation, networking, files or continuous frame updates.
  * Incompatible graphics / busy DMA -> fail closed to stock IGR reset.
  *
- * Important: only ENABLED when per-game GSM is already active. It is not
- * a universal hook: the OPL GSM recorder must have seen the frame display.
- * DEFlicker is not emulated; FIELD_FIX is a separate GSM field control.
+ * The menu can use a passive GS register observer without GSM video
+ * forcing. However GSM video adjustments remain gated behind GSM ON;
+ * an unsupported display/framebuffer refuses to draw (fail closed).
  */
 #include "ee_core.h"
 #include "coreconfig.h"
 #include "maizo_igrmenu.h"
 #include "maizo_igr_state.h"
 #include "maizo_igr_filter.h"
+#include "maizo_gs_runtime.h"
+#include "maizo_gs_probe.h"
+#include "maizo_gs_480i_bridge.h"
+#include "maizo_igr_monitor.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -46,6 +50,10 @@ extern u64 GSMSourceGSRegs[11];
 extern u64 GSMDestGSRegs[11];
 extern u8 GSMFlags[19];
 extern u16 GSMSourceSetGsCrt[3];
+extern u16 GSMDestSetGsCrt[3];
+extern volatile u32 MaizoGs480iMode;
+extern u32 MaizoGs480iOriginalFix;
+extern u64 MaizoGs480iOriginalSMODE2;
 extern volatile u32 MaizoGsFilterMode;
 extern volatile u32 MaizoGsFilterPrimary;
 extern volatile u32 MaizoGsFilterSourceEN;
@@ -128,6 +136,17 @@ static void mzPage(const maizo_igr_state_t *s)
     if(s->page==MZ_PAGE_MAIN){
         for(i=0;i<count;i++)mzLine(25+i*10,11,4,mainNames[i]);
     }else if(s->page==MZ_PAGE_VIDEO){
+        if(!s->video_caps){
+            mzLine(25,11,5,"STRETCH X: REQUER GSM");
+            mzLine(35,11,5,"STRETCH Y: REQUER GSM");
+            mzLine(45,11,5,"POSICAO X: REQUER GSM");
+            mzLine(55,11,5,"POSICAO Y: REQUER GSM");
+            mzLine(65,11,5,"PRESET: REQUER GSM");
+            mzLine(75,11,5,"FIELD FIX: REQUER GSM");
+            mzLine(85,11,4,"FILTROS GRAFICOS >");
+            mzLine(95,11,5,"RESTAURAR: REQUER GSM");
+            mzLine(105,11,4,"VOLTAR");
+        }else{
         mzValue(0,"STRETCH X",s->width*2,1);
         mzValue(1,"STRETCH Y",s->height*2,1);
         mzValue(2,"POSICAO X",s->x*2,0);
@@ -137,6 +156,7 @@ static void mzPage(const maizo_igr_state_t *s)
         mzLine(85,11,4,"FILTROS GRAFICOS >");
         mzLine(95,11,4,"RESTAURAR IMAGEM");
         mzLine(105,11,4,"VOLTAR");
+        }
     }else if(s->page==MZ_PAGE_FILTERS){
         mzLine(25,11,s->filter_caps&2?4:5,
                s->filter_caps&2?(s->filter_mode==2?"DEFLICKER     ON":"DEFLICKER    OFF"):
@@ -147,10 +167,39 @@ static void mzPage(const maizo_igr_state_t *s)
         mzLine(45,11,s->filter_caps&2?4:5,
                s->filter_caps&2?(s->filter_mode==2?"SMOOTH        ON":"SMOOTH       OFF"):
                                 "SMOOTH    INDISP.");
-        mzLine(55,11,5,"AA1: CONTROLE DO JOGO");
-        mzLine(65,11,5,"TEXTURA: DO JOGO");
-        mzLine(75,11,4,"VOLTAR");
-        mzLine(105,8,5,"GS 2 CIRCUITOS / 480I");
+        mzLine(55,11,s->draw_caps&1?4:5,
+               !(s->draw_caps&1)?"AA1: INDISPONIVEL":
+               ((s->draw_modes&3)==1?"AA1: ON":
+                (s->draw_modes&3)==2?"AA1: OFF":"AA1: JOGO"));
+        mzLine(65,11,s->draw_caps&2?4:5,
+               !(s->draw_caps&2)?"BILINEAR: INDISP.":
+               (((s->draw_modes>>2)&3)==1?"BILINEAR: ON":
+                ((s->draw_modes>>2)&3)==2?"BILINEAR: OFF":"BILINEAR: JOGO"));
+        mzLine(75,11,s->draw_caps&4?4:5,
+               !(s->draw_caps&4)?"DITHER: INDISP.":
+               (((s->draw_modes>>4)&3)==1?"DITHER: ON":
+                ((s->draw_modes>>4)&3)==2?"DITHER: OFF":"DITHER: JOGO"));
+        mzLine(85,11,4,"GS AO VIVO >");
+        mzLine(95,11,s->frame480i_caps?4:5,
+               s->frame480i_caps?
+               (s->frame480i_mode?"480P>480I FRAME ON":"480P>480I FRAME OFF"):
+               "480P>480I INDISP.");
+        mzLine(105,11,4,"VOLTAR");
+    }else if(s->page==MZ_PAGE_GS_STATUS){
+        mzLine(25,11,4,"VOLTAR");
+        mzValue(1,"AMOSTRAS",mzGsProbe.samples,0);
+        mzValue(2,"PATH1",mzGsProbe.path1_active,0);
+        mzValue(3,"PATH2",mzGsProbe.path2_active,0);
+        mzValue(4,"PATH3",mzGsProbe.path3_active,0);
+        mzValue(5,"VIF1 DMA",mzGsProbe.vif1_dma_active,0);
+        mzValue(6,"GIF DMA",mzGsProbe.gif_dma_active,0);
+        /* Visibility is evidence-based: count only actual GS writes
+         * changed by a verified pre-DMA adapter, NOT mere hook presence. */
+        mzValue(7,"GS ALTERADOS",
+                mzRuntimeMetrics.edits.primitive_changes +
+                mzRuntimeMetrics.edits.texture_changes +
+                mzRuntimeMetrics.edits.dither_changes,0);
+        mzLine(105,8,5,mzGsRuntimeCaps()?"HOOK: REGISTRADO":"HOOK: INDISPONIVEL");
     }else if(s->page==MZ_PAGE_PADS){
         mzLine(25,11,4,"PAD EMU: CONFIG. MAIZO");
         mzLine(35,11,4,"VOLTAR");
@@ -211,28 +260,20 @@ static void mzRenderLine(u8 *dest,int y)
 static int mzFrame(void)
 {
     const u64 *r=GSMSourceGSRegs;
-    u64 pmode=r[0],fb1=r[7],fb2=r[9],fb,display;
-    int c1=(pmode&1)||(!(pmode&2)&&fb1);
-    u32 w,h;
-    if(!mzGameHasGsm)return 0;
-    fb=c1?fb1:fb2;display=r[c1?8:10];
-    /* No safe guess about a framebuffer we have not observed. */
-    if(!fb || !display)return 0;
-    mzPsm=(fb>>15)&31;
-    mzBpp=mzPsm==0?4:mzPsm==1?3:(mzPsm==2||mzPsm==10?2:0);
-    mzBw=(fb>>9)&63;
-    if(!mzBpp||!mzBw)return 0;
-    mzBp=(fb&0x1ff)*32;
-    w=(((u32)(display>>32)&0xfff)+1)/(((u32)(display>>23)&15)+1);
-    h=(((u32)(display>>44)&0x7ff)+1)/(((u32)(display>>27)&3)+1);
-    if((GSMSourceSetGsCrt[0]&1) && (GSMSourceSetGsCrt[2]&1))
-        h/=2; /* displayed interlaced frame mode is one field in VRAM */
-    if(w>mzBw*64)w=mzBw*64;
-    if(w<PW+8 || h<PH+4 || h>1024)return 0;
-    mzSx=(w>=PW*2+16)?2:1;
-    mzSy=(h>=PH*2+16)?2:1;
-    mzX=((fb>>32)&0x7ff)+(w-PW*mzSx)/2;
-    mzY=((fb>>43)&0x7ff)+(h-PH*mzSy)/2;
+    mz_igr_frame_t f;
+    /* Both recording modes retain the original game's GS writes.
+     * No guessing or readback of potentially write-only GS registers. */
+    if(!mzIgrMonitorFrame(&f,r[0],r[7],r[9],r[8],r[10],
+                          r[2],mzGameHasGsm))
+        return 0;
+    mzPsm=(int)f.psm;
+    mzBpp=(int)f.pixel_bytes;
+    mzBw=(int)f.fbw;
+    mzBp=f.fbbase;
+    mzSx=(int)f.sx;
+    mzSy=(int)f.sy;
+    mzX=(int)f.x;
+    mzY=(int)f.y;
     return 1;
 }
 static int mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
@@ -323,6 +364,47 @@ static u64 mzOutputSource(int index, int fix)
 {
     u64 target=GSMDestGSRegs[index],source=GSMSourceGSRegs[index];
     return fix && target ? target : source;
+}
+
+/* The game must NATIVELY render progressive 480p into a full-height
+ * frame buffer while GSM produces NTSC 480i. A field-mode renderer
+ * cannot be converted to a 480p renderer by changing SMODE2 alone. */
+static int mzFrame480iCaps(void)
+{
+    const u64 *r=GSMSourceGSRegs;
+    return mzGs480iBridgeCaps(
+        GSMSourceSetGsCrt[0],GSMSourceSetGsCrt[1],
+        GSMDestSetGsCrt[0],GSMDestSetGsCrt[1],
+        r[0],r[7],r[9],r[8],r[10]);
+}
+
+/* The GSM breakpoint is disabled while the IGR menu runs. Change only
+ * GS scanout mode and its GSM shadow; never touch per-game primitives,
+ * frame buffer layout, DISPLAY/DISPFB or GS timing mode (NTSC stays
+ * NTSC). Hook_SetGsCrt rolls back this opt-in on CRT mode changes. */
+static int mzFrame480iApply(int enabled)
+{
+    u64 value;
+    if(enabled){
+        if(!mzFrame480iCaps())return 0;
+        if(MaizoGs480iMode)return 1;
+        MaizoGs480iOriginalSMODE2=GSMDestGSRegs[2];
+        MaizoGs480iOriginalFix=(u32)GSMFlags[10];
+        value=mzGs480iFrameSMODE2(GSMDestGSRegs[2]);
+        GSMDestGSRegs[2]=value;
+        GSMFlags[10]=1;
+        MaizoGs480iMode=1;
+    }else{
+        if(!MaizoGs480iMode)return 1;
+        /* Stop enforcing the scanout override before restoring. */
+        MaizoGs480iMode=0;
+        GSMDestGSRegs[2]=MaizoGs480iOriginalSMODE2;
+        GSMFlags[10]=(u8)MaizoGs480iOriginalFix;
+        value=MaizoGs480iOriginalSMODE2;
+    }
+    *(vu64 *)0x12000020=value; /* GS SMODE2: 480i FRAME when ON */
+    asm volatile("sync.l");
+    return 1;
 }
 static int mzFilterCapabilities(void)
 {
@@ -426,8 +508,8 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
     u16 prev,now,pressed;
     int mfifo,result=MAIZO_IGR_RESUME;
     int first;
-    if(!config->EnableGSMOp)return MAIZO_IGR_UNAVAILABLE;
-    mzGameHasGsm=1;
+    if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
+    mzGameHasGsm=!!config->EnableGSMOp;
     if(!mzStateReady){
         maizoIgrStateInit(&mzState,config->GsmConfig.FIELD_fix);
         mzOriginalDisp[0]=GSMDestGSRegs[8];
@@ -435,7 +517,25 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
         mzStateReady=1;
     }
     if(!mzFrame())return MAIZO_IGR_UNAVAILABLE;
-    mzState.filter_caps=mzFilterCapabilities();
+    /* The menu remains navigable without GSM. Unsafe video controls
+     * stay clearly disabled, not silently mapped to GS writes. */
+    mzState.video_caps=(unsigned int)mzGameHasGsm;
+    mzState.filter_caps=mzGameHasGsm?mzFilterCapabilities():0;
+    /* A DRAW switch is only actionable if a verified pre-DMA game
+     * adapter registered support. Stock commercial games do not. */
+    mzState.draw_caps=mzGsRuntimeCaps();
+    mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
+        (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2) |
+        (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4);
+    mzState.draw_changed=0;
+    mzState.frame480i_caps=mzGameHasGsm?mzFrame480iCaps():0;
+    mzState.frame480i_mode=!!MaizoGs480iMode;
+    mzState.frame480i_changed=0;
+    if(!mzGameHasGsm){
+        mzState.width=mzState.height=mzState.x=mzState.y=0;
+        mzState.field_fix=0;
+        mzState.filter_mode=0;
+    }
     if(mzState.filter_mode!=(int)MaizoGsFilterMode)
         mzState.filter_mode=0; /* Another SetGsCrt cancelled the filter. */
     ctrl=*MZ_D_CTRL;
@@ -444,6 +544,13 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
        !mzWait(MZ_D2_CHCR,CHCR_STR,0,mfifo==3) ||
        (*MZ_VIF1_STAT & VIF_STALLED))return MAIZO_IGR_UNAVAILABLE;
     oldBpc=mzBpcOff();
+    /* If a game changed its readout layout without SetGsCrt, restore
+     * before touching more VRAM. Fail closed instead of pretending
+     * a 224-line title has a native 480-line render buffer. */
+    if(MaizoGs480iMode && !mzFrame480iCaps()){
+        mzFrame480iApply(0);
+        mzState.frame480i_mode=0;
+    }
     suspend=0;
     if(mfifo==2){
         suspend=*MZ_D_ENABLER;
@@ -468,16 +575,34 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
         prev=now;
         if(!pressed)continue;
         action=maizoIgrStep(&mzState,pressed);
-        if(mzState.changed){
+        if(mzState.changed && mzGameHasGsm){
             mzApply(&mzState);
             mzState.changed=0;
         }
-        if(mzState.filter_changed){
+        if(mzState.filter_changed && mzGameHasGsm){
             int desired=mzState.filter_mode;
             mzState.filter_changed=0;
             if(!mzFilterApply(desired))
                 mzState.filter_mode=(int)MaizoGsFilterMode;
             mzState.filter_caps=mzFilterCapabilities();
+        }
+        if(mzState.frame480i_changed && mzGameHasGsm){
+            int desired=(int)mzState.frame480i_mode;
+            mzState.frame480i_changed=0;
+            if(!mzFrame480iApply(desired))
+                mzState.frame480i_mode=!!MaizoGs480iMode;
+            mzState.frame480i_caps=mzFrame480iCaps();
+        }
+        if(mzState.draw_changed){
+            unsigned int features=mzState.draw_changed;
+            if(features&MZ_DRAW_AA1)
+                mzGsRuntimeSetMode(MZ_DRAW_AA1,mzState.draw_modes&3u);
+            if(features&MZ_DRAW_BILINEAR)
+                mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,(mzState.draw_modes>>2)&3u);
+            if(features&MZ_DRAW_DITHER)
+                mzGsRuntimeSetMode(MZ_DRAW_DITHER,(mzState.draw_modes>>4)&3u);
+            mzState.draw_changed=0;
+            mzState.draw_caps=mzGsRuntimeCaps();
         }
         if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
         if(action==MZ_ACTION_EXIT){result=MAIZO_IGR_EXIT;break;}

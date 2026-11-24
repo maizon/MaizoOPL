@@ -14,6 +14,10 @@
 #include "gsm_api.h"
 #include "cheat_api.h"
 #include "coreconfig.h"
+#ifdef MAIZO_IGR_MENU
+#include "maizo_gs_runtime.h"
+#include "maizo_gs_probe.h"
+#endif
 
 int isInit = 0;
 
@@ -84,6 +88,13 @@ static int eecoreInit(int argc, char **argv)
 
     DPRINTF("GameID = %s\n", config->GameID);
 
+#ifdef MAIZO_IGR_MENU
+    /* Every game launch starts with zero draw capabilities. Only a later,
+     * verified renderer-specific adapter may advertise supported paths. */
+    mzGsRuntimeReset();
+    mzGsProbeReset(&mzGsProbe);
+#endif
+
     // g_compat_mask is used on ASM directly.
     g_compat_mask = config->_CompatMask;
     DPRINTF("Compat Mask = 0x%02x\n", g_compat_mask);
@@ -107,6 +118,12 @@ static int eecoreInit(int argc, char **argv)
             config->GsmConfig.FIELD_fix);
         EnableGSM();
     }
+#ifdef MAIZO_IGR_MENU
+    else if (config->EnableMaizoIgrMenu) {
+        /* Independent In-Game menu without GSM video-mode forcing. */
+        EnableMaizoGsMonitor();
+    }
+#endif
 
     set_ipconfig();
 

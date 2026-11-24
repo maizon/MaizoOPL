@@ -31,6 +31,7 @@
 #include "gsm_api.h"
 #ifdef MAIZO_IGR_MENU
 #include "maizo_igrmenu.h"
+#include "maizo_gs_probe.h"
 #endif
 #ifdef IGS
 #include "igs_api.h"
@@ -238,6 +239,21 @@ static void IGR_Thread(void *arg)
 maizo_igr_poll_again:
 #endif
     for (;;) {
+#ifdef MAIZO_IGR_MENU
+        /*
+         * Read-only once-per-alarm GS activity sample. No extra IRQ,
+         * DMAC interception, VU reads or contention with GSM's hardware
+         * breakpoint. Designed not to change rendering or pad timing.
+         * The sample may miss a short-lived transfer; it is telemetry,
+         * never a universal-game compatibility claim.
+         */
+        if (config->EnableMaizoIgrMenu) {
+            mzGsProbeSample(&mzGsProbe,
+                            *(vu32 *)0x10003020, /* GIF_STAT */
+                            *(vu32 *)0x10009000, /* D1_CHCR */
+                            *(vu32 *)0x1000a000); /* D2_CHCR */
+        }
+#endif
         if (Pad_Data.pad_buf != NULL) {
             // Read through the uncached segment to obtain live pad data.
             pad_pos_state =
@@ -364,7 +380,7 @@ maizo_igr_poll_again:
 
 #ifdef MAIZO_IGR_MENU
     if (Pad_Data.combo_type == IGR_COMBO_START_SELECT &&
-        config->EnableMaizoIgrMenu && config->EnableGSMOp &&
+        config->EnableMaizoIgrMenu &&
         !Power_Button.press) {
         int choice;
         ChangeThreadPriority(TH_SELF, 0);

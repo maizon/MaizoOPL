@@ -44,6 +44,9 @@ MIPS_Regs:          .space 0x220
 
 .globl Old_SetGsCrt
 Old_SetGsCrt:       .word  0
+# Menu-only GS register observer: PASS-THROUGH, never GSM mode forcing.
+.globl MaizoGsMonitorOnly
+MaizoGsMonitorOnly: .word 0
 
 .globl GSMSourceSetGsCrt
 GSMSourceSetGsCrt:  .space 6
@@ -78,6 +81,15 @@ MaizoGsFilterPMODE: .dword 0
 MaizoGsFilterBaseFB: .dword 0
 .globl MaizoGsFilterBaseDisplay
 MaizoGsFilterBaseDisplay: .dword 0
+# Native 480p frame buffer scanned out on NTSC 480i (interlaced FRAME).
+# Opt-in, console readout mode only. No new rendering, no DTV 480p output.
+.globl MaizoGs480iMode
+MaizoGs480iMode: .word 0
+.globl MaizoGs480iOriginalFix
+MaizoGs480iOriginalFix: .word 0
+.p2align 3
+.globl MaizoGs480iOriginalSMODE2
+MaizoGs480iOriginalSMODE2: .dword 0
 
 
 .p2align 4                                          # align 16 bytes (IMPORTANT!!!)
@@ -169,6 +181,26 @@ Hook_SetGsCrt:
     # Changing video mode may make interlaced filtering invalid.
     la      $t3, MaizoGsFilterMode
     sw      $zero, 0($t3)
+    # When the game changes its CRT mode, roll back the temporary
+    # 480i FRAME override before executing the forced CRT setup.
+    la      $t3, MaizoGs480iMode
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_480i_setcrt_done
+    sw      $zero, 0($t3)
+    la      $t3, MaizoGs480iOriginalSMODE2
+    ld      $t4, 0($t3)
+    la      $t3, GSMDestGSRegs
+    sd      $t4, Target_SMODE2($t3)
+    la      $t3, MaizoGs480iOriginalFix
+    lw      $t4, 0($t3)
+    la      $t3, GSMFlags
+    sb      $t4, SMODE2_fix($t3)
+maizo_480i_setcrt_done:
+    # No GSM forcing in passive menu-only monitor: original SetGsCrt.
+    la      $t3, MaizoGsMonitorOnly
+    lw      $t4, 0($t3)
+    bnez    $t4, Call_SetGsCrt
+    nop
 
 # -----------------------------------------------------------------------------------------
 
@@ -461,6 +493,13 @@ have_some_write:                                    # Opcode is a write, so we m
     nop
     ld      $a1, 0($a1)                             # a1 = value in rt
 
+    # Passive recorder sends ALL writes unchanged; only save readout
+    # registers for the optional menu framebuffer resolver.
+    la      $t3, MaizoGsMonitorOnly
+    lw      $t4, 0($t3)
+    bnez    $t4, maizo_monitor_write
+    nop
+
     addi    $v1, $v0, -GS_PMODE
     beqz    $v1, have_PMODE_write                   # in case of  dest == GS_reg_PMODE
     addi    $v1, $v0, -GS_SMODE1
@@ -484,6 +523,22 @@ have_some_write:                                    # Opcode is a write, so we m
     addi    $v1, $v0, -GS_DISPLAY2
     beqz    $v1, have_DISPLAY2_write                # in case of  dest == GS_reg_DISPLAY2
     nop
+
+# Menu-only observer: GS CRTC has 11 DWORD registers at 16-byte
+# spacings 0..A0. GSMSourceGSRegs packs those 11 values at 8-byte
+# spacings. Capture via a bounded index instead of a branch cascade.
+maizo_monitor_write:
+    sltiu   $t0, $v0, 0x00b0
+    beqz    $t0, maizo_monitor_forward
+    andi    $t0, $v0, 0x000f
+    bnez    $t0, maizo_monitor_forward
+    nop
+    srl     $t0, $v0, 1
+    addu    $t0, $t0, $s0
+    sd      $a1, 0($t0)
+maizo_monitor_forward:
+    b       exit_GSHandler
+    sd      $a1, 0($a3)
 
 not_wanted_reg:                                     # Register unwanted, so perform op unchanged
     b       exit_GSHandler
@@ -580,8 +635,18 @@ have_SMODE2_write:
     or      $v0, $v0, $a1                           # v0 = Target_SMODE2 + Source FFMD
 
 store_v0_as_SMODE2:
-    b       exit_GSHandler                          # Now go exit
-    sd      $v0, 0($a3)                             # after storing
+    # GSM's stock SMODE2 adaptation may copy the source FFMD or even
+    # bypass the target for progressive sources. While the opt-in 480i
+    # bridge is active, always use the explicitly verified NTSC FRAME
+    # target (INT=1, FFMD=1). Keep DPMS and unrelated bits unchanged.
+    la      $t3, MaizoGs480iMode
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_480i_smode2_done
+    nop
+    ld      $v0, Target_SMODE2($s1)
+maizo_480i_smode2_done:
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
 
 # ----------------------------
 # DISPFB1
