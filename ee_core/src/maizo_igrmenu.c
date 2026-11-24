@@ -16,6 +16,7 @@
 #include "coreconfig.h"
 #include "maizo_igrmenu.h"
 #include "maizo_igr_state.h"
+#include "cheat_api.h"
 #include "maizo_igr_profile.h"
 #include "maizo_igr_filter.h"
 #include "maizo_gs_runtime.h"
@@ -249,11 +250,17 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         mzLine(56,8,5,"DRIVER: NAO AO VIVO");
         mzLine(66,8,5,"COMPAT. LIMITADA");
     }else if(s->page==MZ_PAGE_GAME){
-        mzLine(25,11,4,"CHEATS: CONFIG.");
+        mzLine(25,11,s->cheat_caps?4:5,s->cheat_caps?
+            (s->cheat_paused?"CHEATS: PAUSADOS":"CHEATS: ATIVOS"):"CHEATS: N/D");
         mzLine(35,11,4,"IGS: L1+L2+R1+R2+UP");
         mzLine(45,11,4,"VOLTAR");
-        mzLine(66,8,5,"CHEATS IN-GAME");
-        mzLine(76,8,5,"NAO SUPORTADOS");
+        if(s->cheat_caps){
+            mzValue(5,"CODIGOS RAW",numcodes,0);
+            mzLine(95,8,5,"PAUSA NAO DESFAZ");
+        }else{
+            mzLine(66,8,5,"ATIVE NO OPL ANTES");
+            mzLine(76,8,5,"HOOK DEVE SER VALIDO");
+        }
     }else{
         for(i=0;i<count;i++)mzLine(25+i*10,11,i==4&&!s->save_caps?5:4,
             i==4&&!s->save_caps?"SALVAR: N/D":systemNames[i]);
@@ -699,6 +706,9 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4) |
         (mzGsRuntimeMode(MZ_DRAW_SCANLINES)<<6);
     mzState.draw_changed=0;
+    mzState.cheat_caps=!!config->gCheatList && MaizoCheatHookActive && numcodes>0;
+    mzState.cheat_paused=!!MaizoCheatPaused;
+    mzState.cheat_changed=0;
     mzState.frame480i_caps=mzFrame480iCaps();
     mzState.frame480i_mode=!!MaizoGs480iArmed;
     mzState.frame480i_changed=0;
@@ -802,6 +812,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzState.changed=0;
                 mzState.filter_caps=mzFilterCapabilities();
             }
+        }
+        if(mzState.cheat_changed){
+            if(mzState.cheat_caps && MaizoCheatHookActive)
+                MaizoCheatPaused=!!mzState.cheat_paused;
+            mzState.cheat_changed=0;
         }
         if(mzState.field_changed){
             if(mzState.native_field_caps)MaizoNativeFieldInvert=!!mzState.field_fix;

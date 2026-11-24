@@ -6,6 +6,9 @@
 
 void EnableCheats(void);
 void DisableCheats(void);
+#ifdef MAIZO_IGR_MENU
+extern volatile u32 MaizoCheatPaused,MaizoCheatHookActive;
+#endif
 
 /**
  * code_t - a code object

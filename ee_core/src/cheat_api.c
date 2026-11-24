@@ -103,6 +103,9 @@ static inline void Remove_HookSetupThread(void)
 void EnableCheats(void)
 {
     // Setup Cheats
+#ifdef MAIZO_IGR_MENU
+    MaizoCheatPaused=MaizoCheatHookActive=0;
+#endif
     SetupCheats();
     // Install Hook SetupThread
     Install_HookSetupThread();

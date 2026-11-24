@@ -57,6 +57,10 @@
 
 .globl  numcodes
 .globl  codelist
+#ifdef MAIZO_IGR_MENU
+.globl MaizoCheatPaused
+.globl MaizoCheatHookActive
+#endif
 
 .globl  engine_info
 
@@ -158,6 +162,11 @@ CodeHandler:
      * $t3 - total number of codes
      * $t4 - number of codes done
      */
+#ifdef MAIZO_IGR_MENU
+    lw      $t3, MaizoCheatPaused
+    bnez    $t3, ch_ret
+    nop
+#endif
     lw      $t3, numcodes
     beqz    $t3, ch_ret
     li      $t4, 0
@@ -581,6 +590,10 @@ HookSetupThread:
     /* inject jal to engine handler */
     lw      $v1, jal_EngineHandler
     sw      $v1, 0($v0)
+#ifdef MAIZO_IGR_MENU
+    li      $t1, 1
+    sw      $t1, MaizoCheatHookActive
+#endif
     b       3f
     sw      $zero, 4($v0)
 2:
@@ -635,6 +648,12 @@ hooklist:
 /*
  * Code list to be filled by loader.
  */
+#ifdef MAIZO_IGR_MENU
+MaizoCheatPaused:
+.word   0
+MaizoCheatHookActive:
+.word   0
+#endif
 numcodes:
 .word   0
 codelist:

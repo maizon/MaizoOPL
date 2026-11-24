@@ -10,7 +10,7 @@ typedef struct { int page, selected, confirm, field_fix; int width, height, x, y
              int filter_mode, filter_caps, filter_changed;
              unsigned int draw_caps, draw_modes, draw_changed;
              unsigned int frame480i_caps, frame480i_mode, frame480i_changed;
-             unsigned int video_caps, native_field_caps, field_changed, save_caps; } maizo_igr_state_t;
+             unsigned int video_caps, native_field_caps, field_changed, save_caps, cheat_caps, cheat_paused, cheat_changed; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
 {
     s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;s->field_fix=!!field_fix;
@@ -19,6 +19,7 @@ static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
     s->draw_caps=s->draw_modes=s->draw_changed=0;
     s->frame480i_caps=s->frame480i_mode=s->frame480i_changed=0;
     s->video_caps=s->native_field_caps=s->field_changed=s->save_caps=0;
+    s->cheat_caps=s->cheat_paused=s->cheat_changed=0;
 }
 static int maizoIgrPageCount(int page)
 {
@@ -129,6 +130,7 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
     }else if(s->page==MZ_PAGE_PADS){
         if(s->selected==1){s->page=MZ_PAGE_MAIN;s->selected=2;}
     }else if(s->page==MZ_PAGE_GAME){
+        if(s->selected==0 && s->cheat_caps){s->cheat_paused^=1u;s->cheat_changed=1u;}
         if(s->selected==2){s->page=MZ_PAGE_MAIN;s->selected=3;}
     }else if(s->page==MZ_PAGE_SYSTEM){
         if(s->selected==0)return MZ_ACTION_RESUME;
