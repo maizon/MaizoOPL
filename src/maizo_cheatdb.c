@@ -106,7 +106,9 @@ static int matchTitle(const char *s, const char *title, const char *serial)
     }
     normalized(name, a);
     normalized(title, b);
-    return a[0] && !strcmp(a, b);
+    if(a[0]&&!strcmp(a,b))return 1;
+    normalized(s,a);
+    return a[0]&&!strcmp(a,b);
 }
 
 typedef struct
@@ -298,7 +300,7 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
     unsigned char *tail = NULL;
     scanner_t *s = NULL;
     int result = MZDB_INVALID;
-    uint32_t tailSize, central = 0, centralEnd = 0, scanned = 0;
+    uint32_t tailSize, central = 0, centralStart = 0, centralEnd = 0, scanned = 0;
     unsigned int members = 0;
     int foundEnd = 0;
     *text = NULL;
@@ -339,6 +341,7 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
         uint32_t length = u32le(p + 12), eocd = size - tailSize + i;
         if (central > eocd || length > eocd - central || members == 65535)
             goto done;
+        centralStart = central;
         centralEnd = central + length;
         foundEnd = 1;
         break;
@@ -382,17 +385,18 @@ int maizoCheatZipFind(maizo_zip_read read_at, void *ctx, uint32_t size, const ch
             result = MZDB_LIMIT;
             goto done;
         }
-        if (offset > size - sizeof(local) ||
+        if (centralStart < sizeof(local) || offset > centralStart - sizeof(local) ||
             !read_at(ctx, offset, local, sizeof(local)) || u32le(local) != 0x04034b50 ||
             u16le(local + 8) != method || (u16le(local + 6) & 1))
             goto done;
         uint32_t dataOffset = offset + sizeof(local);
         uint32_t extra = u16le(local + 26) + u16le(local + 28);
-        if (extra > size - dataOffset)
+        if (extra > centralStart - dataOffset)
             goto done;
         dataOffset += extra;
-        if (compressed > size - dataOffset || (method == 0 && compressed != uncompressed))
+        if (compressed > centralStart - dataOffset || (method == 0 && compressed != uncompressed))
             goto done;
+        if(!uncompressed)continue;
         scanned += uncompressed;
         s->fileRank = containsSerial(name, s->serial) ? MZDB_SERIAL : 0;
         s->currentRank = s->fileRank;

@@ -18,6 +18,24 @@ static inline int mzLiveWriteOK(uint32_t addr)
     return type<=2 && !(addr&0x0e000000u) && a>=0x00100000u &&
            !(a&((1u<<type)-1u));
 }
+static inline int mzLiveCatalogOK(const mz_live_cheats_t *p)
+{
+    unsigned i,j,seen=0;
+    if(!p->count||p->count>MZ_LIVE_GROUPS||!p->lines||p->lines>MZ_LIVE_CODES||
+       (p->mask>>p->count))return 0;
+    for(i=0;i<p->lines;i++){
+        if(p->owner[i]>=p->count)return 0;
+        seen|=1u<<p->owner[i];
+    }
+    if(seen!=((1u<<p->count)-1u))return 0;
+    for(i=0;i<p->count;i++){
+        if(!p->name[i][0]||p->name[i][MZ_LIVE_NAME-1])return 0;
+        if(p->variant[i]&&(p->mask&(1u<<i)))
+            for(j=0;j<i;j++)
+                if(p->variant[i]==p->variant[j]&&(p->mask&(1u<<j)))return 0;
+    }
+    return 1;
+}
 static inline unsigned mzLiveToggle(const mz_live_cheats_t *p,unsigned mask,unsigned i)
 {
     unsigned j,bit;

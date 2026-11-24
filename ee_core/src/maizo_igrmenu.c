@@ -825,8 +825,13 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             }
         }
         if(mzState.live_choice){
-            if(mzState.live_count&&MaizoCheatHookActive)
+            if(mzState.live_count&&MaizoCheatHookActive){
                 MaizoLiveMask=mzLiveToggle(&config->MaizoLiveCheats,MaizoLiveMask,mzState.live_choice-1);
+                if(MaizoLiveMask&(1u<<(mzState.live_choice-1))){
+                    MaizoCheatPaused=0;
+                    mzState.cheat_paused=0;
+                }
+            }
             mzState.live_choice=0;
         }
         if(mzState.cheat_changed){

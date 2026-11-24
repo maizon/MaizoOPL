@@ -113,7 +113,7 @@ static void finishCheat(char name[CHEAT_NAME_MAX + 1], code_t *codes, int count,
 {
     if (!name[0] || (!count && !bad))
         return;
-    if (bad || *total >= MAX_CODES) {
+    if (bad || !count || *total >= MAX_CODES) {
         cheatSkipped++;
         return;
     }
@@ -136,6 +136,8 @@ static void finishMapped(char *name,code_t *codes,int count,int bad,int *total,
 {
     if(!map){finishCheat(name,codes,count,bad,total);return;}
     if(bad||line<0||line>=count||cheatConfigIsMasterCode(name)){cheatSkipped++;return;}
+    for(int j=0;j<count;j++)
+        if((codes[j].addr&0xfe000000u)==0x90000000u){cheatSkipped++;return;}
     unsigned group=++variantGroup;
     for(unsigned i=0;i<map->count;i++){
         if(map->values[i].value&~mask){cheatSkipped++;continue;}
@@ -473,7 +475,12 @@ int cheatBuildLive(mz_live_cheats_t *out)
                 continue;
             }
             unsigned group=p.count++;
-            snprintf(p.name[group],MZ_LIVE_NAME,"%.23s",e->name);
+            const char *value=e->variant_group?strrchr(e->name,':'):NULL;
+            if(value&&strlen(e->name)>21){
+                value++;
+                while(*value==' ')value++;
+                snprintf(p.name[group],MZ_LIVE_NAME,"%.9s: %.10s",e->name,value);
+            }else snprintf(p.name[group],MZ_LIVE_NAME,"%.21s",e->name);
             p.variant[group]=e->variant_group;
             if(e->enabled)p.mask|=1u<<group;
             for(unsigned j=0;j<n;j++){
@@ -482,7 +489,7 @@ int cheatBuildLive(mz_live_cheats_t *out)
                 list[words++]=e->codes[j].val;
             }
         }
-    if(!p.count)return 0;
+    if(!mzLiveCatalogOK(&p))return 0;
     if(out){*out=p;memcpy(gCheatList,list,sizeof(list));}
     return 1;
 }

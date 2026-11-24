@@ -111,8 +111,7 @@ void EnableCheats(void)
     USE_LOCAL_EECORE_CONFIG;
     const mz_live_cheats_t *p=&config->MaizoLiveCheats;
     MaizoLiveCount=MaizoLiveMask=0;
-    if(p->count&&p->count<=MZ_LIVE_GROUPS&&p->lines<=MZ_LIVE_CODES&&
-       p->lines==(unsigned)numcodes&&numhooks>0){
+    if(mzLiveCatalogOK(p)&&p->lines==(unsigned)numcodes&&numhooks>0){
         unsigned i;
         for(i=0;i<p->lines;i++)
             if(p->owner[i]>=p->count||!mzLiveWriteOK(codelist[i*2]))break;
@@ -133,5 +132,9 @@ void EnableCheats(void)
 void DisableCheats(void)
 {
     // Remove Hook SetupThread
+#ifdef MAIZO_IGR_MENU
+    MaizoCheatPaused=1;
+    MaizoLiveCount=MaizoLiveMask=MaizoCheatHookActive=0;
+#endif
     Remove_HookSetupThread();
 }

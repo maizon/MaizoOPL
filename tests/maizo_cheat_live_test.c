@@ -9,5 +9,11 @@ int main(void){
  assert(mzLiveToggle(&p,2,2)==6);
  assert(mzLiveToggle(&p,6,1)==4);
  assert(mzLiveToggle(&p,4,8)==4);
+ p.lines=3;
+ p.owner[0]=0;p.owner[1]=1;p.owner[2]=2;
+ p.name[0][0]='A';p.name[1][0]='B';p.name[2][0]='C';
+ p.mask=1;assert(mzLiveCatalogOK(&p));
+ p.mask=3;assert(!mzLiveCatalogOK(&p));
+ p.mask=1;p.owner[2]=8;assert(!mzLiveCatalogOK(&p));
  return 0;
 }

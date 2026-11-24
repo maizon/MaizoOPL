@@ -177,8 +177,7 @@ CodeHandler:
     la      $t1, type_tab
 ch_loop:
 #ifdef MAIZO_IGR_MENU
-    # Live mode contains independent constant writes only. Filter each
-    # line by its group bit; no code list is ever rewritten mid-handler.
+    /* Independent constant writes only; filter each line by its group bit. */
     lw      $t5, MaizoLiveCount
     beqz    $t5, maizo_live_pass
     nop
