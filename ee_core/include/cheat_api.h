@@ -8,6 +8,8 @@ void EnableCheats(void);
 void DisableCheats(void);
 #ifdef MAIZO_IGR_MENU
 extern volatile u32 MaizoCheatPaused,MaizoCheatHookActive;
+extern volatile u32 MaizoLiveMask,MaizoLiveCount;
+extern unsigned char MaizoLiveOwner[48];
 #endif
 
 /**

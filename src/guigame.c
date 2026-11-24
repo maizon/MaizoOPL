@@ -533,6 +533,11 @@ void guiGameShowDatabaseCheats(item_list_t *support, int id, config_set_t *cfg)
     if (!guiManageCheats(cfg))
         return;
     int enabled = cheatHasOptionalSelection();
+#ifdef MAIZO_IGR_MENU
+    /* Saving this confirmed game catalog explicitly authorizes the
+     * master hook even when all optional live groups start OFF. */
+    if(!enabled)enabled=cheatBuildLive(NULL);
+#endif
     if (cheatDatabaseMatch() > 0)
         configSetStr(cfg, "$CheatDBCRC", cheatDatabaseFingerprint());
     else

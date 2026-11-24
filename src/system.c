@@ -1089,6 +1089,8 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         config->EnableMaizoIgrMenu=(config->EnableMaizoIgrMenu!=0);
         memcpy(config->MaizoProfileID,mzProfileID,sizeof(mzProfileID));
         config->MaizoProfile=mzProfileValue;
+        if(config->EnableMaizoIgrMenu && GetCheatsEnabled())
+            cheatBuildLive(&config->MaizoLiveCheats);
     }
 #endif
     config->EnableGSMOp = GetGSMEnabled();

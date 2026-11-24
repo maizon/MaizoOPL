@@ -438,3 +438,52 @@ void set_cheats_list(void)
         gCheatList[cheatCount - 1] = 0; // val
     }
 }
+
+#ifdef MAIZO_IGR_MENU
+/* Build a catalog without modifying the old list until every enabled
+ * group fits. Master hooks are immutable and installed by PS2RD.
+ * NULL is a dry run used by the frontend before accepting an empty
+ * initial selection. A rejected catalog leaves the old list intact. */
+int cheatBuildLive(mz_live_cheats_t *out)
+{
+    mz_live_cheats_t p={0};
+    u32 list[MAX_CHEATLIST]={0};
+    unsigned words=0,hooks=0;
+    for(int i=0;i<MAX_CODES&&gCheats[i].name[0];i++){
+        cheat_entry_t *e=&gCheats[i];
+        if(!cheatConfigIsMasterCode(e->name))continue;
+        for(int j=0;j<MAX_CHEATLIST&&e->codes[j].addr;j++){
+            u32 a=e->codes[j].addr;
+            if((a&0xfe000000u)!=0x90000000u||
+               (a&0x01fffffcu)<0x100000u||hooks==MAX_HOOKS)return 0;
+            list[words++]=a;list[words++]=e->codes[j].val;hooks++;
+        }
+    }
+    if(!hooks)return 0;
+    for(int pass=0;pass<2;pass++)
+        for(int i=0;i<MAX_CODES&&gCheats[i].name[0];i++){
+            cheat_entry_t *e=&gCheats[i];
+            if(cheatConfigIsMasterCode(e->name)||!!e->enabled!=(pass==0))continue;
+            unsigned n=0;
+            while(n<MAX_CHEATLIST&&e->codes[n].addr&&mzLiveWriteOK(e->codes[n].addr))n++;
+            if(!n||n==MAX_CHEATLIST||e->codes[n].addr||
+               p.count>=MZ_LIVE_GROUPS||n>MZ_LIVE_CODES-p.lines||
+               e->variant_group>255u){
+                if(e->enabled)return 0;
+                continue;
+            }
+            unsigned group=p.count++;
+            snprintf(p.name[group],MZ_LIVE_NAME,"%.23s",e->name);
+            p.variant[group]=e->variant_group;
+            if(e->enabled)p.mask|=1u<<group;
+            for(unsigned j=0;j<n;j++){
+                p.owner[p.lines++]=group;
+                list[words++]=e->codes[j].addr;
+                list[words++]=e->codes[j].val;
+            }
+        }
+    if(!p.count)return 0;
+    if(out){*out=p;memcpy(gCheatList,list,sizeof(list));}
+    return 1;
+}
+#endif

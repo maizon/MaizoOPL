@@ -156,6 +156,7 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
     static const char *const systemNames[5] = {
         "CONTINUAR", "SAIR DO JOGO", "DESLIGAR PS2", "VOLTAR", "SALVAR E SAIR"
     };
+    USE_LOCAL_EECORE_CONFIG;
     mzLineCount=0;
     mzSelectedY=25+s->selected*10;
     mzLine(4,8,3,"MAIZO IN-GAME PRO");
@@ -252,7 +253,7 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
     }else if(s->page==MZ_PAGE_GAME){
         mzLine(25,11,s->cheat_caps?4:5,s->cheat_caps?
             (s->cheat_paused?"CHEATS: PAUSADOS":"CHEATS: ATIVOS"):"CHEATS: N/D");
-        mzLine(35,11,4,"IGS: L1+L2+R1+R2+UP");
+        mzLine(35,11,s->live_count?4:5,s->live_count?"LISTA DE CHEATS >":"LISTA: N/D");
         mzLine(45,11,4,"VOLTAR");
         if(s->cheat_caps){
             mzValue(5,"CODIGOS RAW",numcodes,0);
@@ -261,6 +262,14 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
             mzLine(66,8,5,"ATIVE NO OPL ANTES");
             mzLine(76,8,5,"HOOK DEVE SER VALIDO");
         }
+    }else if(s->page==MZ_PAGE_CHEATS){
+        for(i=0;i<(int)s->live_count;i++){
+            char label[MZ_LIVE_NAME+4];
+            label[0]=(MaizoLiveMask&(1u<<i))?'+':'-';label[1]=' ';
+            mzCopy(label+2,config->MaizoLiveCheats.name[i]);
+            mzLine(25+i*10,11,(MaizoLiveMask&(1u<<i))?4:5,label);
+        }
+        mzLine(25+i*10,11,4,"VOLTAR");
     }else{
         for(i=0;i<count;i++)mzLine(25+i*10,11,i==4&&!s->save_caps?5:4,
             i==4&&!s->save_caps?"SALVAR: N/D":systemNames[i]);
@@ -709,6 +718,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.cheat_caps=!!config->gCheatList && MaizoCheatHookActive && numcodes>0;
     mzState.cheat_paused=!!MaizoCheatPaused;
     mzState.cheat_changed=0;
+    mzState.live_count=mzState.cheat_caps?MaizoLiveCount:0;
+    mzState.live_choice=0;
     mzState.frame480i_caps=mzFrame480iCaps();
     mzState.frame480i_mode=!!MaizoGs480iArmed;
     mzState.frame480i_changed=0;
@@ -812,6 +823,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                 mzState.changed=0;
                 mzState.filter_caps=mzFilterCapabilities();
             }
+        }
+        if(mzState.live_choice){
+            if(mzState.live_count&&MaizoCheatHookActive)
+                MaizoLiveMask=mzLiveToggle(&config->MaizoLiveCheats,MaizoLiveMask,mzState.live_choice-1);
+            mzState.live_choice=0;
         }
         if(mzState.cheat_changed){
             if(mzState.cheat_caps && MaizoCheatHookActive)

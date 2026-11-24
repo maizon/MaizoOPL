@@ -869,11 +869,19 @@ int sbLoadCheats(const char *path, const char *file, const char *title, config_s
             return 0;
         }
         cheatConfigLoadSelections(configSet);
-        if (!cheatHasOptionalSelection())
+        if (!cheatHasOptionalSelection()
+#ifdef MAIZO_IGR_MENU
+            && !cheatBuildLive(NULL)
+#endif
+        )
             cheatDisableLaunch();
     } else if (result == 1) {
         cheatConfigLoadSelections(configSet);
-        if (!cheatHasOptionalSelection())
+        if (!cheatHasOptionalSelection()
+#ifdef MAIZO_IGR_MENU
+            && !cheatBuildLive(NULL)
+#endif
+        )
             cheatDisableLaunch();
     }
     if (GetCheatsEnabled() && !cheatSelectionFits()) {

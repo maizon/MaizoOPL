@@ -60,6 +60,9 @@
 #ifdef MAIZO_IGR_MENU
 .globl MaizoCheatPaused
 .globl MaizoCheatHookActive
+.globl MaizoLiveMask
+.globl MaizoLiveCount
+.globl MaizoLiveOwner
 #endif
 
 .globl  engine_info
@@ -173,6 +176,22 @@ CodeHandler:
     la      $t0, codelist
     la      $t1, type_tab
 ch_loop:
+#ifdef MAIZO_IGR_MENU
+    # Live mode contains independent constant writes only. Filter each
+    # line by its group bit; no code list is ever rewritten mid-handler.
+    lw      $t5, MaizoLiveCount
+    beqz    $t5, maizo_live_pass
+    nop
+    la      $t5, MaizoLiveOwner
+    addu    $t5, $t5, $t4
+    lbu     $t6, 0($t5)
+    lw      $t5, MaizoLiveMask
+    srlv    $t5, $t5, $t6
+    andi    $t5, $t5, 1
+    beqz    $t5, next
+    nop
+maizo_live_pass:
+#endif
     /*
      * $t2 - ptr to current code
      * $a0 - RAM address
@@ -654,6 +673,12 @@ MaizoCheatPaused:
 .word   0
 MaizoCheatHookActive:
 .word   0
+MaizoLiveMask:
+.word   0
+MaizoLiveCount:
+.word   0
+MaizoLiveOwner:
+.space 48
 #endif
 numcodes:
 .word   0

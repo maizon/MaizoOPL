@@ -107,6 +107,22 @@ void EnableCheats(void)
     MaizoCheatPaused=MaizoCheatHookActive=0;
 #endif
     SetupCheats();
+#ifdef MAIZO_IGR_MENU
+    USE_LOCAL_EECORE_CONFIG;
+    const mz_live_cheats_t *p=&config->MaizoLiveCheats;
+    MaizoLiveCount=MaizoLiveMask=0;
+    if(p->count&&p->count<=MZ_LIVE_GROUPS&&p->lines<=MZ_LIVE_CODES&&
+       p->lines==(unsigned)numcodes&&numhooks>0){
+        unsigned i;
+        for(i=0;i<p->lines;i++)
+            if(p->owner[i]>=p->count||!mzLiveWriteOK(codelist[i*2]))break;
+        if(i==p->lines){
+            for(i=0;i<p->lines;i++)MaizoLiveOwner[i]=p->owner[i];
+            MaizoLiveMask=p->mask&((1u<<p->count)-1u);
+            MaizoLiveCount=p->count;
+        }else numcodes=0; /* never execute a rejected live catalog */
+    }else if(p->count)numcodes=0;
+#endif
     // Install Hook SetupThread
     Install_HookSetupThread();
 }

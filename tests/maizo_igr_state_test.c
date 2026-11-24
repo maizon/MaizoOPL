@@ -112,5 +112,10 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.cheat_changed&&s.cheat_paused);
     s.cheat_changed=0;
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.cheat_changed&&!s.cheat_paused);
+    s.live_count=2;s.selected=1;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_CHEATS);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.live_choice==1);
+    maizoIgrStep(&s,MZ_KEY_UP);assert(s.selected==2);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_GAME);
     puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;
 }

@@ -45,6 +45,10 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_state_test.c -o /tmp/maizo_igr_state_test
           /tmp/maizo_igr_state_test
+      - name: Verify live cheat address and exclusive-group masks
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_cheat_live_test.c -o /tmp/maizo_live
+          /tmp/maizo_live
       - name: Verify CheatDevice selectable value map grammar
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/maizo_cheat_map_test.c -o /tmp/maizo_map

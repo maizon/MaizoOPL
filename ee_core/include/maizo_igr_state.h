@@ -1,7 +1,7 @@
 /* MAIZO In-Game PRO state model, fixed footprint, host-testable. */
 #ifndef MAIZO_IGR_STATE_H
 #define MAIZO_IGR_STATE_H
-enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS };
+enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS, MZ_PAGE_CHEATS };
 enum { MZ_VIDEO_NONE=0, MZ_VIDEO_GSM=1, MZ_VIDEO_NATIVE=2 };
 enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF, MZ_ACTION_SAVE_EXIT };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
@@ -10,7 +10,7 @@ typedef struct { int page, selected, confirm, field_fix; int width, height, x, y
              int filter_mode, filter_caps, filter_changed;
              unsigned int draw_caps, draw_modes, draw_changed;
              unsigned int frame480i_caps, frame480i_mode, frame480i_changed;
-             unsigned int video_caps, native_field_caps, field_changed, save_caps, cheat_caps, cheat_paused, cheat_changed; } maizo_igr_state_t;
+             unsigned int video_caps, native_field_caps, field_changed, save_caps, cheat_caps, cheat_paused, cheat_changed, live_count, live_choice; } maizo_igr_state_t;
 static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
 {
     s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;s->field_fix=!!field_fix;
@@ -19,7 +19,7 @@ static void maizoIgrStateInit(maizo_igr_state_t *s,int field_fix)
     s->draw_caps=s->draw_modes=s->draw_changed=0;
     s->frame480i_caps=s->frame480i_mode=s->frame480i_changed=0;
     s->video_caps=s->native_field_caps=s->field_changed=s->save_caps=0;
-    s->cheat_caps=s->cheat_paused=s->cheat_changed=0;
+    s->cheat_caps=s->cheat_paused=s->cheat_changed=s->live_count=s->live_choice=0;
 }
 static int maizoIgrPageCount(int page)
 {
@@ -38,9 +38,11 @@ static int maizoIgrBound(int v,int low,int high) {return v<low?low:v>high?high:v
 static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
 {
     int *v=0,min=0,max=0,delta=0,n=maizoIgrPageCount(s->page);
+    if(s->page==MZ_PAGE_CHEATS)n=s->live_count+1;
     if(pressed&MZ_KEY_START)return MZ_ACTION_RESUME;
     if(pressed&MZ_KEY_BACK) {
         if(s->page==MZ_PAGE_MAIN)return MZ_ACTION_RESUME;
+        if(s->page==MZ_PAGE_CHEATS){s->page=MZ_PAGE_GAME;s->selected=1;return MZ_ACTION_NONE;}
         if(s->page==MZ_PAGE_GS_STATUS){s->page=MZ_PAGE_FILTERS;s->selected=6;return MZ_ACTION_NONE;}
         s->page=MZ_PAGE_MAIN;s->selected=0;s->confirm=0;return MZ_ACTION_NONE;
     }
@@ -131,7 +133,11 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         if(s->selected==1){s->page=MZ_PAGE_MAIN;s->selected=2;}
     }else if(s->page==MZ_PAGE_GAME){
         if(s->selected==0 && s->cheat_caps){s->cheat_paused^=1u;s->cheat_changed=1u;}
+        if(s->selected==1&&s->live_count){s->page=MZ_PAGE_CHEATS;s->selected=0;}
         if(s->selected==2){s->page=MZ_PAGE_MAIN;s->selected=3;}
+    }else if(s->page==MZ_PAGE_CHEATS){
+        if((unsigned)s->selected<s->live_count)s->live_choice=s->selected+1;
+        else{s->page=MZ_PAGE_GAME;s->selected=1;}
     }else if(s->page==MZ_PAGE_SYSTEM){
         if(s->selected==0)return MZ_ACTION_RESUME;
         if(s->selected==1||s->selected==2){
