@@ -66,7 +66,18 @@ static int MaizoIgrWaitRelease;
  * monitor, even when the title runs at a priority above 8. No new
  * VBLANK hook, no self-rearming ISR, no pad parsing in IRQ context. */
 #define MAIZO_IGR_POLL_PRIORITY 0
+#define MAIZO_IGR_SMB_POLL_PRIORITY 32
 static volatile int mzPollBoost;
+
+/* Streaming titles must not have their EE workers repeatedly preempted
+ * at priority zero just to poll a controller. On ETH/SMB keep a normal
+ * sleeping worker; raise to zero only for the explicit menu capture.
+ * This does not change the IOP network driver or its thread priorities. */
+static int mzIgrPollPriority(const struct EECoreConfig_t *config)
+{
+    if(!config->EnableMaizoIgrMenu)return 127;
+    return config->GameMode==ETH_MODE?MAIZO_IGR_SMB_POLL_PRIORITY:MAIZO_IGR_POLL_PRIORITY;
+}
 /* Dedicated cache line: IOP never targets a game-owned buffer. */
 volatile u32 MaizoPadMailbox[16] __attribute__((aligned(64)));
 static u8 *mzPadSlots[8];
@@ -321,7 +332,7 @@ static void IGR_Thread(void *arg)
     u8 pad_pos_combo1;
     u8 pad_pos_combo2;
 #ifdef MAIZO_IGR_MENU
-    const int pollPriority=config->EnableMaizoIgrMenu?MAIZO_IGR_POLL_PRIORITY:127;
+    const int pollPriority=mzIgrPollPriority(config);
 #endif
 
     (void)arg;
@@ -489,6 +500,12 @@ maizo_igr_poll_again:
 
         if (alarm_id >= 0) {
             SleepThread();
+#ifdef MAIZO_IGR_MENU
+            /* Restore normal priority only after a successful sleep,
+             * including recovery from a temporary exhausted alarm pool. */
+            if(config->GameMode==ETH_MODE && config->EnableMaizoIgrMenu)
+                ChangeThreadPriority(TH_SELF,pollPriority);
+#endif
         } else {
             /*
              * An alarm slot should normally be available. Fall back to
@@ -501,7 +518,9 @@ maizo_igr_poll_again:
 #endif
             nopdelay();
 #ifdef MAIZO_IGR_MENU
-            ChangeThreadPriority(TH_SELF,pollPriority);
+            if(config->GameMode!=ETH_MODE)
+                ChangeThreadPriority(TH_SELF,pollPriority);
+            /* On SMB remain at 127 until an alarm can actually sleep. */
 #endif
         }
     }
@@ -979,9 +998,9 @@ void Install_IGR(void)
 #ifdef MAIZO_IGR_MENU
         {
             USE_LOCAL_EECORE_CONFIG;
-            mzPollBoost=!!config->EnableMaizoIgrMenu;
-            if(mzPollBoost)
-                thread_param.initial_priority=MAIZO_IGR_POLL_PRIORITY;
+            thread_param.initial_priority=mzIgrPollPriority(config);
+            /* No interrupt-context priority promotion for SMB. */
+            mzPollBoost=config->EnableMaizoIgrMenu && config->GameMode!=ETH_MODE;
         }
 #endif
 
