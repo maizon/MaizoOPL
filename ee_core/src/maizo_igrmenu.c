@@ -359,8 +359,9 @@ int maizoIGR_Preflight(u32 heldDmac)
     USE_LOCAL_EECORE_CONFIG;
     mzGameHasGsm=!!config->EnableGSMOp;
     return !(*MZ_D_CTRL&0xcu) &&
-           mzIgrReadyPath(*MZ_D1_CHCR,*MZ_D2_CHCR,*MZ_VIF1_STAT,
-                          *MZ_GIF_STAT,mzIgrOriginalDstat(*MZ_D_STAT,heldDmac)) && mzFrame();
+           (heldDmac==MZ_IGR_CAPTURE_PROBE ||
+            mzIgrReadyPath(*MZ_D1_CHCR,*MZ_D2_CHCR,*MZ_VIF1_STAT,
+                           *MZ_GIF_STAT,mzIgrOriginalDstat(*MZ_D_STAT,heldDmac))) && mzFrame();
 }
 static int mzWait(vu32 *reg,u32 mask)
 {
@@ -815,7 +816,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         if(!armed){
             /* Ignore the opening chord until its buttons are released.
              * Direction/confirm edges then start from a fresh sample. */
-            if(now&0x0f09u)continue;
+            if(now&0x0f09u){prev=now;continue;}
             armed=1;
             prev=now;
             continue;

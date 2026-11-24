@@ -22,7 +22,9 @@ static inline int mzIgrDmaBorrowable(uint32_t stat,unsigned int channel)
 static inline int mzIgrSelectPath(uint32_t stat,uint32_t gif)
 {
     if(gif&0x1008u)return 0; /* reverse transfer or global GIF pause */
-    if(!(gif&3u)&&mzIgrDmaBorrowable(stat,2))return 3;
+    /* PATH3 uses CPU FIFO stores, not channel 2 DMA. Its pending
+     * completion must be preserved, not used as a rejection reason. */
+    if(!(gif&3u)&&!(stat&0xe000u))return 3;
     if(mzIgrDmaBorrowable(stat,1))return 2;
     return 0;
 }

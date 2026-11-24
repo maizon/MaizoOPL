@@ -23,8 +23,9 @@ int main(void)
     assert(mzIgrSelectPath(0,2)==2);
     assert(!mzIgrSelectPath(0,8));
     assert(mzIgrSelectPath(4,0)==3); /* masked IRQ pending is preserved */
-    assert(mzIgrSelectPath(0x40004,0)==2);
-    assert(!mzIgrSelectPath(0x60006,0));
+    assert(mzIgrSelectPath(0x40004,0)==3);
+    assert(mzIgrSelectPath(0x60006,0)==3);
+    assert(!mzIgrSelectPath(0x60006,1));
     assert(!mzIgrSelectPath(0x8000,0));
     assert(mzIgrReadyPath(0,0,0x800,0,0)==3);
     assert(!mzIgrReadyPath(0,0,0x800,1,0));
@@ -34,6 +35,7 @@ int main(void)
     assert(!mzIgrReadyPath(0,0,0,0x1000,0));
     assert(!mzIgrReadyPath(0,0,0,0x20,0));
     assert(mzIgrOriginalDstat(2,2)==0x20002);
+    assert(mzIgrReadyPath(0,0,0,0,mzIgrOriginalDstat(4,4))==3);
     assert(!mzIgrReadyPath(0,0,0,1,mzIgrOriginalDstat(2,2)));
     puts("MAIZO In-Game VIF1/GIF pipeline preflight PASS");
     return 0;

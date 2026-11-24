@@ -246,22 +246,16 @@ static void maizoIgrYield(void)
     unsigned int n;
     for(n=0;n<0x80000u;n++)asm volatile("nop\nnop\nnop\nnop" ::: "memory");
 }
-/* Some pad libraries require a live EE worker to advance their pad
- * buffer. Check for real progress after suspension, before modifying
- * VRAM. A dead controller stream must not strand a paused game. */
+/* A stable pad is required before rendering; freshness is monitored
+ * throughout menu navigation. */
 static int maizoIgrPadReady(void)
 {
-    u16 keys,firstKeys=0;
-    u32 frame,first=0;
-    int got=0,i;
-    for(i=0;i<24;i++){
-        if(maizoIgrButtons(&keys,&frame)){
-            if(got && (frame!=first || keys!=firstKeys))return 1;
-            first=frame;firstKeys=keys;got=1;
-        }
-        maizoIgrYield();
-    }
-    return 0;
+    u16 keys;
+    u32 frame;
+    /* A valid stable pad sample suffices to draw. The menu itself
+     * enforces live progress, release-before-input and a finite timeout.
+     * Do not require an extra frame transition at this exact instant. */
+    return maizoIgrButtons(&keys,&frame);
 }
 #endif
 
@@ -466,32 +460,35 @@ maizo_igr_poll_again:
              * reaches an idle point; pausing first can freeze a
              * half-consumed VIF packet forever. Up to 64 alarms. */
             int retries,attempt;
-            for(attempt=0;attempt<3;attempt++){
-                ChangeThreadPriority(TH_SELF,127);
-                for(retries=0;retries<64;retries++){
-                    if(maizoIGR_Preflight(0))break;
-                    alarm_id=SetAlarm(97,IGR_Poll_Alarm,&IGR_Thread_ID);
-                    if(alarm_id>=0)SleepThread();else nopdelay();
-                }
-                ChangeThreadPriority(TH_SELF,0);
-                if(retries==64)break;
-                maizoIgrHold();
-                maizoIgrPauseThreads();
-                if(maizoIgrPadReady()){
-                    /* An already submitted transfer may finish without
-                     * EE workers. Never reset or truncate game DMA. */
-                    for(retries=0;retries<8;retries++){
+            for(attempt=0;attempt<8;attempt++){
+                /* Validate the display/mode first, NOT simultaneous
+                 * DMA idleness while the game is producing commands. */
+                if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE)){
+                    maizoIgrHold();
+                    maizoIgrPauseThreads();
+                    /* Stop new EE submissions, then give already queued
+                     * hardware work a bounded opportunity to drain.
+                     * If it needs an EE worker/IRQ, release and retry. */
+                    for(retries=0;retries<4;retries++){
                         if(maizoIGR_Preflight(MaizoIgrDmacMask))break;
                         maizoIgrYield();
                     }
-                    if(retries<8){
+                    if(retries<4&&maizoIgrPadReady()&&
+                       maizoIGR_Preflight(MaizoIgrDmacMask)){
                         choice=maizoIGR_MenuRun(maizoIgrButtons,maizoIgrYield,MaizoIgrDmacMask);
                         maizoIgrUnhold();
-                        break; /* never retry after touching the framebuffer */
+                        break;
                     }
+                    maizoIgrUnhold();
+                    maizoIgrResumeThreads();
                 }
-                maizoIgrUnhold();
-                maizoIgrResumeThreads();
+                /* Let title workers and their IRQs make progress before
+                 * another short capture. Never leave the title paused
+                 * while sleeping on an alarm. */
+                ChangeThreadPriority(TH_SELF,127);
+                alarm_id=SetAlarm(97,IGR_Poll_Alarm,&IGR_Thread_ID);
+                if(alarm_id>=0)SleepThread();else nopdelay();
+                ChangeThreadPriority(TH_SELF,0);
             }
         }
         choice = maizoIgrSafeChoice(config->EnableMaizoIgrMenu, choice);
