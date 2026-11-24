@@ -4,4 +4,5 @@
 #include <tamtypes.h>
 #include "maizo_igr_route.h"
 int maizoIGR_MenuRun(u16 (*buttons)(void));
+int maizoIGR_Preflight(void);
 #endif

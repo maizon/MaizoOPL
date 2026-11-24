@@ -392,10 +392,24 @@ maizo_igr_poll_again:
          */
         ChangeThreadPriority(TH_SELF, 0);
         if (config->EnableMaizoIgrMenu) {
-            maizoIgrHold();
-            maizoIgrPauseThreads();
-            choice = maizoIGR_MenuRun(maizoIgrButtons);
-            maizoIgrUnhold();
+            /* Yield to live game threads until the GS/VIF1 pipeline
+             * reaches an idle point; pausing first can freeze a
+             * half-consumed VIF packet forever. Up to 64 alarms. */
+            int retries;
+            int ready = 0;
+            ChangeThreadPriority(TH_SELF, 127);
+            for(retries=0;retries<64;retries++){
+                if(maizoIGR_Preflight()){ready=1;break;}
+                alarm_id=SetAlarm(256,IGR_Poll_Alarm,&IGR_Thread_ID);
+                if(alarm_id>=0)SleepThread();else nopdelay();
+            }
+            ChangeThreadPriority(TH_SELF, 0);
+            if(ready){
+                maizoIgrHold();
+                maizoIgrPauseThreads();
+                choice = maizoIGR_MenuRun(maizoIgrButtons);
+                maizoIgrUnhold();
+            }
         }
         choice = maizoIgrSafeChoice(config->EnableMaizoIgrMenu, choice);
         if (choice == MAIZO_IGR_RESUME) {

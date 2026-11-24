@@ -109,6 +109,11 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_gsm_layout_test.c -o /tmp/maizo_igr_layout
           /tmp/maizo_igr_layout
+      - name: Verify live VIF1/GIF pipeline preflight rejects partial packets
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_igr_pipeline_test.c -o /tmp/maizo_igr_pipeline
+          /tmp/maizo_igr_pipeline
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract

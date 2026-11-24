@@ -22,6 +22,7 @@
 #include "maizo_gs_480i_bridge.h"
 #include "maizo_igr_monitor.h"
 #include "maizo_igr_gsm_layout.h"
+#include "maizo_igr_pipeline.h"
 #define IGRM_FONT_DATA
 #include "maizo_igrmfont.h"
 
@@ -294,6 +295,15 @@ static int mzFrame(void)
     mzY=(int)f.y;
     return 1;
 }
+/* Non-destructive preflight while game threads keep running. It is
+ * intentionally separate from GSM: it only checks the GS readout
+ * and that VIF1/PATH2 can accept a fresh DIRECT command. */
+int maizoIGR_Preflight(void)
+{
+    return mzFrame() &&
+           mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
+                             *MZ_VIF1_STAT,*MZ_GIF_STAT);
+}
 static int mzWait(vu32 *reg,u32 mask,u32 want,int mfifo)
 {
     int i;
@@ -556,6 +566,9 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
     }
     if(mzState.filter_mode!=(int)MaizoGsFilterMode)
         mzState.filter_mode=0; /* Another SetGsCrt cancelled the filter. */
+    if(!mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
+                           *MZ_VIF1_STAT,*MZ_GIF_STAT))
+        return MAIZO_IGR_UNAVAILABLE;
     ctrl=*MZ_D_CTRL;
     mfifo=(ctrl>>2)&3;
     if(!mzWait(MZ_D1_CHCR,CHCR_STR,0,mfifo==2) ||
