@@ -61,7 +61,7 @@ extern u32 MaizoGs480iOriginalFix;
 extern u64 MaizoGs480iOriginalSMODE2;
 extern volatile u32 MaizoGsFilterMode;
 extern volatile u32 MaizoGsFilterPrimary;
-extern volatile u32 MaizoGsFilterSourceEN;
+extern volatile u32 MaizoGsFilterSourceEN,MaizoNativeSmoothMaxFBP;
 extern volatile u64 MaizoGsFilterPMODE;
 extern volatile u64 MaizoGsFilterBaseFB;
 extern volatile u64 MaizoGsFilterBaseDisplay;
@@ -400,7 +400,7 @@ static int __attribute__((noinline)) mzNativeApply(const maizo_igr_state_t *s)
 {
     unsigned int en=mzNativeCaps(),i;
     u64 target[2],source[2];
-    if(!en)return 0;
+    if(!en || MaizoGsFilterMode)return 0;
     for(i=0;i<2;i++){
         if(!(en&(1u<<i)))continue;
         source[i]=GSMSourceGSRegs[8+i*2];
@@ -508,8 +508,17 @@ static int mzFilterCapabilities(void)
     u64 fb2=mzOutputSource(9,GSMFlags[15]);
     u64 d1=mzOutputSource(8,GSMFlags[16]);
     u64 d2=mzOutputSource(10,GSMFlags[16]);
+    int caps;
     if(!pmode || !smode)return 0;
-    return mzFilterCaps(pmode,smode,fb1,fb2,d1,d2);
+    caps=mzFilterCaps(pmode,smode,fb1,fb2,d1,d2);
+    if(!mzGameHasGsm){
+        int limit;
+        u64 fb=(pmode&3)==1?fb1:fb2;
+        if(MaizoNativeMask||!mzNativeCaps())return 0;
+        limit=mzNativeSmoothLimit(fb,(pmode&3)==1?d1:d2);
+        if(limit<0 || (int)(fb&511u)>limit)caps&=~MZ_FILTER_SMOOTH;
+    }
+    return caps;
 }
 static int __attribute__((noinline)) mzFilterApply(int mode)
 {
@@ -522,7 +531,7 @@ static int __attribute__((noinline)) mzFilterApply(int mode)
     int primary, caps;
     u64 fb,display,filteredPmode;
     if(!pmode || !smode)return 0;
-    caps=mzFilterCaps(pmode,smode,fb1,fb2,d1,d2);
+    caps=mzFilterCapabilities();
     if(mode && !(caps&mode))return 0;
 
     /* Turn off the assembler hook FIRST while returning to the game's
@@ -555,6 +564,8 @@ static int __attribute__((noinline)) mzFilterApply(int mode)
     MaizoGsFilterPMODE=filteredPmode;
 
     if(mode==MZ_FILTER_SMOOTH){
+        if(!mzGameHasGsm)
+            MaizoNativeSmoothMaxFBP=(u32)mzNativeSmoothLimit(fb,display);
         if(primary==1){
             *(vu64 *)0x12000070=fb;
             *(vu64 *)0x12000090=mzFilterOffsetOneLine(fb);
@@ -629,7 +640,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
      * stay clearly disabled, not silently mapped to GS writes. */
     mzState.video_caps=mzGameHasGsm?MZ_VIDEO_GSM:
         (mzNativeCaps()?MZ_VIDEO_NATIVE:MZ_VIDEO_NONE);
-    mzState.filter_caps=mzGameHasGsm?mzFilterCapabilities():0;
+    mzState.filter_caps=mzFilterCapabilities();
     /* A DRAW switch is only actionable if a verified pre-DMA game
      * adapter registered support. Stock commercial games do not. */
     mzState.draw_caps=mzGsRuntimeCaps();
@@ -644,10 +655,8 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         if(!MaizoNativeMask)
             mzState.width=mzState.height=mzState.x=mzState.y=0;
         mzState.field_fix=0;
-        mzState.filter_mode=0;
     }
-    if(mzState.filter_mode!=(int)MaizoGsFilterMode)
-        mzState.filter_mode=0; /* Another SetGsCrt cancelled the filter. */
+    mzState.filter_mode=(int)MaizoGsFilterMode; /* Another SetGsCrt cancelled the filter. */
     if(!mzIgrPipelineIdle(*MZ_D1_CHCR,*MZ_D2_CHCR,
                            *MZ_VIF1_STAT,*MZ_GIF_STAT))
         return MAIZO_IGR_UNAVAILABLE;
@@ -715,9 +724,10 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
                     mzState.x=oldX;mzState.y=oldY;
                 }
                 mzState.changed=0;
+                mzState.filter_caps=mzFilterCapabilities();
             }
         }
-        if(mzState.filter_changed && mzGameHasGsm){
+        if(mzState.filter_changed){
             int desired=mzState.filter_mode;
             mzState.filter_changed=0;
             if(!mzFilterApply(desired))

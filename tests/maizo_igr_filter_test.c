@@ -18,6 +18,10 @@ int main(void)
                         disp,mzFilterShortDisplay(disp))==MZ_FILTER_SHARP);
     assert(mzFilterCaps(0x07,3,one,fb(100,10,0,6),disp,disp)==0);
     assert(mzFilterOffsetOneLine(one)==fb(96,10,0,7));
+    assert(mzNativeSmoothLimit(one,disp)==360);
+    assert(mzNativeSmoothLimit(one,disp|(1ULL<<27))==-1);
+    assert(mzNativeSmoothLimit(fb(96,1,0,6),disp)==-1);
+    assert(mzNativeSmoothLimit(fb(96,10,31,6),disp)==-1);
     assert((mzFilterPmode(0x05,MZ_FILTER_SMOOTH,1)&0xffe3ULL)==0x7023);
     assert((mzFilterPmode(0x07,MZ_FILTER_SHARP,1)&3ULL)==1);
     assert((mzFilterPmode(0x07,MZ_FILTER_SHARP,2)&3ULL)==2);

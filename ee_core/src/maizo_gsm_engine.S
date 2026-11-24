@@ -82,6 +82,8 @@ MaizoGsFilterMode: .word 0
 MaizoGsFilterPrimary: .word 0
 .globl MaizoGsFilterSourceEN
 MaizoGsFilterSourceEN: .word 0
+.globl MaizoNativeSmoothMaxFBP
+MaizoNativeSmoothMaxFBP: .word 0
 .p2align 3
 .globl MaizoGsFilterPMODE
 MaizoGsFilterPMODE: .dword 0
@@ -188,9 +190,34 @@ Hook_SetGsCrt:
     sh      $a0, Source_INT($v0)
     sh      $a1, Source_MODE($v0)
     sh      $a2, Source_FFMD($v0)
-    # Changing video mode may make interlaced filtering invalid.
+    # Undo an active native scanout override BEFORE changing timing.
+    # Keep syscall arguments intact; original SetGsCrt will run normally.
     la      $t3, MaizoGsFilterMode
+    lw      $t4, 0($t3)
     sw      $zero, 0($t3)
+    beqz    $t4, maizo_setcrt_filter_done
+    nop
+    la      $t3, MaizoGsMonitorOnly
+    lw      $t4, 0($t3)
+    beqz    $t4, maizo_setcrt_filter_done
+    nop
+    li      $t4, 0x8000
+    mtbpc   $t4
+    sync.p
+    la      $t3, GSMSourceGSRegs
+    li      $t4, GS_BASE
+    ld      $t5, Source_PMODE($t3)
+    sd      $t5, GS_PMODE($t4)
+    ld      $t5, Source_DISPFB1($t3)
+    sd      $t5, GS_DISPFB1($t4)
+    ld      $t5, Source_DISPFB2($t3)
+    sd      $t5, GS_DISPFB2($t4)
+    ld      $t5, Source_DISPLAY1($t3)
+    sd      $t5, GS_DISPLAY1($t4)
+    ld      $t5, Source_DISPLAY2($t3)
+    sd      $t5, GS_DISPLAY2($t4)
+    sync.l
+maizo_setcrt_filter_done:
     # When the game changes its CRT mode, roll back the temporary
     # 480i FRAME override before executing the forced CRT setup.
     la      $t3, MaizoGs480iMode
@@ -591,7 +618,12 @@ maizo_monitor_write:
     nop
     srl     $t0, $v0, 1
     addu    $t0, $t0, $s0
+    ld      $t6, 0($t0)
     sd      $a1, 0($t0)
+    la      $t3, MaizoGsFilterMode
+    lw      $t5, 0($t3)
+    bnez    $t5, maizo_native_filter_write
+    nop
     # Only DISPLAY1/2 can be changed. Keep the raw game value above.
     addiu   $t0, $v0, -GS_DISPLAY1
     beqz    $t0, maizo_native_first
@@ -640,6 +672,97 @@ maizo_native_cancel_second:
 maizo_monitor_forward:
     b       exit_GSHandler
     sd      $a1, 0($a3)
+
+# Native filter path. Record every original write above, including
+# the inactive circuit. Exact layout changes cancel the override.
+# Only smooth may follow verified primary framebuffer-base swaps.
+maizo_native_filter_write:
+    beqz    $v0, maizo_native_filter_pmode
+    nop
+    li      $t0, 2
+    bne     $t5, $t0, maizo_native_filter_unchanged
+    nop
+    addiu   $t0, $v0, -GS_DISPFB1
+    beqz    $t0, maizo_native_filter_fb1
+    addiu   $t0, $v0, -GS_DISPFB2
+    beqz    $t0, maizo_native_filter_fb2
+    addiu   $t0, $v0, -GS_DISPLAY1
+    beqz    $t0, maizo_native_filter_d1
+    addiu   $t0, $v0, -GS_DISPLAY2
+    beqz    $t0, maizo_native_filter_d2
+    nop
+maizo_native_filter_unchanged:
+    bne     $t6, $a1, maizo_native_filter_cancel
+    nop
+    b       maizo_monitor_forward
+    nop
+maizo_native_filter_pmode:
+    bne     $t6, $a1, maizo_native_filter_cancel
+    nop
+    la      $t3, MaizoGsFilterPMODE
+    ld      $a1, 0($t3)
+    b       maizo_monitor_forward
+    nop
+maizo_native_filter_fb1:
+    b       maizo_native_filter_fb
+    li      $a0, 1
+maizo_native_filter_fb2:
+    li      $a0, 2
+maizo_native_filter_fb:
+    la      $t3, MaizoGsFilterPrimary
+    lw      $t0, 0($t3)
+    bne     $a0, $t0, maizo_native_filter_fb_send
+    nop
+    la      $t3, MaizoGsFilterBaseFB
+    ld      $t0, 0($t3)
+    xor     $t0, $t0, $a1
+    dsrl    $t0, $t0, 9
+    bnez    $t0, maizo_native_filter_cancel
+    andi    $t0, $a1, 511
+    la      $t3, MaizoNativeSmoothMaxFBP
+    lw      $t1, 0($t3)
+    sltu    $t0, $t1, $t0
+    bnez    $t0, maizo_native_filter_cancel
+    nop
+maizo_native_filter_fb_send:
+    jal     maizo_filter_framebuffer
+    or      $v0, $zero, $a1
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
+maizo_native_filter_d1:
+    b       maizo_native_filter_d
+    li      $a0, 1
+maizo_native_filter_d2:
+    li      $a0, 2
+maizo_native_filter_d:
+    la      $t3, MaizoGsFilterPrimary
+    lw      $t0, 0($t3)
+    bne     $a0, $t0, maizo_native_filter_d_send
+    nop
+    la      $t3, MaizoGsFilterBaseDisplay
+    ld      $t0, 0($t3)
+    bne     $t0, $a1, maizo_native_filter_cancel
+    nop
+maizo_native_filter_d_send:
+    jal     maizo_filter_display
+    or      $v0, $zero, $a1
+    b       exit_GSHandler
+    sd      $v0, 0($a3)
+maizo_native_filter_cancel:
+    la      $t3, MaizoGsFilterMode
+    sw      $zero, 0($t3)
+    ld      $t0, Source_PMODE($s0)
+    sd      $t0, GS_PMODE($s4)
+    ld      $t0, Source_DISPFB1($s0)
+    sd      $t0, GS_DISPFB1($s4)
+    ld      $t0, Source_DISPFB2($s0)
+    sd      $t0, GS_DISPFB2($s4)
+    ld      $t0, Source_DISPLAY1($s0)
+    sd      $t0, GS_DISPLAY1($s4)
+    ld      $t0, Source_DISPLAY2($s0)
+    sd      $t0, GS_DISPLAY2($s4)
+    b       maizo_monitor_forward
+    nop
 
 not_wanted_reg:                                     # Register unwanted, so perform op unchanged
     b       exit_GSHandler

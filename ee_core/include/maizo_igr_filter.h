@@ -64,6 +64,24 @@ static int mzFilterCaps(mz_u64 pmode,mz_u64 smode2,
     }
     return caps;
 }
+/* Last legal framebuffer base in 8 KiB units. Smooth shifts the
+ * secondary readout one source line and shortens its output by one,
+ * so both circuits together read no more rows than the original.
+ * Only same-stride, same-format swaps within this bound are allowed. */
+static int mzNativeSmoothLimit(mz_u64 fb,mz_u64 display)
+{
+    unsigned int fbw=(fb>>9)&63u,psm=(fb>>15)&31u;
+    unsigned int dbx=(fb>>32)&2047u,dby=(fb>>43)&2047u;
+    unsigned int w=(((display>>32)&4095u)+1u)/(((display>>23)&15u)+1u);
+    unsigned int h=((display>>44)&2047u)+1u;
+    unsigned int bytes;
+    if(!fbw||!w||dbx+w>fbw*64u||dby+h>2048u||
+       ((display>>27)&3u)||h<2u||
+       (psm!=0&&psm!=1&&psm!=2&&psm!=10))return -1;
+    bytes=(dby+h)*fbw*64u*((psm==2||psm==10)?2u:4u);
+    if(bytes>4u*1024u*1024u)return -1;
+    return 512-(int)((bytes+8191u)/8192u);
+}
 static mz_u64 mzFilterPmode(mz_u64 original,int mode,int primary)
 {
     if(mode==MZ_FILTER_NATIVE)return original;
