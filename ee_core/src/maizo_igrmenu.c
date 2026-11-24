@@ -53,6 +53,9 @@ extern u64 GSMDestGSRegs[11];
 extern u8 GSMFlags[19];
 extern u16 GSMSourceSetGsCrt[3];
 extern u16 GSMDestSetGsCrt[3];
+extern volatile u32 MaizoNativeMask;
+extern volatile u64 MaizoNativeSource[2],MaizoNativeTarget[2];
+extern volatile u32 MaizoGsMonitorOnly;
 extern volatile u32 MaizoGs480iMode;
 extern u32 MaizoGs480iOriginalFix;
 extern u64 MaizoGs480iOriginalSMODE2;
@@ -149,6 +152,16 @@ static void mzPage(const maizo_igr_state_t *s)
             };
             for(i=0;i<9;i++)
                 mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
+        }else if(s->video_caps==MZ_VIDEO_NATIVE){
+            mzValue(0,"RECORTE X",-s->width*2,0);
+            mzValue(1,"RECORTE Y",-s->height*2,0);
+            mzValue(2,"POSICAO X",s->x,0);
+            mzValue(3,"POSICAO Y",s->y,0);
+            mzLine(65,11,4,"PRESET RECORTE");
+            mzLine(75,11,5,"FIELD: GSM OFF");
+            mzLine(85,11,4,"FILTROS >");
+            mzLine(95,11,4,"RESTAURAR IMAGEM");
+            mzLine(105,11,4,"VOLTAR");
         }else{
         mzValue(0,"STRETCH X",s->width*2,1);
         mzValue(1,"STRETCH Y",s->height*2,1);
@@ -363,6 +376,47 @@ static u64 mzDisplayEdit(u64 base,const maizo_igr_state_t *s)
     return (base & ~clear)|(u64)dx|((u64)dy<<12)|
            ((u64)dw<<32)|((u64)dh<<44);
 }
+/* Only recorder-backed layouts; never use guessed MMIO readbacks
+ * for native edits. Both active circuits must independently validate. */
+static unsigned int mzNativeCaps(void)
+{
+    const u64 *r=GSMSourceGSRegs;
+    mz_igr_frame_t f;
+    unsigned int en=r[0]&3u,i;
+    u64 unchanged;
+    if(!MaizoGsMonitorOnly || !en)return 0;
+    for(i=0;i<2;i++){
+        unsigned int bit=1u<<i;
+        if(!(en&bit))continue;
+        if(!mzIgrMonitorFrame(&f,(r[0]&~3ULL)|bit,r[7],r[9],r[8],r[10],r[2],0) ||
+           !mzNativeDisplayEdit(r[8+i*2],0,0,0,0,&unchanged))return 0;
+    }
+    return en;
+}
+/* Called only with game threads suspended and the GS breakpoint off.
+ * Prepare ALL outputs first; an invalid request must not partially write
+ * the hardware. The passive observer reapplies only exact source matches. */
+static int mzNativeApply(const maizo_igr_state_t *s)
+{
+    unsigned int en=mzNativeCaps(),i;
+    u64 target[2],source[2];
+    if(!en)return 0;
+    for(i=0;i<2;i++){
+        if(!(en&(1u<<i)))continue;
+        source[i]=GSMSourceGSRegs[8+i*2];
+        if(!mzNativeDisplayEdit(source[i],s->width,s->height,s->x,s->y,&target[i]))return 0;
+    }
+    MaizoNativeMask=0;
+    for(i=0;i<2;i++){
+        if(!(en&(1u<<i)))continue;
+        MaizoNativeSource[i]=source[i];
+        MaizoNativeTarget[i]=target[i];
+        *(vu64 *)(0x12000080u+i*0x20u)=target[i];
+    }
+    asm volatile("sync.l");
+    if(s->width||s->height||s->x||s->y)MaizoNativeMask=en;
+    return 1;
+}
 static void mzApply(const maizo_igr_state_t *s)
 {
     u64 display1,display2;
@@ -560,7 +614,8 @@ int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
     if(!mzFrame())return MAIZO_IGR_UNAVAILABLE;
     /* The menu remains navigable without GSM. Unsafe video controls
      * stay clearly disabled, not silently mapped to GS writes. */
-    mzState.video_caps=(unsigned int)mzGameHasGsm;
+    mzState.video_caps=mzGameHasGsm?MZ_VIDEO_GSM:
+        (mzNativeCaps()?MZ_VIDEO_NATIVE:MZ_VIDEO_NONE);
     mzState.filter_caps=mzGameHasGsm?mzFilterCapabilities():0;
     /* A DRAW switch is only actionable if a verified pre-DMA game
      * adapter registered support. Stock commercial games do not. */
@@ -573,7 +628,8 @@ int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
     mzState.frame480i_mode=!!MaizoGs480iMode;
     mzState.frame480i_changed=0;
     if(!mzGameHasGsm){
-        mzState.width=mzState.height=mzState.x=mzState.y=0;
+        if(!MaizoNativeMask)
+            mzState.width=mzState.height=mzState.x=mzState.y=0;
         mzState.field_fix=0;
         mzState.filter_mode=0;
     }
@@ -635,10 +691,18 @@ int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
         pressed=now&~prev;
         prev=now;
         if(!pressed)continue;
-        action=maizoIgrStep(&mzState,pressed);
-        if(mzState.changed && mzGameHasGsm){
-            mzApply(&mzState);
-            mzState.changed=0;
+        {
+            int oldW=mzState.width,oldH=mzState.height;
+            int oldX=mzState.x,oldY=mzState.y;
+            action=maizoIgrStep(&mzState,pressed);
+            if(mzState.changed){
+                if(mzGameHasGsm)mzApply(&mzState);
+                else if(!mzNativeApply(&mzState)){
+                    mzState.width=oldW;mzState.height=oldH;
+                    mzState.x=oldX;mzState.y=oldY;
+                }
+                mzState.changed=0;
+            }
         }
         if(mzState.filter_changed && mzGameHasGsm){
             int desired=mzState.filter_mode;

@@ -81,5 +81,16 @@ int main(void) {
     assert(s.selected==8);
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_VIDEO);
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
+    maizoIgrStateInit(&s,0);
+    s.page=MZ_PAGE_VIDEO;s.video_caps=MZ_VIDEO_NATIVE;
+    maizoIgrStep(&s,MZ_KEY_RIGHT);assert(!s.width&&!s.changed);
+    maizoIgrStep(&s,MZ_KEY_LEFT);assert(s.width==-1&&s.changed);
+    s.selected=5;s.changed=0;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.field_fix&&!s.changed);
+    s.selected=4;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height);
+    maizoIgrStep(&s,MZ_KEY_OK);assert(s.width==-6&&s.height==-6);
+    s.selected=7;
+    maizoIgrStep(&s,MZ_KEY_OK);assert(!s.width&&!s.height&&!s.x&&!s.y);
     puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;
 }

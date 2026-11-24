@@ -60,6 +60,17 @@ int main(void)
     assert(!mzIgrMonitorFrame(&f,1u,fb|500u,0,disp(640,224,4),0,1,0));
     assert(!mzIgrMonitorFrame(&f,1u,0,0,0,0,0,0));
     assert(!mzIgrMonitorFrame(0,1u,fb,0,disp(640,224,4),0,1,0));
+    {
+        uint64_t original=disp(640,448,4)|200u|((uint64_t)40u<<12),out=0;
+        assert(mzNativeDisplayEdit(original,0,0,0,0,&out)&&out==original);
+        assert(mzNativeDisplayEdit(original,-2,-2,1,-1,&out));
+        assert((out&4095u)==212u && ((out>>12)&2047u)==41u);
+        assert(((out>>32)&4095u)==2543u && ((out>>44)&2047u)==443u);
+        assert(((out>>23)&63u)==((original>>23)&63u));
+        assert(!mzNativeDisplayEdit(original,1,0,0,0,&out));
+        assert(!mzNativeDisplayEdit(original,0,0,25,0,&out));
+        assert(!mzNativeDisplayEdit(disp(640,448,4),0,0,-1,0,&out));
+    }
     puts("MAIZO In-Game independent observer safety PASS");
     return 0;
 }

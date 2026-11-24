@@ -115,4 +115,27 @@ MZ_IGR_FN int mzIgrResolveFrame(mz_igr_frame_t *out,
     return mzIgrMonitorFrame(out,(pm&~3ULL)|1ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height) ||
            mzIgrMonitorFrame(out,(pm&~3ULL)|2ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height);
 }
+/* Native geometry never expands the game's original readout: DISPLAY
+ * changes the scanout window, not arbitrary resampling. Negative crop
+ * keeps the output window centered; magnification and timing are intact.
+ * Positive expansion is refused without known backing image bounds. */
+static inline int mzNativeDisplayEdit(uint64_t base,int cropX,int cropY,
+                                      int offsetX,int offsetY,uint64_t *out)
+{
+    int dx=base&4095u,dy=(base>>12)&2047u;
+    int dw=(base>>32)&4095u,dh=(base>>44)&2047u;
+    int mh=((base>>23)&15u)+1,mv=((base>>27)&3u)+1;
+    int cutX,cutY;
+    const uint64_t mask=4095ULL|(2047ULL<<12)|(4095ULL<<32)|(2047ULL<<44);
+    if(!out||!base||cropX>0||cropX< -8||cropY>0||cropY< -8||
+       offsetX< -24||offsetX>24||offsetY< -24||offsetY>24)return 0;
+    cutX=-cropX*mh*2;cutY=-cropY*mv*2;
+    if(dw+1-cutX<168*mh || dh+1-cutY<130*mv)return 0;
+    dx+=offsetX*mh+cutX/2;dy+=offsetY*mv+cutY/2;
+    if(dx<0||dx>4095||dy<0||dy>2047||
+       dx+dw-cutX>4095||dy+dh-cutY>2047)return 0;
+    *out=(base&~mask)|(uint64_t)dx|((uint64_t)dy<<12)|
+         ((uint64_t)(dw-cutX)<<32)|((uint64_t)(dh-cutY)<<44);
+    return 1;
+}
 #endif

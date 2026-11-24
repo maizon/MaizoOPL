@@ -2,6 +2,7 @@
 #ifndef MAIZO_IGR_STATE_H
 #define MAIZO_IGR_STATE_H
 enum { MZ_PAGE_MAIN, MZ_PAGE_VIDEO, MZ_PAGE_PADS, MZ_PAGE_GAME, MZ_PAGE_SYSTEM, MZ_PAGE_FILTERS, MZ_PAGE_GS_STATUS };
+enum { MZ_VIDEO_NONE=0, MZ_VIDEO_GSM=1, MZ_VIDEO_NATIVE=2 };
 enum { MZ_ACTION_NONE, MZ_ACTION_RESUME, MZ_ACTION_EXIT, MZ_ACTION_POWEROFF };
 enum { MZ_KEY_UP=0x0010, MZ_KEY_DOWN=0x0040, MZ_KEY_LEFT=0x0080, MZ_KEY_RIGHT=0x0020,
        MZ_KEY_OK=0x4000, MZ_KEY_BACK=0x2000, MZ_KEY_START=0x0008 };
@@ -50,11 +51,11 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         if(!s->video_caps)return MZ_ACTION_NONE;
         delta=pressed&MZ_KEY_RIGHT?1:-1;
         switch(s->selected) {
-        case 0:v=&s->width;min=-8;max=8;break;
-        case 1:v=&s->height;min=-8;max=8;break;
+        case 0:v=&s->width;min=-8;max=s->video_caps==MZ_VIDEO_NATIVE?0:8;break;
+        case 1:v=&s->height;min=-8;max=s->video_caps==MZ_VIDEO_NATIVE?0:8;break;
         case 2:v=&s->x;min=-24;max=24;break;
         case 3:v=&s->y;min=-24;max=24;break;
-        case 5:s->field_fix^=1;s->changed=1;return MZ_ACTION_NONE;
+        case 5:if(s->video_caps==MZ_VIDEO_GSM){s->field_fix^=1;s->changed=1;}return MZ_ACTION_NONE;
         default:return MZ_ACTION_NONE;
         }
         if(v){int next=maizoIgrBound(*v+delta,min,max);if(next!=*v){*v=next;s->changed=1;}}
@@ -67,8 +68,14 @@ static int maizoIgrStep(maizo_igr_state_t *s,unsigned int pressed)
         s->page=s->selected;s->selected=0;return MZ_ACTION_NONE;
     }
     if(s->page==MZ_PAGE_VIDEO) {
-        if(s->selected==4 && s->video_caps){s->width=s->width==0?6:0;s->changed=1;}
-        else if(s->selected==5 && s->video_caps){s->field_fix^=1;s->changed=1;}
+        if(s->selected==4 && s->video_caps){
+            if(s->video_caps==MZ_VIDEO_NATIVE){
+                int v=(s->width||s->height)?0:-6;
+                s->width=s->height=v;
+            }else s->width=s->width==0?6:0;
+            s->changed=1;
+        }
+        else if(s->selected==5 && s->video_caps==MZ_VIDEO_GSM){s->field_fix^=1;s->changed=1;}
         else if(s->selected==6){s->page=MZ_PAGE_FILTERS;s->selected=0;}
         else if(s->selected==7 && s->video_caps){s->width=s->height=s->x=s->y=0;s->changed=1;}
         else if(s->selected==8){s->page=MZ_PAGE_MAIN;s->selected=1;}

@@ -47,6 +47,14 @@ Old_SetGsCrt:       .word  0
 # Menu-only GS register observer: PASS-THROUGH, never GSM mode forcing.
 .globl MaizoGsMonitorOnly
 MaizoGsMonitorOnly: .word 0
+# Native geometry opt-in; exact original DISPLAY match is required.
+.globl MaizoNativeMask
+MaizoNativeMask: .word 0
+.p2align 3
+.globl MaizoNativeSource
+MaizoNativeSource: .space 16
+.globl MaizoNativeTarget
+MaizoNativeTarget: .space 16
 
 .globl GSMSourceSetGsCrt
 GSMSourceSetGsCrt:  .space 6
@@ -199,8 +207,21 @@ maizo_480i_setcrt_done:
     # No GSM forcing in passive menu-only monitor: original SetGsCrt.
     la      $t3, MaizoGsMonitorOnly
     lw      $t4, 0($t3)
-    bnez    $t4, Call_SetGsCrt
+    beqz    $t4, maizo_native_setcrt_done
     nop
+    # A new CRT mode invalidates the old geometry and recorder values.
+    la      $t3, MaizoNativeMask
+    sw      $zero, 0($t3)
+    la      $t3, GSMSourceGSRegs
+    sd      $zero, Source_PMODE($t3)
+    sd      $zero, Source_SMODE2($t3)
+    sd      $zero, Source_DISPFB1($t3)
+    sd      $zero, Source_DISPLAY1($t3)
+    sd      $zero, Source_DISPFB2($t3)
+    sd      $zero, Source_DISPLAY2($t3)
+    b       Call_SetGsCrt
+    nop
+maizo_native_setcrt_done:
 
 # -----------------------------------------------------------------------------------------
 
@@ -536,6 +557,32 @@ maizo_monitor_write:
     srl     $t0, $v0, 1
     addu    $t0, $t0, $s0
     sd      $a1, 0($t0)
+    # Only DISPLAY1/2 can be changed. Keep the raw game value above.
+    addiu   $t0, $v0, -GS_DISPLAY1
+    beqz    $t0, maizo_native_first
+    addiu   $t0, $v0, -GS_DISPLAY2
+    bnez    $t0, maizo_monitor_forward
+    nop
+    li      $t1, 2
+    b       maizo_native_check
+    li      $t2, 8
+maizo_native_first:
+    li      $t1, 1
+    li      $t2, 0
+maizo_native_check:
+    la      $t3, MaizoNativeMask
+    lw      $t4, 0($t3)
+    and     $t4, $t4, $t1
+    beqz    $t4, maizo_monitor_forward
+    nop
+    la      $t3, MaizoNativeSource
+    addu    $t3, $t3, $t2
+    ld      $t4, 0($t3)
+    bne     $a1, $t4, maizo_monitor_forward
+    nop
+    la      $t3, MaizoNativeTarget
+    addu    $t3, $t3, $t2
+    ld      $a1, 0($t3)
 maizo_monitor_forward:
     b       exit_GSHandler
     sd      $a1, 0($a3)
