@@ -16,11 +16,11 @@
 #include <stdint.h>
 #include <string.h>
 
-static inline int mzGsRuntimeStageShadow(
+static inline int mzGsRuntimeStageShadowMasked(
     unsigned int submit_type,
     const void *original, void *scratch, size_t scratch_capacity, size_t bytes,
     const mz_gs_dma_guard_t *guard,
-    void **dma_source)
+    void **dma_source, unsigned int mask)
 {
     uintptr_t ss, se, os, oe;
     mz_gs_gif_policy_t policy;
@@ -29,7 +29,7 @@ static inline int mzGsRuntimeStageShadow(
     if (!dma_source || !original) return MZ_GS_DMA_BAD_PACKET;
     *dma_source = (void *)original;
     if (!mzGsRuntimeCaps()) return MZ_GS_DMA_SKIPPED;
-    mzGsRuntimeGetPolicy(&policy);
+    mzGsRuntimeGetPolicyMasked(&policy, mask);
     if (!mzGsDmaPolicyEnabled(&policy)) return MZ_GS_DMA_SKIPPED;
 
     if (!guard || !guard->caller_owns_buffer || !guard->channel_idle ||
@@ -56,11 +56,20 @@ static inline int mzGsRuntimeStageShadow(
         return MZ_GS_DMA_UNSUPPORTED;
 
     memcpy(scratch, original, bytes);
-    status = mzGsRuntimeSubmit(submit_type, scratch, bytes,
-                               guard, NULL, 0);
+    status = mzGsRuntimeSubmitMasked(submit_type, scratch, bytes,
+                                     guard, NULL, 0, mask);
     if (status == MZ_GS_DMA_OK)
         *dma_source = scratch;
     return status;
 }
 
+static inline int mzGsRuntimeStageShadow(
+    unsigned int submit_type,
+    const void *original, void *scratch, size_t scratch_capacity, size_t bytes,
+    const mz_gs_dma_guard_t *guard,
+    void **dma_source)
+{
+    return mzGsRuntimeStageShadowMasked(submit_type, original, scratch,
+        scratch_capacity, bytes, guard, dma_source, MZ_DRAW_ALL);
+}
 #endif

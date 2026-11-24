@@ -114,7 +114,6 @@ void sysLoadElf(char *filename, int argc, char **argv)
 #ifdef MAIZO_IGR_MENU
         mzGsRuntimeReset(); /* No stale adapter survives an ELF transition. */
         mzGsRuntimePublish(config->EnableMaizoIgrMenu);
-        mzGsRuntimeSeed(config->MaizoDrawModes);
 #endif
         apply_patches(filename);
 

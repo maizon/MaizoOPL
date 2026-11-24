@@ -66,8 +66,7 @@ enum MENU_IDs {
     MENU_HOMEBREW_STORE,
     MENU_INGAME_PRO,
     MENU_PROMPT_STYLE,
-    MENU_SETUP_DASH_NEXT,
-    MENU_MAGE_FILTERS
+    MENU_SETUP_DASH_NEXT
 };
 
 enum GAME_MENU_IDs {
@@ -581,7 +580,6 @@ static int settingsItemCategory(int id)
         case MENU_ITEM_INFO:
             return 2;
         case MENU_VIDEO_SETTINGS:
-        case MENU_MAGE_FILTERS:
             return 3;
         case MENU_AUDIO_SETTINGS:
             return 4;
@@ -644,9 +642,6 @@ static void menuInitMainMenu(void)
                       MENU_INGAME_PRO, -1);
 #endif
     submenuAppendItem(&mainMenu, -1, "Abrir Setup Dash no proximo build", MENU_SETUP_DASH_NEXT, -1);
-#ifdef MAIZO_IGR_MENU
-    submenuAppendItem(&mainMenu, -1, "Filtros graficos automaticos", MENU_MAGE_FILTERS, -1);
-#endif
     submenuAppendItem(&mainMenu, -1, NULL, MENU_GFX_SETTINGS, _STR_GFX_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_CONTROLLER_SETTINGS, _STR_CONTROLLER_SETTINGS);
@@ -1770,55 +1765,6 @@ void menuHandleInputMenu()
         } else if (id == MENU_GAME_PREFERENCES) {
             if (menuCheckParentalLock() == 0)
                 guiShowGamePreferences();
-        } else if (id == MENU_MAGE_FILTERS) {
-#ifdef MAIZO_IGR_MENU
-            if (menuCheckParentalLock() == 0) {
-                const char *modes[] = {"Jogo original", "Auto", "Forcar OFF", NULL};
-                const char *texture[] = {"Jogo original", "Bilinear AUTO", "Forcar nearest", "Trilinear AUTO", NULL};
-                const char *scan[] = {"Jogo original", "25%", "50%", "75%", NULL};
-                struct UIItem dlg[] = {
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"FILTROS GRAFICOS - MAGE", -1}}},
-                    {UI_SPLITTER},
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"AA1", -1}}},
-                    {UI_ENUM, 9050, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
-                    {UI_BREAK},
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Texturas", -1}}},
-                    {UI_ENUM, 9051, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, texture}}},
-                    {UI_BREAK},
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Dithering", -1}}},
-                    {UI_ENUM, 9052, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, modes}}},
-                    {UI_BREAK},
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Scanlines", -1}}},
-                    {UI_ENUM, 9053, 1, 1, -1, 0, 0, {.intvalue = {0, 0, 0, 0, scan}}},
-                    {UI_BREAK},
-                    {UI_LABEL, 0, 1, 1, -1, 0, 0, {.label = {"Somente adaptadores compativeis. Sem hook: original.", -1}}},
-                    {UI_BREAK},
-                    {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {"Salvar", -1}}},
-                    {UI_TERMINATOR}};
-                config_set_t *cfg = configGetByType(CONFIG_OPL);
-                int old = 0;
-                int had = configGetInt(cfg, "maizo_draw_modes", &old);
-                for (int i = 0; i < 4; i++) {
-                    int value = ((unsigned)old >> (2*i)) & 3u;
-                    if ((i == 0 || i == 2) && value == 3) value = 0;
-                    diaSetInt(dlg, 9050+i, value);
-                }
-                if (diaExecuteDialog(dlg, -1, 1, NULL) == UIID_BTN_OK) {
-                    unsigned packed = 0;
-                    for (int i = 0; i < 4; i++) {
-                        int value = 0;
-                        diaGetInt(dlg, 9050+i, &value);
-                        packed |= ((unsigned)value & 3u) << (2*i);
-                    }
-                    configSetInt(cfg, "maizo_draw_modes", packed);
-                    if (!saveConfig(CONFIG_OPL, 0)) {
-                        if (had) configSetInt(cfg, "maizo_draw_modes", old);
-                        else configRemoveKey(cfg, "maizo_draw_modes");
-                        guiMsgBox("Falha ao salvar os filtros.", 0, NULL);
-                    }
-                }
-            }
-#endif
         } else if (id == MENU_INGAME_PRO) {
 #ifdef MAIZO_IGR_MENU
             if (menuCheckParentalLock() == 0) {

@@ -56,6 +56,11 @@ int main(void) {
     maizoIgrStep(&s,MZ_KEY_DOWN);
     maizoIgrStep(&s,MZ_KEY_OK);
     assert(((s.draw_modes>>2)&3u)==0); /* No phantom bilinear toggle */
+    s.draw_caps |= 2u;
+    for (int i=1;i<=4;i++) {
+        maizoIgrStep(&s,MZ_KEY_OK);
+        assert(((s.draw_modes>>2)&3u)==(unsigned)(i%4));
+    }
     maizoIgrStep(&s,MZ_KEY_DOWN);
     maizoIgrStep(&s,MZ_KEY_OK);
     assert(((s.draw_modes>>4)&3u)==1);

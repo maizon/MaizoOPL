@@ -88,12 +88,8 @@ static inline void mzGsRuntimeReset(void)
     memset(&mzRuntimeMetrics, 0, sizeof(mzRuntimeMetrics));
 }
 
-/* The frontend requests settings, not capabilities. Only a real adapter
- * attaches; unsupported options stay unavailable. No patch work at boot. */
-static inline void mzGsRuntimeSeed(unsigned int requested)
-{
-    mzGsShared->requested_modes = mzMageModes(requested);
-}
+/* Preserve live menu choices across a verified reattachment in the
+ * same ELF. A new ELF always resets choices to the game's original. */
 static inline int mzGsRuntimeAttach(unsigned int capabilities)
 {
     unsigned int requested = mzGsShared->requested_modes;
@@ -135,6 +131,18 @@ static inline void mzGsRuntimeGetPolicy(mz_gs_gif_policy_t *policy)
     policy->scanmask = MZ_GS_SCAN_UNCHANGED;
 }
 
+/* A verified adapter supplies the capabilities of THIS draw pass.
+ * Never temporarily change shared menu settings to avoid duplicate edits. */
+static inline void mzGsRuntimeGetPolicyMasked(mz_gs_gif_policy_t *policy,
+                                              unsigned int mask)
+{
+    mzGsRuntimeGetPolicy(policy);
+    if (!policy) return;
+    if (!(mask & MZ_DRAW_AA1)) policy->aa1 = MZ_GS_KEEP;
+    if (!(mask & MZ_DRAW_BILINEAR)) policy->bilinear = MZ_GS_KEEP;
+    if (!(mask & MZ_DRAW_DITHER)) policy->dither = MZ_GS_KEEP;
+}
+
 static inline mz_gs_gif_state_t *mzGsRuntimeGetState(void)
 {
     return &mzRuntimeState;
@@ -171,11 +179,11 @@ static inline unsigned int mzGsRuntimeAccepted(void)
     return mzRuntimeAccepted;
 }
 
-static inline int mzGsRuntimeSubmit(unsigned int submit_type, void *packet,
-                                    size_t bytes,
-                                    const mz_gs_dma_guard_t *guard,
-                                    const mz_gs_dma_owned_ref_t *refs,
-                                    size_t ref_count)
+static inline int mzGsRuntimeSubmitMasked(unsigned int submit_type, void *packet,
+                                          size_t bytes,
+                                          const mz_gs_dma_guard_t *guard,
+                                          const mz_gs_dma_owned_ref_t *refs,
+                                          size_t ref_count, unsigned int mask)
 {
     mz_gs_gif_policy_t policy;
     mz_gs_gif_state_t *state;
@@ -184,7 +192,7 @@ static inline int mzGsRuntimeSubmit(unsigned int submit_type, void *packet,
 
     if (!mzGsRuntimeCaps() || !guard)
         return MZ_GS_DMA_SKIPPED;
-    mzGsRuntimeGetPolicy(&policy);
+    mzGsRuntimeGetPolicyMasked(&policy, mask);
     if (!mzGsDmaPolicyEnabled(&policy))
         return MZ_GS_DMA_SKIPPED;
 
@@ -218,5 +226,15 @@ static inline int mzGsRuntimeSubmit(unsigned int submit_type, void *packet,
     }
     mzGsRuntimeRecord(result);
     return result;
+}
+
+static inline int mzGsRuntimeSubmit(unsigned int submit_type, void *packet,
+                                    size_t bytes,
+                                    const mz_gs_dma_guard_t *guard,
+                                    const mz_gs_dma_owned_ref_t *refs,
+                                    size_t ref_count)
+{
+    return mzGsRuntimeSubmitMasked(submit_type, packet, bytes, guard,
+                                   refs, ref_count, MZ_DRAW_ALL);
 }
 #endif

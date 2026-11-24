@@ -14,5 +14,13 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_mage_rw_test.c -o /tmp/mage-rw
           /tmp/mage-rw
+      - name: Live menu and runtime controls
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_state_test.c -o /tmp/mage-menu
+          /tmp/mage-menu
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include ee_core/src/maizo_gs_runtime.c tests/maizo_gs_runtime_test.c -o /tmp/mage-live
+          /tmp/mage-live
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_gs_gif_filter_test.c -o /tmp/mage-gif
+          /tmp/mage-gif
       - name: Existing exact-revision installer
         run: python3 tests/maizo_gs_install_elf_test.py

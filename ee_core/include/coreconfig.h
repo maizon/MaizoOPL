@@ -78,7 +78,6 @@ struct EECoreConfig_t
     char MaizoProfileID[12];
     u32 MaizoProfile;
     mz_live_cheats_t MaizoLiveCheats;
-    u32 MaizoDrawModes;
 #endif
 };
 

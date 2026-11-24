@@ -94,7 +94,6 @@ static int eecoreInit(int argc, char **argv)
      * verified renderer-specific adapter may advertise supported paths. */
     mzGsRuntimeReset();
     mzGsRuntimePublish(config->EnableMaizoIgrMenu);
-    mzGsRuntimeSeed(config->MaizoDrawModes);
     mzGsProbeReset(&mzGsProbe);
 #endif
 

@@ -61,26 +61,25 @@ revisions; review driver Sky call sites, capture world and HUD pass behavior,
 then construct signed-off database entries and compare baseline hardware.
 No commercial compatibility percentage has been measured.
 
-## Boot preference integration (ABI 2)
+## Live filter integration (ABI 2)
 
-Experimental frontend: Settings > VIDEO > Filtros graficos automaticos.
-Requests AA1, texture bilinear/trilinear, dithering, and scanlines before
-launch. The existing In-Game switches still control attached adapters.
-Every ELF transition clears capabilities and seeds the requested modes.
-An adapter receives only the subset of requests it actually supports.
-No adapter means original graphics. Three consecutive rejected packets
-disable registration until an ELF reset. Clients compiled against ABI 1
-must be rebuilt; incompatible ABI markers fail closed.
+All drawing filter choices are made in the existing In-Game PRO menu, while
+the title runs. No pre-launch filter dialog or boot preference is used.
+An ELF transition clears capabilities and choices. Attached verified clients
+read current modes on each eligible submission, not only on startup.
+Trilinear is texture mode 3; the existing GIF parser preserves mip levels
+and falls back to bilinear for non-mipmapped textures. The RenderWare client
+uses the same menu setting. Unknown passes remain original.
 
-Trilinear is texture mode 3, with the existing TEX1 parser and RenderWare
-world-texture helper. For GIF, only an already mipmapped sampler with
-nonzero MXL may change to MMIN=5; no new mip levels, addresses, or K/LOD
-values are fabricated. Non-mipmapped textures fall back to bilinear;
-reserved MMIN values stay untouched. RenderWare requires the adapter's
-proof of existing mipmaps. This does not fix texture upload or filtering
-in unhooked commercial binaries.
+The live mzMageRwSendFallback API accepts masks for engine-handled and GIF
+supported features for a verified pass, stages only the remaining eligible
+GIF filters and forwards exactly one submission without changing global
+menu settings. It never guesses the engine or attaches a commercial hook.
+Three rejected packets disable the registration until ELF reset.
+ABI 1 clients must be rebuilt; incompatible clients fail closed.
 
-Native deflicker and sharp remain independent scanout controls. No
-commercial adapter or signature is invented. The offline database
-remains empty until real ELF evidence is supplied. No claim of 80%
-commercial compatibility is made.
+Native deflicker and sharp remain independent scanout controls. Returning
+to JOGO restores original *future* packets, not retroactively the GS state.
+The offline resolver remains an optional developer tool to prepare audited
+hooks, not a requirement for the player's in-game workflow. No commercial
+profile has been verified yet. No claim of 80% coverage is made.
