@@ -1,6 +1,6 @@
 EE_BIN = maizo-gs-lab.elf
 EE_OBJS = main.o kick.o autolink.o
-EE_LDFLAGS += -Wl,--wrap=dma_channel_send_normal
+EE_LDFLAGS += -Wl,--wrap=dma_channel_send_normal -Wl,--wrap=dma_channel_send_chain
 EE_LIBS = -lgraph -ldma -lpad -lpacket2 -ldraw
 EE_CFLAGS += -Wall -Wextra -I../../ee_core/include
 all: $(EE_BIN)

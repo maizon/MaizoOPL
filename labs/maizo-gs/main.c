@@ -26,6 +26,9 @@ mz_gs_shared_t *mzGsShared;
 extern unsigned char mzKickStart[],mzKickEnd[];
 static uint64_t packet[512] MZ_ALIGNED,shadow[512] MZ_ALIGNED;
 static uint64_t vif[520] MZ_ALIGNED;
+static uint64_t chainPacket[516] MZ_ALIGNED;
+static uint64_t chainRef[512] MZ_ALIGNED;
+static unsigned chainTest;
 static uint64_t scanpacket[MZ_SCANLINE_QWC*2] MZ_ALIGNED;
 static unsigned char padbuf[256] MZ_ALIGNED;
 static mz_scanline_frame_t frame;
@@ -118,8 +121,24 @@ static int path3(void)
 {
     scene(0,30);
     if(!wait_dma(DMA_CHANNEL_GIF))return 0;
-    mzGsAutoEligible(1);
-    if(dma_channel_send_normal(DMA_CHANNEL_GIF,packet,pos,0,0)<0)return 0;
+    if(chainTest){
+        /* Split the GIF tag and the payload across real CNT and REFE.
+         * The wrapper sees the same bytes as ordinary PATH3. */
+        mz_chain_range_t ranges[2]={
+            {(uint32_t)chainPacket,chainPacket,48},
+            {(uint32_t)chainRef,chainRef,(pos-1u)*16u}
+        };
+        chainPacket[0]=1u|(1ULL<<28);chainPacket[1]=0;
+        chainPacket[2]=packet[0];chainPacket[3]=packet[1];
+        chainPacket[4]=(pos-1u)|((uint64_t)(uint32_t)chainRef<<32);chainPacket[5]=0;
+        memcpy(chainRef,packet+2,(pos-1u)*16u);
+        SyncDCache(chainRef,(unsigned char *)chainRef+(pos-1u)*16u);
+        mzGsAutoChainEligible(ranges,2);
+        if(dma_channel_send_chain(DMA_CHANNEL_GIF,chainPacket,3,0,0)<0)return 0;
+    }else{
+        mzGsAutoEligible(1);
+        if(dma_channel_send_normal(DMA_CHANNEL_GIF,packet,pos,0,0)<0)return 0;
+    }
     return wait_dma(DMA_CHANNEL_GIF)&&finish();
 }
 static int path2(void)
@@ -207,6 +226,7 @@ int main(void)
             mzGsRuntimeSetMode(MZ_DRAW_DITHER,phase?MZ_GS_FORCE_ON:MZ_GS_KEEP);
             mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,phase);
         }
+        if((now&~prev)&PAD_TRIANGLE)chainTest^=1u;
         prev=now;
         if(!clear_frame()||!path3()||!path2()||!path1()||!end_frame())goto stop;
         graph_wait_vsync();

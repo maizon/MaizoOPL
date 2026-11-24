@@ -6,5 +6,9 @@
  * site and scratch allocation; this does NOT install that binary hook. */
 #ifndef MAIZO_GS_AUTOLINK_H
 #define MAIZO_GS_AUTOLINK_H
+#include "maizo_gs_chain_shadow.h"
 void mzGsAutoEligible(int exclusive);
+/* One-shot declaration of immutable chain ranges. Valid until the next
+ * chain submission; the caller must keep all ranges alive. */
+void mzGsAutoChainEligible(const mz_chain_range_t *ranges,size_t count);
 #endif

@@ -24,3 +24,5 @@ The 80% target is an acceptance criterion, not an estimate: at least 80%
 of a predeclared representative commercial-game sample must pass each feature,
 with no regressions in baseline boot or input. The hardware fixture is excluded
 from this denominator.
+
+The source-available adapter now interposes the actual PS2SDK GIF chain submission as well as normal DMA, with an explicit one-shot range ownership declaration. The hardware fixture uses Triangle to switch PATH3 between normal and actual CNT/REFE split chains. This is an executable integration, not evidence of a hook in stripped commercial games. Scanline submission additionally refuses masked/paused GIF and active VIF1. No additional resident EE scratch was allocated.

@@ -62,7 +62,8 @@ static inline int mzGsPs2Scanlines(uint64_t *packet,size_t capacity,
     mz_gs_dma_guard_t guard={MZ_GS_PATH3_GIF_DMA,0,0,0,0};
     guard.caller_owns_buffer=!!exclusive;
     guard.channel_idle=mzPs2DmaIdle(DMA_CHANNEL_GIF)&&mzPs2DmaIdle(DMA_CHANNEL_VIF1)&&
-        !(*(volatile unsigned int *)0x10003020u&0x1f000c00u);
+        !(*(volatile unsigned int *)0x10003020u&0x1f000fcbu) &&
+        !(*(volatile unsigned int *)0x10003c00u&0x1f800f0fu);
     return mzGsClientEndFrame(packet,capacity,frame,&guard,mzPs2DmaSubmit,mzPs2DmaFlush,&call);
 }
 #endif
