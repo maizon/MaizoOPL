@@ -101,7 +101,7 @@ void sysMaizoPrepareProfile(const char *id)
 int sysMaizoImportProfile(const char *arg)
 {
     char id[12],path[256];
-    u32 value;
+    uint32_t value;
     mz_profile_record_t r,verify;
     int slot,fd,n,closed;
     if(!mzProfileParse(arg,id,&value))return 0;

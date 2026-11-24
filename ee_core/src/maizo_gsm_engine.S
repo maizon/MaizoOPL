@@ -653,6 +653,16 @@ maizo_monitor_write:
     addu    $t0, $t0, $s0
     ld      $t6, 0($t0)
     sd      $a1, 0($t0)
+    addiu   $t0, $v0, -GS_SMODE2
+    bnez    $t0, maizo_native_field_write_done
+    nop
+    xor     $t0, $t6, $a1
+    andi    $t0, $t0, 3
+    beqz    $t0, maizo_native_field_write_done
+    nop
+    la      $t3, MaizoNativeFieldInvert
+    sw      $zero, 0($t3)
+maizo_native_field_write_done:
     la      $t3, MaizoGs480iMode
     lw      $t4, 0($t3)
     bnez    $t4, maizo_native_bridge_write

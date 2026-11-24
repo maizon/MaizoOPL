@@ -250,7 +250,7 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
     }else{
         for(i=0;i<count;i++)mzLine(25+i*10,11,i==4&&!s->save_caps?5:4,
             i==4&&!s->save_caps?"SALVAR: N/D":systemNames[i]);
-        if(s->confirm)mzLine(86,8,5,"CONFIRME DE NOVO");
+        if(s->confirm)mzLine(96,8,5,"CONFIRME DE NOVO");
     }
     mzLine(114,8,3,"X OK  O VOLTAR START");
 }
