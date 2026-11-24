@@ -62,6 +62,9 @@ static int IGR_Thread_ID = -1;
 static u32 MaizoIgrSuspended[8];
 static u32 MaizoIgrIntcMask, MaizoIgrDmacMask;
 static int MaizoIgrWaitRelease;
+/* A sleeping monitor must be able to preempt a CPU-bound game thread.
+ * Keep the legacy priority for non-menu configurations. */
+#define MAIZO_IGR_POLL_PRIORITY 8
 /* Dedicated cache line: IOP never targets a game-owned buffer. */
 volatile u32 MaizoPadMailbox[16] __attribute__((aligned(64)));
 static u8 *mzPadSlots[8];
@@ -310,6 +313,9 @@ static void IGR_Thread(void *arg)
     u8 pad_pos_frame;
     u8 pad_pos_combo1;
     u8 pad_pos_combo2;
+#ifdef MAIZO_IGR_MENU
+    const int pollPriority=config->EnableMaizoIgrMenu?MAIZO_IGR_POLL_PRIORITY:127;
+#endif
 
     (void)arg;
 
@@ -481,7 +487,15 @@ maizo_igr_poll_again:
              * An alarm slot should normally be available. Fall back to
              * a low-priority delay rather than sleeping forever.
              */
+            /* An exhausted alarm pool must never leave a high-priority
+             * monitor spinning and starving the game. */
+#ifdef MAIZO_IGR_MENU
+            ChangeThreadPriority(TH_SELF,127);
+#endif
             nopdelay();
+#ifdef MAIZO_IGR_MENU
+            ChangeThreadPriority(TH_SELF,pollPriority);
+#endif
         }
     }
 
@@ -509,6 +523,17 @@ maizo_igr_poll_again:
                 /* Validate the display/mode first, NOT simultaneous
                  * DMA idleness while the game is producing commands. */
                 if(maizoIGR_Preflight(MZ_IGR_CAPTURE_PROBE)){
+                    /* Prefer a real idle boundary with game IRQs still
+                     * enabled. A pending completion can be serviced here
+                     * instead of being masked before it has a chance to
+                     * release a VIF/GIF stall. Limit the live probe to a
+                     * few register samples; the old bounded drain remains
+                     * the fallback for continuously submitting titles. */
+                    unsigned probe;
+                    for(probe=0;probe<64;probe++){
+                        if(maizoIGR_Preflight(0))break;
+                        asm volatile("nop\nnop\nnop\nnop" ::: "memory");
+                    }
                     maizoIgrHold();
                     int suspended=maizoIgrPauseThreads();
                     /* Stop new EE submissions, then give already queued
@@ -530,9 +555,12 @@ maizo_igr_poll_again:
                 /* Let title workers and their IRQs make progress before
                  * another short capture. Never leave the title paused
                  * while sleeping on an alarm. */
-                ChangeThreadPriority(TH_SELF,127);
+                ChangeThreadPriority(TH_SELF,pollPriority);
                 alarm_id=SetAlarm(97,IGR_Poll_Alarm,&IGR_Thread_ID);
-                if(alarm_id>=0)SleepThread();else nopdelay();
+                if(alarm_id>=0)SleepThread();else{
+                    ChangeThreadPriority(TH_SELF,127);
+                    nopdelay();
+                }
                 ChangeThreadPriority(TH_SELF,0);
             }
         }
@@ -542,7 +570,7 @@ maizo_igr_poll_again:
                 maizoIgrResumeThreads();
             Pad_Data.combo_type = 0;
             MaizoIgrWaitRelease = 1;
-            ChangeThreadPriority(TH_SELF, 127);
+            ChangeThreadPriority(TH_SELF, pollPriority);
             goto maizo_igr_poll_again;
         }
         if (choice == MAIZO_IGR_POWEROFF)
@@ -948,11 +976,18 @@ void Install_IGR(void)
         thread_param.stack_size = IGR_STACK_SIZE;
 
         /*
-         * Keep OPL's original low priority. The alarm wakes the thread
-         * periodically, and it raises itself to priority 0 only after
-         * detecting an IGR combination.
+         * Legacy OPL retains low priority. The experimental menu uses
+         * a short, sleeping high-priority monitor to avoid starvation
+         * during CPU-bound 3D rendering. Capture alone uses priority 0.
          */
         thread_param.initial_priority = 127;
+#ifdef MAIZO_IGR_MENU
+        {
+            USE_LOCAL_EECORE_CONFIG;
+            if(config->EnableMaizoIgrMenu)
+                thread_param.initial_priority=MAIZO_IGR_POLL_PRIORITY;
+        }
+#endif
 
         IGR_Thread_ID = CreateThread(&thread_param);
 
