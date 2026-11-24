@@ -402,7 +402,7 @@ GSHandler:
 # $k1 is used to save the context by the Level 2 exception handler. $k1 is reserved for kernel usage in interrupt and trap handling.
     sq      $k1, -0x20($zero)                       # Store $k1 register in the same place as the kernel does, via kseg3.
     la      $k1, MIPS_Regs                          # Store MIPS_Regs via $k0
-    # sq      $zero, 0x000($k1)
+    sq      $zero, 0x000($k1)                      # architectural r0 is always zero
     sq      $at, 0x010($k1)
     sq      $v0, 0x020($k1)
     sq      $v1, 0x030($k1)
@@ -487,7 +487,9 @@ get_access_info:
     sll     $a3, $a0, 4                             # a3 = raw base_ix << 4 (scaled base_ix reg index)
     addu    $a3, $a2, $a3                           # a3 = &MIPS_Regs[base_ix]; (if type = u128)
     lw      $a3, 0($a3)                             # a3 = base register value
-    andi    $v0, $v0, 0xFFFF                        # v0 = offset field of instruction
+    # Load/store effective address also uses a signed immediate.
+    sll     $v0, $v0, 16
+    sra     $v0, $v0, 16
     addu    $a3, $a3, $v0                           # a3 = address which triggered breakpoint
 
     sll     $v0, $a1, 4                             # v0 = raw rt_ix << 4 (scaled rt_ix reg index)
@@ -561,6 +563,9 @@ load_new_value:
 
 # Store data to destination
 do_load:
+    # MMIO read side effects already occurred. Discard writes to r0.
+    beq     $a1, $a2, exit_GSHandler
+    nop
     b       exit_GSHandler
     sd      $v0, 0($a1)
 
@@ -1492,7 +1497,7 @@ GSHandler_BranchDelaySlotException:
 # ----------------------------
 B_com1:                                             # This group contains 8 different branch operations
     srl     $k1, $k0, 16                            # k1 = aligned for sub_opcode (range 0x00-0x1F)
-    andi    $k1, $k1, 0x3F                          # k1 = pure sub_opcode number
+    andi    $k1, $k1, 0x1F                          # REGIMM rt is FIVE bits; BD_t2 has 32 entries
     sll     $k1, $k1, 2                             # k1 = sub_op_num*2 (offset for jump table)
 
     la      $t1, BD_t2                              # t1 -> BD_t2
@@ -1559,9 +1564,10 @@ B_BLEZL:
 B_BGTZL:
 B_taken:
 #  Here we have a 'branch taken' operation with relative offset/4 in instruction
-    li      $t0, 0xFFFF                             # t0 = bitmask for branch offset bits
-    and     $k1, $k0, $t0                           # k1 = branch offset bits (== offset/4)
-    sll     $k1, 2                                  # k1 = branch offset
+    # MIPS branch immediate is signed, relative to PC+4.
+    # Zero extension sends backward branches 256 KiB past their target.
+    sll     $k1, $k0, 16
+    sra     $k1, $k1, 14                             # sign_extend(imm16) * 4
     addiu   $t0, $t2, 4                             # t0 = $t2+4 (ErrorEPC+4) (-> address after branch op)
     addu    $t0, $k1                                # t0 = jump destination address
     mtc0    $t0, $30                                # store t0 in Error Exception Program Counter

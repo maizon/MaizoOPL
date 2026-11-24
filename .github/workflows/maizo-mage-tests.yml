@@ -20,6 +20,7 @@ jobs:
           /tmp/mage-menu
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_input_test.c -o /tmp/mage-input
           /tmp/mage-input
+          python3 tests/maizo_gsm_exception_decode_test.py
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include ee_core/src/maizo_gs_runtime.c tests/maizo_gs_runtime_test.c -o /tmp/mage-live
           /tmp/mage-live
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_gs_gif_filter_test.c -o /tmp/mage-gif
