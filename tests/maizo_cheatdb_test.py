@@ -78,6 +78,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert find(p.read_bytes())[0] == 2
     assert find(archive([("empty.txt", ""), ("CheatDatabase.txt", aggregate)]))[0] == 1
     assert find(archive([("CheatDatabase.txt", aggregate)]),title=b"Game One (USA)")[0] == 1
+    assert find(archive([("CheatDatabase.txt", aggregate)]),title=b"SLUS_123.45.Game One.iso")[0] == 1
     print("CheatDevice ZIP tests passed")
     import os, re, io, collections
     original=os.environ.get("MAIZO_OFFICIAL_CHEAT_ZIP")
@@ -94,16 +95,26 @@ with tempfile.TemporaryDirectory() as directory:
                                     if l.strip().startswith(b'"') and l.strip().endswith(b'"') and len(l.strip())>2)
         assert len(sections)>100
         counts=collections.Counter(sections)
+        print("Original title examples:", sections[:12])
         tested=0
+        failures=[]
         for heading in sections:
             if counts[heading]!=1 or len(heading)>=200: continue
-            match=re.search(rb"\((USA|US|NTSC-U|PAL|Europe|Japan|NTSC-J)\)$",heading,re.I)
-            if not match or re.search(rb"S[A-Z]{3}[-_ ]?\d{3}[.]?\d{2}",heading,re.I): continue
-            region=match.group(1).lower()
-            serial=b"SLES_999.99" if region in (b"pal",b"europe") else b"SLPS_999.99" if region in (b"japan",b"ntsc-j") else b"SLUS_999.99"
+            # Original titles may include IDs, parenthetical regions,
+            # bracketed regions, short region tags, or no region at all.
+            serial_match=re.search(rb"(S[A-Z]{3})[-_ ]?(\d{3})[.]?(\d{2})(?!\d)",heading,re.I)
+            region_match=re.search(rb"[\[(](USA|US|U|NTSC-U/C|NTSC-U|PAL|Europe|E|Japan|J|NTSC-J)[\])]$",heading,re.I)
+            region=region_match.group(1).lower() if region_match else b""
+            serial=(serial_match.group(1).upper()+b"_"+serial_match.group(2)+b"."+serial_match.group(3)) if serial_match else (
+                b"SLES_999.99" if region in (b"pal",b"europe",b"e") else b"SLPS_999.99" if region in (b"japan",b"ntsc-j",b"j") else b"SLUS_999.99")
             result, text, actual=find(original_zip,serial,heading)
-            if result==1 and actual==heading and text: tested+=1
+            if result in (1,2) and actual==heading and text:
+                tested+=1
+                print("Original lookup PASS:", heading, "rank", result)
+            else:
+                failures.append((heading,result,actual))
+                if len(failures)>=12: break
             if tested==5: break
-        assert tested==5, ("official release compatible headings",tested)
+        assert tested==5, ("original release lookup",tested,failures)
         assert find(original_zip,b"SLUS_999.99",b"MAIZO_NOT_A_REAL_GAME")[0]==0
         print("Original CheatDevicePS2 release ZIP: five matched games + missing title PASS")

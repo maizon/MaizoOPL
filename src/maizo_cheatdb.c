@@ -104,8 +104,19 @@ static int matchTitle(const char *s, const char *title, const char *serial)
             }
         }
     }
+    char input[256], id[10];
+    if(strlen(title)>=sizeof(input)||hasOtherSerial(title,serial))return 0;
+    const char *p=title;
+    if(serialAt(p,id)&&!strcmp(id,serial)){
+        unsigned digits=0;
+        while(*p&&digits<9){if(isalnum((unsigned char)*p))digits++;p++;}
+        while(*p=='_'||*p=='-'||*p=='.'||isspace((unsigned char)*p))p++;
+    }
+    strcpy(input,p);
+    len=strlen(input);
+    if(len>4&&!strcasecmp(input+len-4,".iso"))input[len-4]=0;
     normalized(name, a);
-    normalized(title, b);
+    normalized(input, b);
     if(a[0]&&!strcmp(a,b))return 1;
     normalized(s,a);
     return a[0]&&!strcmp(a,b);

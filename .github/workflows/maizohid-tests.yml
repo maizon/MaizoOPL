@@ -45,10 +45,6 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_igr_state_test.c -o /tmp/maizo_igr_state_test
           /tmp/maizo_igr_state_test
-      - name: Test unchanged original CheatDevicePS2 release database
-        run: |
-          curl --fail --location --retry 3 --max-time 90 -o /tmp/cheatdevice-original.zip https://github.com/root670/CheatDevicePS2/releases/download/v1.7.5/CheatDevicePS2-v1.7.5.zip
-          MAIZO_OFFICIAL_CHEAT_ZIP=/tmp/cheatdevice-original.zip python3 tests/maizo_cheatdb_test.py
       - name: Verify live cheat address and exclusive-group masks
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_cheat_live_test.c -o /tmp/maizo_live
@@ -168,3 +164,12 @@ jobs:
         run: python3 tests/maizo_cheatdb_test.py
       - name: Test cheat selection identity and duplicate labels
         run: python3 tests/maizo_cheatselection_test.py
+
+  official-cheatdevice:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test unchanged original CheatDevicePS2 release database
+        run: |
+          curl --fail --location --retry 3 --max-time 90 -o /tmp/cheatdevice-original.zip https://github.com/root670/CheatDevicePS2/releases/download/v1.7.5/CheatDevicePS2-v1.7.5.zip
+          MAIZO_OFFICIAL_CHEAT_ZIP=/tmp/cheatdevice-original.zip python3 tests/maizo_cheatdb_test.py
