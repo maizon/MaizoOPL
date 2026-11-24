@@ -76,7 +76,6 @@ extern void Hook_SetGsCrt();
 extern void GSHandler();
 extern volatile u32 MaizoGsMonitorOnly;
 extern u64 GSMSourceGSRegs[11];
-extern u64 GSMDestGSRegs[11];
 
 static unsigned int KSEG_backup[2]; // Copies of the original words at 0x80000100 and 0x80000104.
 
@@ -202,10 +201,8 @@ void EnableMaizoGsMonitor(void)
 {
     int i;
     volatile u8 *flags=(volatile u8 *)&GSMFlags;
-    for (i=0;i<11;i++) {
+    for (i=0;i<11;i++)
         GSMSourceGSRegs[i]=0;
-        GSMDestGSRegs[i]=0;
-    }
     for (i=0;i<19;i++)
         flags[i]=0; /* disable every GSM adaptation and field fix */
     MaizoGsMonitorOnly=1;
