@@ -118,6 +118,12 @@ static int eecoreInit(int argc, char **argv)
             config->GsmConfig.FIELD_fix);
         EnableGSM();
     }
+#ifdef MAIZO_IGR_MENU
+    else if (config->EnableMaizoIgrMenu) {
+        /* Independent In-Game menu without GSM video-mode forcing. */
+        EnableMaizoGsMonitor();
+    }
+#endif
 
     set_ipconfig();
 

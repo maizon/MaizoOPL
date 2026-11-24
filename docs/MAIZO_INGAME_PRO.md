@@ -1,7 +1,9 @@
 # MAIZO In-Game PRO (experimental and opt-in)
 
 A new **small EE in-game menu** is available when MAIZO In-Game PRO is
-enabled in Settings → Games **and the specific PS2 game has GSM active**.
+enabled in Settings → Games. GSM video mode forcing is now OPTIONAL:
+when GSM is OFF, the menu uses a passive GS write observer that tracks
+the frame readout registers without changing the output mode.
 Its hotkey is the **existing OPL IGR combo**:
 L1 + L2 + R1 + R2 + Start + Select.
 
@@ -28,8 +30,9 @@ RiptOPL/RIPPS2/ORBIT are credited for the low-level GS transfer technique.
 - **Sistema:** resume, exit to existing IGR path, power off (two presses).
 
 The menu is **disabled by default** because PS2 games can use GS modes and
-VIF/DMA paths incompatible with an overlay. With GSM off, the normal OPL
-IGR shortcut remains unchanged. When a safe frame cannot be determined,
+VIF/DMA paths incompatible with an overlay. When explicitly enabled,
+it accepts the IGR hotkey regardless of the GSM mode-selector setting.
+With the MAIZO menu OFF, the original OPL IGR remains unchanged. When a safe frame cannot be determined,
 the handler refuses to draw and falls back to the original IGR reset.
 
 ## Safety and limits
@@ -103,3 +106,27 @@ registradores originais do GS confirmar compatibilidade:
 
 **Créditos:** PS2SDK `graph_mode.c` (filtro por dois read circuits),
 RiptOPL/RIPPS2 (overlay com GS), OPL GSM original.
+
+## Independente do seletor de vídeo GSM (modo de observação)
+
+- **In-Game PRO ON + GSM OFF**: pressionar L1+L2+R1+R2+START+SELECT
+  pode abrir o menu, navegar pelas páginas, mostrar diagnósticos e
+  acessar as ações existentes continuar/sair/desligar. A saída de vídeo
+  não é forçada e as escritas GS/SetGsCrt do jogo são repassadas sem
+  modificações pelo observador.
+- **GSM ON**: permanece o caminho anterior, incluindo ajustes de
+  geometria, FIELD fix, Deflicker/Sharp/Smooth e saída 480p>480i
+  quando suas condições de hardware forem satisfeitas.
+- Sem GSM, os controles que exigem força de vídeo aparecem como
+  REQUER GSM e não são executados. AA1, Bilinear e Dither mantêm a
+  política de só ativar se um adaptador de desenho for registrado
+  com suporte real ao jogo. Não simulamos melhorias.
+- O menu continua usando o GS PATH2/VIF1 em uma janela pequena,
+  pausando outras threads. Se não houver framebuffer compatível,
+  não tenta adivinhar o endereço: retorna ao caminho antigo de IGR.
+- O observador só registra PMODE, SMODE2, DISPFB1/2 e DISPLAY1/2,
+  sem alterar os dados escritos. **Importante:** ele reutiliza
+  a infraestrutura de breakpoint GS do GSM, mas NÃO o GSM como
+  seletor/conversor de resolução. Não é uma instrumentação inteiramente
+  separada do código GSM e ainda pode conflitar com jogos que alteram
+  handlers de debug. Teste no PS2 físico é indispensável.

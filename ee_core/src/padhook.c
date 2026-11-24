@@ -247,7 +247,7 @@ maizo_igr_poll_again:
          * The sample may miss a short-lived transfer; it is telemetry,
          * never a universal-game compatibility claim.
          */
-        if (config->EnableMaizoIgrMenu && config->EnableGSMOp) {
+        if (config->EnableMaizoIgrMenu) {
             mzGsProbeSample(&mzGsProbe,
                             *(vu32 *)0x10003020, /* GIF_STAT */
                             *(vu32 *)0x10009000, /* D1_CHCR */
@@ -380,7 +380,7 @@ maizo_igr_poll_again:
 
 #ifdef MAIZO_IGR_MENU
     if (Pad_Data.combo_type == IGR_COMBO_START_SELECT &&
-        config->EnableMaizoIgrMenu && config->EnableGSMOp &&
+        config->EnableMaizoIgrMenu &&
         !Power_Button.press) {
         int choice;
         ChangeThreadPriority(TH_SELF, 0);

@@ -44,6 +44,9 @@ MIPS_Regs:          .space 0x220
 
 .globl Old_SetGsCrt
 Old_SetGsCrt:       .word  0
+# Menu-only GS register observer: PASS-THROUGH, never GSM mode forcing.
+.globl MaizoGsMonitorOnly
+MaizoGsMonitorOnly: .word 0
 
 .globl GSMSourceSetGsCrt
 GSMSourceSetGsCrt:  .space 6
@@ -193,6 +196,11 @@ Hook_SetGsCrt:
     la      $t3, GSMFlags
     sb      $t4, SMODE2_fix($t3)
 maizo_480i_setcrt_done:
+    # No GSM forcing in passive menu-only monitor: original SetGsCrt.
+    la      $t3, MaizoGsMonitorOnly
+    lw      $t4, 0($t3)
+    bnez    $t4, Call_SetGsCrt
+    nop
 
 # -----------------------------------------------------------------------------------------
 
@@ -485,6 +493,13 @@ have_some_write:                                    # Opcode is a write, so we m
     nop
     ld      $a1, 0($a1)                             # a1 = value in rt
 
+    # Passive recorder sends ALL writes unchanged; only save readout
+    # registers for the optional menu framebuffer resolver.
+    la      $t3, MaizoGsMonitorOnly
+    lw      $t4, 0($t3)
+    bnez    $t4, maizo_monitor_write
+    nop
+
     addi    $v1, $v0, -GS_PMODE
     beqz    $v1, have_PMODE_write                   # in case of  dest == GS_reg_PMODE
     addi    $v1, $v0, -GS_SMODE1
@@ -508,6 +523,52 @@ have_some_write:                                    # Opcode is a write, so we m
     addi    $v1, $v0, -GS_DISPLAY2
     beqz    $v1, have_DISPLAY2_write                # in case of  dest == GS_reg_DISPLAY2
     nop
+
+# In menu-only mode the original data and the original MMIO destination
+# are preserved. Do NOT call any GS display adaptation in this path.
+maizo_monitor_write:
+    addi    $v1, $v0, -GS_PMODE
+    bnez    $v1, maizo_monitor_smode2
+    nop
+    sd      $a1, Source_PMODE($s0)
+    b       maizo_monitor_forward
+    nop
+maizo_monitor_smode2:
+    addi    $v1, $v0, -GS_SMODE2
+    bnez    $v1, maizo_monitor_fb1
+    nop
+    sd      $a1, Source_SMODE2($s0)
+    b       maizo_monitor_forward
+    nop
+maizo_monitor_fb1:
+    addi    $v1, $v0, -GS_DISPFB1
+    bnez    $v1, maizo_monitor_fb2
+    nop
+    sd      $a1, Source_DISPFB1($s0)
+    b       maizo_monitor_forward
+    nop
+maizo_monitor_fb2:
+    addi    $v1, $v0, -GS_DISPFB2
+    bnez    $v1, maizo_monitor_display1
+    nop
+    sd      $a1, Source_DISPFB2($s0)
+    b       maizo_monitor_forward
+    nop
+maizo_monitor_display1:
+    addi    $v1, $v0, -GS_DISPLAY1
+    bnez    $v1, maizo_monitor_display2
+    nop
+    sd      $a1, Source_DISPLAY1($s0)
+    b       maizo_monitor_forward
+    nop
+maizo_monitor_display2:
+    addi    $v1, $v0, -GS_DISPLAY2
+    bnez    $v1, maizo_monitor_forward
+    nop
+    sd      $a1, Source_DISPLAY2($s0)
+maizo_monitor_forward:
+    b       exit_GSHandler
+    sd      $a1, 0($a3)
 
 not_wanted_reg:                                     # Register unwanted, so perform op unchanged
     b       exit_GSHandler

@@ -6,6 +6,17 @@ int main(void) {
     assert(s.field_fix&&s.page==MZ_PAGE_MAIN);
     maizoIgrStep(&s,MZ_KEY_DOWN);maizoIgrStep(&s,MZ_KEY_OK);
     assert(s.page==MZ_PAGE_VIDEO);
+    /* GSM OFF: menu works, GSM-dependent controls are read-only. */
+    maizoIgrStep(&s,MZ_KEY_RIGHT);
+    assert(s.width==0 && !s.changed);
+    for(int i=0;i<4;i++)maizoIgrStep(&s,MZ_KEY_DOWN);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.width==0 && !s.changed);
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(!s.changed);
+    s.selected=0;
+    s.video_caps=1;
     for(int i=0;i<30;i++)maizoIgrStep(&s,MZ_KEY_RIGHT);
     assert(s.width==8);
     for(int i=0;i<40;i++)maizoIgrStep(&s,MZ_KEY_LEFT);
