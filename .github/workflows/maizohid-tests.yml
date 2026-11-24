@@ -64,6 +64,10 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_gs_dma_preflight_test.c -o /tmp/maizo_gs_dma_preflight
           /tmp/maizo_gs_dma_preflight
+      - name: Verify bounded split GIF chain shadow and CALL/RET traversal
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include ee_core/src/maizo_gs_runtime.c tests/maizo_gs_chain_shadow_test.c -o /tmp/maizo_chain
+          /tmp/maizo_chain
       - name: Verify trusted PATH3 REF chains and cooperative PATH1 staging
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
