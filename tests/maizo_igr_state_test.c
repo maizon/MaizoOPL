@@ -56,6 +56,18 @@ int main(void) {
     assert(s.page==MZ_PAGE_FILTERS && s.selected==6);
     maizoIgrStep(&s,MZ_KEY_DOWN);
     assert(s.selected==7);
+    /* Full-frame NTSC bridge is disabled unless the running game is
+     * verifiably a native 480p renderer with compatible GS scanout. */
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(!s.frame480i_mode && !s.frame480i_changed);
+    s.frame480i_caps=1;
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(s.frame480i_mode && s.frame480i_changed);
+    s.frame480i_changed=0;
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(!s.frame480i_mode && s.frame480i_changed);
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    assert(s.selected==8);
     maizoIgrStep(&s,MZ_KEY_OK);assert(s.page==MZ_PAGE_VIDEO);
     maizoIgrStep(&s,MZ_KEY_BACK);assert(s.page==MZ_PAGE_MAIN);
     puts("MAIZO IGR navigation + verified-hook draw toggle gating OK");return 0;

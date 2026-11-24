@@ -87,6 +87,11 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
             tests/maizo_gs_probe_test.c -o /tmp/maizo_gs_probe
           /tmp/maizo_gs_probe
+      - name: Validate native progressive to NTSC 480i FRAME gates
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include \
+            tests/maizo_gs_480i_bridge_test.c -o /tmp/maizo_gs_480i_bridge
+          /tmp/maizo_gs_480i_bridge
       - name: Verify verified-TLS MAIZO Store contracts
         run: python3 tests/maizo_store_contract_test.py
       - name: Check Supreme integration contract

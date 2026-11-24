@@ -181,3 +181,30 @@ antes do primeiro `PRIM` (e depois usa `PRMODECONT.AC=0`), forçar AA1
 não precisa conhecer antecipadamente o tipo de primitiva. O bit AA1
 em PRMODE é aplicado sem alterar ABE; o GS ignora AA1 para pontos/sprites.
 Foram adicionados testes dessa ordem de inicialização de renderizadores.
+
+## Progressivo nativo 480p → saída analógica 480i (experimental)
+
+Agora o menu de filtros inclui **480P>480I FRAME ON/OFF**.
+Essa opção só fica disponível quando detectamos um jogo que já configura
+`SetGsCrt` em DTV 480p (modo 0x50, não entrelaçado), o GSM está forçando
+NTSC entrelaçado padrão (modo 2), o jogo usa somente um circuito de
+leitura e o `DISPLAY` original indica um framebuffer com 440–480 linhas
+visíveis, não ampliadas. Jogos que geram 224 linhas, usam mixagens
+complexas ou que não expõem um framebuffer completo ficam INDISP.
+
+O botão **ON** aplica `SMODE2.INT=1`, `SMODE2.FFMD=1`,
+mantendo a saída em **480i (15 kHz)** e preservando `DISPLAY`,
+`DISPFB`, offsets, tamanho/aspecto e modo de geração de pixels do
+jogo. **OFF** restaura a configuração anterior no GSM. O GSM também
+restaura o estado automaticamente quando o jogo chama `SetGsCrt` outra
+vez, evitando persistir um modo antigo após transições de vídeo.
+
+IMPORTANTE: isso não renderiza um jogo interlaced/224p em 480p por
+software; a resolução real depende do motor e das superfícies VRAM.
+Em jogos que já usam FRAME scanout, o resultado pode parecer idêntico.
+Compatibilidade com TV CRT composta PAL-M/NTSC e imagem real precisam
+ser verificadas no console; a compilação não substitui ensaio de vídeo.
+Não há reescalonamento mágico nem aumento garantido de qualidade.
+
+O AA1, bilinear e dither continuam isolados em adaptadores de pacotes
+pré-DMA. Não os ativamos falsamente para jogos sem hook.
