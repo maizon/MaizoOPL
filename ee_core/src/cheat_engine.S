@@ -592,7 +592,8 @@ HookSetupThread:
     sw      $v1, 0($v0)
 #ifdef MAIZO_IGR_MENU
     li      $t1, 1
-    sw      $t1, MaizoCheatHookActive
+    la      $v1, MaizoCheatHookActive
+    sw      $t1, 0($v1)
 #endif
     b       3f
     sw      $zero, 4($v0)
