@@ -103,3 +103,15 @@ assert "mzIgrGsFifoEmpty((u32)*MZ_GS_CSR)" in drain
 assert "for (i = 255; i > 0; i--)" in pad
 assert "#define IGR_STACK_SIZE (5 * 1024)" in pad
 print("Transaction: staged cheats, reversible thread hold, GS drain and empty MFIFO gate PASS")
+
+# Experimental restoration and separated overlay must never compromise
+# the default resident layout or DMA into a leased, freed IOP allocation.
+transport=read("ee_core/src/maizo_restore.c")
+service=read("modules/iopcore/maizo_restore/maizo_restore.c")
+assert "dma(line,upload,n)" in transport and "dma(line,buf+off,n)" not in transport
+assert "case MZR_WRITE:" in service and "buf[r->off+j]=upload[j]" in service
+assert "mzOvlHeaderOK(overlay)" in system and "overlay->run>=fileEnd" in system
+assert "ModuleStorageEnd=(void *)MZ_OVL_END" in system
+assert "maizo_overlay_stub.o" in read("ee_core/Makefile")
+assert "ASSERT(_stack_size >= 8192" in read("ee_core/linkfile.maizo")
+print("Restoration isolation and protected separate overlay source checks PASS")

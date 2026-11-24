@@ -547,3 +547,9 @@ The normal PRO build still uses its resident menu unchanged. The
 8 KiB main-stack assertion remains mandatory. Internal write-only GS
 transfer register restoration remains unsolved; this is not a
 universal hardware save-state implementation.
+
+The IOP lease must never release a target of a delayed EE DMA: uploads
+now land in an aligned, permanently resident staging line and are copied
+by the IOP worker after a validated sequence. No EE DMA targets the
+leased dynamic allocation. The overlay ELF loader also verifies the
+file-backed entry point ranges and exact low-arena placement.

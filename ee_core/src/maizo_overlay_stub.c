@@ -3,6 +3,7 @@
  * are linked independently at MZ_OVL_BASE. */
 #include "maizo_overlay_api.h"
 #include "maizo_igrmenu.h"
+#include "maizo_ee_layout.h"
 static const mz_ovl_api api={
     .shared=&mzGsResident,
     .p_g_ee_core_config=&g_ee_core_config,
@@ -62,7 +63,7 @@ static const mz_ovl_header *find(void)
     USE_LOCAL_EECORE_CONFIG;
     const mz_ovl_header *h=(const mz_ovl_header *)MZ_OVL_BASE;
     if(!config->EnableMaizoIgrMenu ||
-       (u32)config->ModStorageStart>MZ_OVL_BASE ||
+       (u32)config->ModStorageStart!=MZ_EE_EXP_TOP ||
        (u32)config->ModStorageEnd!=MZ_OVL_END ||
        !mzOvlHeaderOK(h) || h->api_size!=sizeof(api))return 0;
     return h;

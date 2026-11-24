@@ -10,6 +10,7 @@ static volatile mzr_req req;
 static mzr_ack ack;
 static u32 eeAck,eeLine,bufSize;
 static u8 *buf;
+static u8 upload[MZR_LINE] __attribute__((aligned(16)));
 static u16 vol[2][2],pitch[2][24];
 static int hush,dmaBusy;
 static void wake(void)
@@ -69,7 +70,13 @@ static int execute(const mzr_req *r)
         if(!r->len || r->len>MZR_MAX || (r->len&15u))return -1;
         buf=AllocSysMemory(ALLOC_FIRST,r->len,0);
         if(!buf)return -1;
-        bufSize=r->len;ack.buf=(u32)buf;return 0;
+        bufSize=r->len;return 0;
+    case MZR_WRITE:
+        /* DMA only targets permanent upload storage, never a buffer
+         * which may be freed by the inactivity lease. */
+        if(!buf || !mzrRange(r->off,r->len,bufSize))return -1;
+        for(u32 j=0;j<r->len;j++)buf[r->off+j]=upload[j];
+        return r->len;
     case MZR_READ:
         if(!buf || r->ee!=eeLine || !mzrRange(r->off,r->len,bufSize))return -1;
         return send(buf+r->off,eeLine,r->len)?(int)r->len:-1;
@@ -125,6 +132,7 @@ int _start(int argc,char **argv)
     id=CreateThread(&t);
     if(id<0)return MODULE_NO_RESIDENT_END;
     ack.result=(s32)&req;
+    ack.buf=(u32)upload;
     if(!send(&ack,eeAck,sizeof(ack)))return MODULE_RESIDENT_END;
     StartThread(id,0);
     return MODULE_RESIDENT_END;

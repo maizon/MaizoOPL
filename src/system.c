@@ -1059,18 +1059,24 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         /* Verify every PT_LOAD before publishing the ABI. No segment
          * may overlap the module arena, resident core or game RAM. */
         elf_header_t *oh=(elf_header_t *)maizo_overlay_elf;
-        elf_pheader_t *op=(elf_pheader_t *)(maizo_overlay_elf+oh->phoff);
+        elf_pheader_t *op;
+        u32 fileEnd=0;
         int n=0,valid=(u32)ModuleStorageEnd<=MZ_OVL_BASE &&
             size_maizo_overlay_elf>=sizeof(*oh) &&
+            maizo_overlay_elf[0]==0x7f && maizo_overlay_elf[1]=='E' &&
+            maizo_overlay_elf[2]=='L' && maizo_overlay_elf[3]=='F' &&
             oh->phoff<=size_maizo_overlay_elf &&
             oh->phnum<=(size_maizo_overlay_elf-oh->phoff)/sizeof(*op);
-        if(valid)for(i=0;i<oh->phnum;i++){
+        if(!valid){guiMsgBox("ELF do overlay PRO invalido.",1,NULL);return;}
+        op=(elf_pheader_t *)(maizo_overlay_elf+oh->phoff);
+        for(i=0;i<oh->phnum;i++){
             if(op[i].type!=ELF_PT_LOAD)continue;
             u32 dst=(u32)op[i].vaddr;
-            if(dst<MZ_OVL_BASE || dst>=MZ_OVL_END ||
+            if(dst!=MZ_OVL_BASE || op[i].filesz<sizeof(mz_ovl_header) ||
                op[i].memsz>MZ_OVL_END-dst || op[i].filesz>op[i].memsz ||
                op[i].offset>size_maizo_overlay_elf ||
                op[i].filesz>size_maizo_overlay_elf-op[i].offset){valid=0;break;}
+            fileEnd=dst+op[i].filesz;
             n++;
         }
         if(!valid || n!=1){
@@ -1079,7 +1085,9 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         memset((void *)MZ_OVL_BASE,0,MZ_OVL_END-MZ_OVL_BASE);
         for(i=0;i<oh->phnum;i++)if(op[i].type==ELF_PT_LOAD)
             memcpy(op[i].vaddr,maizo_overlay_elf+op[i].offset,op[i].filesz);
-        if(!mzOvlHeaderOK((const mz_ovl_header *)MZ_OVL_BASE)){
+        const mz_ovl_header *overlay=(const mz_ovl_header *)MZ_OVL_BASE;
+        if(!mzOvlHeaderOK(overlay) || overlay->preflight>=fileEnd ||
+           overlay->run>=fileEnd || overlay->profile>=fileEnd){
             guiMsgBox("ABI do overlay PRO invalida.",1,NULL);return;
         }
         ModuleStorageEnd=(void *)MZ_OVL_END; /* include overlay in kernel wipe boundary */
