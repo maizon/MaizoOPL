@@ -118,9 +118,7 @@ static int eecoreInit(int argc, char **argv)
             config->GsmConfig.k576P_fix,
             config->GsmConfig.kGsDxDyOffsetSupported,
             config->GsmConfig.FIELD_fix);
-#ifdef MAIZO_IGR_MENU
-        maizoIGR_BootProfile();
-#endif
+        /* Saved live geometry is applied only at the first safe menu boundary. */
         EnableGSM();
     }
 #ifdef MAIZO_IGR_MENU

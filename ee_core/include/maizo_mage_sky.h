@@ -61,6 +61,7 @@ static inline int mzSkyReloadCodeOK(const volatile uint32_t *code,uint32_t hash)
     return mzSkyHash(h,code+5,4)==hash;
 }
 void maizoSkySelect(const char *path);
+void maizoSkyPrepare(void);
 int maizoSkyAvailable(void);
 unsigned maizoSkyMode(void);
 int maizoSkySetMode(unsigned mode);

@@ -62,22 +62,10 @@ static int IGR_Thread_ID = -1;
 static u32 MaizoIgrSuspended[8];
 static u32 MaizoIgrIntcMask, MaizoIgrDmacMask;
 static int MaizoIgrWaitRelease;
-/* The existing one-shot alarm promotes the sleeping experimental
- * monitor, even when the title runs at a priority above 8. No new
- * VBLANK hook, no self-rearming ISR, no pad parsing in IRQ context. */
-#define MAIZO_IGR_POLL_PRIORITY 0
-#define MAIZO_IGR_SMB_POLL_PRIORITY 32
-static volatile int mzPollBoost;
-
-/* Streaming titles must not have their EE workers repeatedly preempted
- * at priority zero just to poll a controller. On ETH/SMB keep a normal
- * sleeping worker; raise to zero only for the explicit menu capture.
- * This does not change the IOP network driver or its thread priorities. */
-static int mzIgrPollPriority(const struct EECoreConfig_t *config)
-{
-    if(!config->EnableMaizoIgrMenu)return 127;
-    return config->GameMode==ETH_MODE?MAIZO_IGR_SMB_POLL_PRIORITY:MAIZO_IGR_POLL_PRIORITY;
-}
+/* Restore the background scheduler used by Beta-39 and the first
+ * working overlay builds. Priority 0 is for an explicit capture only,
+ * not ordinary controller/streaming work or an alarm callback. */
+#define MAIZO_IGR_POLL_PRIORITY 127
 /* Dedicated cache line: IOP never targets a game-owned buffer. */
 volatile u32 MaizoPadMailbox[16] __attribute__((aligned(64)));
 static u8 *mzPadSlots[8];
@@ -301,10 +289,6 @@ static void IGR_Poll_Alarm(s32 alarm_id, u16 time, void *common)
     (void)time;
 
     int thread=*(int *)common;
-#ifdef MAIZO_IGR_MENU
-    if(mzPollBoost && thread>0)
-        iChangeThreadPriority(thread,MAIZO_IGR_POLL_PRIORITY);
-#endif
     if(thread>0)iWakeupThread(thread);
 }
 
@@ -345,7 +329,7 @@ static void IGR_Thread(void *arg)
     u8 pad_pos_combo1;
     u8 pad_pos_combo2;
 #ifdef MAIZO_IGR_MENU
-    const int pollPriority=mzIgrPollPriority(config);
+    const int pollPriority=MAIZO_IGR_POLL_PRIORITY;
 #endif
 
     (void)arg;
@@ -430,13 +414,18 @@ maizo_igr_poll_again:
                  * handler's pad-hook recovery behaviour.
                  */
                 if (Pad_Data.vb_count++ >= 10) {
-                    if (pad_pos_frame != Pad_Data.prev_frame) {
-                        padOpen_hooked = 1;
-                        Pad_Data.prev_frame = pad_pos_frame;
-                    } else {
-                        padOpen_hooked = 0;
+#ifdef MAIZO_IGR_MENU
+                    /* An input sample is not evidence of a replaced
+                     * function. A paused/stale DMA frame or a mailbox
+                     * sequence wrap must not trigger live RAM patching
+                     * via Hook_CreateThread during a loading screen.
+                     * Real ELF transitions still reinstall the hook. */
+                    if (!config->EnableMaizoIgrMenu)
+#endif
+                    {
+                        padOpen_hooked = pad_pos_frame != Pad_Data.prev_frame;
                     }
-
+                    Pad_Data.prev_frame = pad_pos_frame;
                     Pad_Data.vb_count = 0;
                 }
 
@@ -513,12 +502,6 @@ maizo_igr_poll_again:
 
         if (alarm_id >= 0) {
             SleepThread();
-#ifdef MAIZO_IGR_MENU
-            /* Restore normal priority only after a successful sleep,
-             * including recovery from a temporary exhausted alarm pool. */
-            if(config->GameMode==ETH_MODE && config->EnableMaizoIgrMenu)
-                ChangeThreadPriority(TH_SELF,pollPriority);
-#endif
         } else {
             /*
              * An alarm slot should normally be available. Fall back to
@@ -530,11 +513,6 @@ maizo_igr_poll_again:
             ChangeThreadPriority(TH_SELF,127);
 #endif
             nopdelay();
-#ifdef MAIZO_IGR_MENU
-            if(config->GameMode!=ETH_MODE)
-                ChangeThreadPriority(TH_SELF,pollPriority);
-            /* On SMB remain at 127 until an alarm can actually sleep. */
-#endif
         }
     }
 
@@ -1009,14 +987,6 @@ void Install_IGR(void)
          * during CPU-bound 3D rendering. Capture alone uses priority 0.
          */
         thread_param.initial_priority = 127;
-#ifdef MAIZO_IGR_MENU
-        {
-            USE_LOCAL_EECORE_CONFIG;
-            thread_param.initial_priority=mzIgrPollPriority(config);
-            /* No interrupt-context priority promotion for SMB. */
-            mzPollBoost=config->EnableMaizoIgrMenu && config->GameMode!=ETH_MODE;
-        }
-#endif
 
         IGR_Thread_ID = CreateThread(&thread_param);
 
@@ -1044,9 +1014,6 @@ void Install_IGR(void)
 
 void Reset_Padhook(void)
 {
-#ifdef MAIZO_IGR_MENU
-    mzPollBoost=0;
-#endif
     IGR_Intc_ID = -1;
     IGR_Thread_ID = -1;
 }

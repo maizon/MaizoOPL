@@ -155,13 +155,14 @@ static void Install_GSHandler(void)
     *(volatile u32 *)0x80000104 = NOP;
     ee_kmode_exit();
 
-    // Set Data Address Write Breakpoint
-    // Trap writes to GS registers, so as to control their values
-    Enable_GSBreakpoint();
-    EI();
-
+    /* Publish the replacement exception vector before any GS access
+     * can trap. The old instruction cache must never be executed
+     * with our new breakpoint configuration. */
     FlushCache(0);
     FlushCache(2);
+    DI();
+    Enable_GSBreakpoint();
+    EI();
 }
 
 static void Remove_GSHandler(void)

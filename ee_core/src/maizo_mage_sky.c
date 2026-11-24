@@ -6,7 +6,7 @@
 #include "util.h"
 #include <kernel.h>
 static int skyMode=-1;
-static int skyFogReady,skyReloadReady;
+static int skyFogReady,skyReloadReady,skyPending;
 static int skyValid(const mz_sky_record_t *p,unsigned mode)
 {
     uint32_t h=mzSkyHash(2166136261u,(const volatile uint32_t *)(uintptr_t)p->set,16);
@@ -20,15 +20,24 @@ void maizoSkySelect(const char *path)
 {
     USE_LOCAL_EECORE_CONFIG;
     const mz_sky_record_t *p=&config->MaizoSky;
-    unsigned limit=mzSkyLimit((unsigned)config->ModStorageStart,(unsigned)config->ModStorageEnd);
     skyMode=-1;
-    skyFogReady=skyReloadReady=0;
+    skyFogReady=skyReloadReady=skyPending=0;
     if(!p->state || !mzGsResident.enabled ||
        _strncmp(path,"cdrom0:\\",8) || _strncmp(path+8,config->GameID,11) ||
        (path[19] && _strcmp(path+19,";1")))return;
+    /* Only identify the candidate at ELF load. Do not inspect game
+     * addresses until a user-requested, suspended menu boundary. */
+    skyPending=1;
+}
+void maizoSkyPrepare(void)
+{
+    USE_LOCAL_EECORE_CONFIG;
+    const mz_sky_record_t *p=&config->MaizoSky;
+    unsigned limit=mzSkyLimit((unsigned)config->ModStorageStart,(unsigned)config->ModStorageEnd);
+    if(!skyPending || skyMode>=0 || !mzGsResident.enabled)return;
     if(mzSkyRange(p->set,64,limit) && mzSkyRange(p->state,212,limit) &&
        mzSkyRange(p->dispatch,36,limit) && mzSkyRange(p->table,24,limit) &&
-       mzSkyRange(p->device-16u,24,limit) && skyValid(p,0))skyMode=0;
+       mzSkyRange(p->device-16u,24,limit) && skyValid(p,0)){skyMode=0;skyPending=0;}
     if(skyMode>=0 && p->fog_hash && mzSkyRange(p->dispatch,56,limit) &&
        mzSkyRange(p->fog,64,limit) &&
        *(const volatile uint32_t *)(uintptr_t)(p->dispatch+52u)==p->fog &&

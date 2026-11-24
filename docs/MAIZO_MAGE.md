@@ -333,3 +333,26 @@ for a particular commercial game is claimed.
 
 Reference: TX79 Core Architecture manual, 4.2.17 and 13.2,
 https://lukasz.dk/files/tx79architecture.pdf
+
+## Stability recovery after commercial-game loading reports
+
+Compared the user-confirmed playable Beta-39 (e75bc88), the early
+overlay revision e02fd93 (menu appeared, but not confirmed stable),
+and 426b062 with 7bb68c4. The exact last stable Justiceiro/Avatar
+revision is unknown. Restore the original sleeping IGR priority 127
+on every backend, with priority zero only for explicit capture.
+A stale input DMA sample no longer invalidates a successful installed
+pad hook in PRO mode; the normal ELF transition still handles
+reinstallation. Retain the menu's fresh-input arbitration and bounded
+capture. This may reduce opening responsiveness in CPU-bound games.
+
+Sky selection at launch now identifies the title only. Live memory
+signature verification and saved MAIZO geometry application occur
+at the suspended menu boundary, not during startup. The original
+user-selected OPL GSM mode is unchanged. The GS exception vector
+is flushed before arming its breakpoint. Retain the narrower native
+GS recorder and memory guards; there is still a passive write trap.
+These changes isolate concrete differences, not a reproduced root
+cause for BLACK, GTA, Ben 10 or Justiceiro. Hardware A/B testing
+with the same ISO, SMB settings, controller and game options is
+required before calling the regression fixed.

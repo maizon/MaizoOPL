@@ -549,19 +549,6 @@ static void mzDecodeGeometry(maizo_igr_state_t *s,u32 v)
     s->field_fix=!!(v&(1u<<24));
     s->legacy_geometry=(v&0xe0000000u)==MZ_PROFILE_V2;
 }
-void maizoIGR_BootProfile(void)
-{
-    USE_LOCAL_EECORE_CONFIG;
-    u32 v=config->MaizoProfile;
-    if(!config->EnableMaizoIgrMenu||!config->EnableGSMOp||
-       !(v&(1u<<28))||!mzProfileValid(v)||!(v&0x60000000u))return;
-    mzGameHasGsm=1;
-    maizoIgrStateInit(&mzState,config->GsmConfig.FIELD_fix);
-    mzOriginalDisp[0]=GSMDestGSRegs[8];mzOriginalDisp[1]=GSMDestGSRegs[10];
-    mzDecodeGeometry(&mzState,v);
-    mzApply(&mzState,0);
-    mzStateReady=1;mzProfilePending=1;
-}
 
 /* This function is called ONLY in the paused IGR thread after GSM's GS
  * breakpoint has been suspended. Every active state change is applied to the
@@ -800,6 +787,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
     /* Prefer a registered renderer adapter; otherwise the matched Sky
      * state-9 table is a separate experimental mip-only route. */
+    maizoSkyPrepare(); /* Game threads are paused; no launch-time address probes. */
     mzSkyMenu=maizoSkyAvailable() &&
         (!(mzGsRuntimeCaps()&MZ_DRAW_BILINEAR) || maizoSkyMode());
     mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);
