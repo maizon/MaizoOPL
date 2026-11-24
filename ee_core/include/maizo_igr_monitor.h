@@ -10,12 +10,19 @@
 #ifndef MAIZO_IGR_MONITOR_H
 #define MAIZO_IGR_MONITOR_H
 #include <stdint.h>
+#if defined(__mips__)
+/* The EE core has an 8 KiB stack guard: do not inline the same 64-bit
+ * framebuffer validator six times in its resident text section. */
+#define MZ_IGR_FN static __attribute__((noinline))
+#else
+#define MZ_IGR_FN static inline
+#endif
 typedef struct {
     uint32_t width, height, sx, sy, x, y, fbw, fbbase;
     uint32_t psm, pixel_bytes;
 } mz_igr_frame_t;
 
-static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
+MZ_IGR_FN int mzIgrMonitorFrame(mz_igr_frame_t *out,
                                     uint64_t pmode,
                                     uint64_t fb1, uint64_t fb2,
                                     uint64_t display1, uint64_t display2,
@@ -84,7 +91,7 @@ static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
 /* Mixed PMODE may blend two independently backed GS read circuits.
  * Accept only a currently enabled and individually VRAM-validated
  * display framebuffer. No guessed display layout or video forcing. */
-static inline int mzIgrResolveFrame(mz_igr_frame_t *out,
+MZ_IGR_FN int mzIgrResolveFrame(mz_igr_frame_t *out,
                                     uint64_t pm,
                                     uint64_t fb1,uint64_t fb2,
                                     uint64_t d1,uint64_t d2,

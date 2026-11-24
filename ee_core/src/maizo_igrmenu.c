@@ -141,15 +141,14 @@ static void mzPage(const maizo_igr_state_t *s)
         for(i=0;i<count;i++)mzLine(25+i*10,11,4,mainNames[i]);
     }else if(s->page==MZ_PAGE_VIDEO){
         if(!s->video_caps){
-            mzLine(25,11,5,"STRETCH X: GSM OFF");
-            mzLine(35,11,5,"STRETCH Y: GSM OFF");
-            mzLine(45,11,5,"POS. X: GSM OFF");
-            mzLine(55,11,5,"POS. Y: GSM OFF");
-            mzLine(65,11,5,"PRESET: GSM OFF");
-            mzLine(75,11,5,"FIELD: GSM OFF");
-            mzLine(85,11,4,"FILTROS >");
-            mzLine(95,11,5,"RESTAURAR: GSM OFF");
-            mzLine(105,11,4,"VOLTAR");
+            static const char *const labels[9]={
+                "STRETCH X: GSM OFF","STRETCH Y: GSM OFF",
+                "POS. X: GSM OFF","POS. Y: GSM OFF",
+                "PRESET: GSM OFF","FIELD: GSM OFF",
+                "FILTROS >","RESTAURAR: GSM OFF","VOLTAR"
+            };
+            for(i=0;i<9;i++)
+                mzLine(25+i*10,11,(i==6||i==8)?4:5,labels[i]);
         }else{
         mzValue(0,"STRETCH X",s->width*2,1);
         mzValue(1,"STRETCH Y",s->height*2,1);
