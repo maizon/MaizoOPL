@@ -30,9 +30,9 @@ void maizoSkySelect(const char *path)
        mzSkyRange(p->dispatch,36,limit) && mzSkyRange(p->table,24,limit) &&
        mzSkyRange(p->device-16u,24,limit) && skyValid(p,0))skyMode=0;
     if(skyMode>=0 && p->fog_hash && mzSkyRange(p->dispatch,56,limit) &&
-       mzSkyRange(p->fog,56,limit) &&
+       mzSkyRange(p->fog,64,limit) &&
        *(const volatile uint32_t *)(uintptr_t)(p->dispatch+52u)==p->fog &&
-       *(const volatile uint32_t *)(uintptr_t)p->fog==MZ_SKY_FOG_ORIGINAL &&
+       (*(const volatile uint32_t *)(uintptr_t)p->fog & ~1u)==MZ_SKY_FOG_ORIGINAL &&
        mzSkyFogCodeOK((const volatile uint32_t *)(uintptr_t)p->fog,p->fog_hash))skyFogReady=1;
     if(skyMode>=0 && p->reload_blur_hash && p->reload_blur>=16u &&
        mzSkyRange(p->reload_blur-16u,36,limit) &&
@@ -74,13 +74,14 @@ int maizoSkyFogAvailable(void)
 unsigned maizoSkyFogMode(void)
 {
     return maizoSkyFogAvailable() &&
-           *(const volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.fog==MZ_SKY_FOG_OFF?2u:0u;
+           (*(const volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.fog & ~1u)==MZ_SKY_FOG_OFF?2u:0u;
 }
 int maizoSkyFogSet(unsigned mode)
 {
     volatile uint32_t *code=(volatile uint32_t *)(uintptr_t)g_ee_core_config.MaizoSky.fog;
-    uint32_t desired=mode==2u?MZ_SKY_FOG_OFF:MZ_SKY_FOG_ORIGINAL;
+    uint32_t desired;
     if((mode!=0u && mode!=2u)||!maizoSkyFogAvailable())return 0;
+    desired=(mode==2u?MZ_SKY_FOG_OFF:MZ_SKY_FOG_ORIGINAL)|(*code&1u);
     if(*code!=desired){
         *code=desired;
         FlushCache(0);

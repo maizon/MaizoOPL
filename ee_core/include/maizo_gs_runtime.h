@@ -17,7 +17,8 @@ enum {
     MZ_DRAW_DITHER = 4,
     MZ_DRAW_SCANLINES = 8,
     MZ_DRAW_LOD = 16,
-    MZ_DRAW_ALL = 31
+    MZ_DRAW_FOG = 32, /* explicit adapter capability, MAEC-owned mode */
+    MZ_DRAW_ALL = 63
 };
 
 enum {
@@ -36,7 +37,7 @@ enum {
 #define MZ_GS_SHARED_MAGIC0 0x4d5a4753u
 #define MZ_GS_SHARED_MAGIC1 0x92a5b8acu
 #include "maizo_effects.h"
-#define MZ_GS_SHARED_ABI 4u
+#define MZ_GS_SHARED_ABI 5u
 typedef struct {
     uint32_t magic0, magic1, abi, bytes;
     volatile unsigned int enabled, capabilities, modes;
@@ -122,10 +123,17 @@ static inline int mzGsEffectsAttach(unsigned caps,unsigned reduced)
     mzGsShared->effect_caps=caps;
     return 1;
 }
+/* Engine effects take precedence. Otherwise an explicitly registered
+ * GIF adapter can expose native FGE removal without knowing the engine. */
+static inline unsigned mzGsEffectCaps(void)
+{
+    return mzGsShared->effect_caps |
+        ((mzRuntimeCapabilities&MZ_DRAW_FOG)?(1u<<MZ_EFFECT_FOG):0u);
+}
 static inline int mzGsEffectSet(unsigned id,unsigned mode)
 {
     if(id>=MZ_EFFECT_COUNT||mode>MZ_EFFECT_OFF||
-       !(mzGsShared->effect_caps&(1u<<id))||
+       !(mzGsEffectCaps()&(1u<<id))||
        (mode==MZ_EFFECT_REDUCED&&!(mzGsShared->effect_reduced&(1u<<id))))return 0;
     mzGsShared->effect_modes=mzEffectPut(mzGsShared->effect_modes,id,mode);
     return 1;
@@ -162,7 +170,10 @@ static inline void mzGsRuntimeGetPolicy(mz_gs_gif_policy_t *policy)
     policy->aa1 = (uint8_t)mzGsRuntimeMode(MZ_DRAW_AA1);
     policy->bilinear = (uint8_t)(mzGsRuntimeMode(MZ_DRAW_BILINEAR) | (mzGsRuntimeMode(MZ_DRAW_LOD)<<2));
     policy->dither = (uint8_t)mzGsRuntimeMode(MZ_DRAW_DITHER);
-    policy->scanmask = MZ_GS_SCAN_UNCHANGED;
+    policy->scanmask = ((mzRuntimeCapabilities&MZ_DRAW_FOG) &&
+        !(mzGsShared->effect_caps&(1u<<MZ_EFFECT_FOG)) &&
+        mzEffectMode(mzGsShared->effect_modes,MZ_EFFECT_FOG)==MZ_EFFECT_OFF)?
+        MZ_GS_FOG_OFF_FLAG:MZ_GS_SCAN_UNCHANGED;
 }
 
 /* A verified adapter supplies the capabilities of THIS draw pass.
@@ -176,6 +187,7 @@ static inline void mzGsRuntimeGetPolicyMasked(mz_gs_gif_policy_t *policy,
     if (!(mask & MZ_DRAW_BILINEAR)) policy->bilinear &= ~3u;
     if (!(mask & MZ_DRAW_LOD)) policy->bilinear &= 3u;
     if (!(mask & MZ_DRAW_DITHER)) policy->dither = MZ_GS_KEEP;
+    if (!(mask & MZ_DRAW_FOG)) policy->scanmask &= ~MZ_GS_FOG_OFF_FLAG;
 }
 
 static inline mz_gs_gif_state_t *mzGsRuntimeGetState(void)

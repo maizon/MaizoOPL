@@ -42,5 +42,16 @@ int main(void)
         code[4]=0;assert(!mzSkyReloadCodeOK(code,h));
         code[4]=MZ_SKY_RELOAD_ORIGINAL;assert(mzSkyReloadCodeOK(code,h));
     }
+    {
+        uint32_t code[16]={0x12000007u};
+        for(unsigned i=1;i<16;i++)code[i]=0x01234567u+i;
+        uint32_t h=mzSkyHash(2166136261u,code,16);
+        assert(mzSkyFogCodeOK(code,h));
+        code[0]=0x10000007u;
+        assert(mzSkyFogCodeOK(code,h));
+        code[15]^=1;assert(!mzSkyFogCodeOK(code,h));code[15]^=1;
+        code[0]=0x12000007u;assert(mzSkyFogCodeOK(code,h));
+        code[0]=0x10000006u;assert(!mzSkyFogCodeOK(code,h));
+    }
     return 0;
 }

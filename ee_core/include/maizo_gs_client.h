@@ -31,6 +31,8 @@ static inline int mzGsClientBind(void)
     return mzGsClientBindRange((void *)0x84000u,MZ_EE_EXP_TOP-0x84000u);
 }
 #endif
+/* Advertise MZ_DRAW_FOG only when relevant native-fog writes are
+ * covered and original state is re-emitted at safe boundaries. */
 static inline int mzGsClientAttach(unsigned int caps)
 {
     return mzGsShared&&mzGsShared->enabled&&mzGsRuntimeAttach(caps);

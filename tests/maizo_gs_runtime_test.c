@@ -28,7 +28,7 @@ int main(void)
            ==MZ_GS_DMA_SKIPPED);
     assert(mzGifRead64(buf+16)==tri);
     assert(!mzGsRuntimeAttach(0));
-    assert(!mzGsRuntimeAttach(32));
+    assert(!mzGsRuntimeAttach(64));
     assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
     assert(!mzGsRuntimeSetMode(32,MZ_GS_FORCE_ON));
     assert(mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,3));
@@ -142,6 +142,49 @@ int main(void)
         assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
         assert(mzGsRuntimeMode(MZ_DRAW_LOD)==0);
     }
+    /* Generic fog is independent of engine identity. Explicit adapter
+     * registration, original pass-through, mask and engine ownership. */
+    mzGsRuntimeReset();
+    assert(!mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_OFF));
+    assert(mzGsRuntimeAttach(MZ_DRAW_FOG));
+    assert(mzGsEffectCaps()==(1u<<MZ_EFFECT_FOG));
+    assert(!mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_REDUCED));
+    assert(mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_OFF));
+    gif_primitive(buf,tri|32ULL);
+    guard.path=MZ_GS_PATH3_GIF_DMA;
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0)==0);
+    assert(mzGifRead64(buf+16)==tri);
+    assert(mzRuntimeMetrics.edits.fog_changes==1);
+    guard.path=MZ_GS_PATH2_VIF1;
+    memset(buf,0,sizeof(buf));
+    {
+        uint32_t cmd=(0x50u<<24)|2u;
+        memcpy(buf+12,&cmd,4);
+    }
+    mzGifWrite64(buf+16,1ULL|(1ULL<<15)|(1ULL<<60));
+    mzGifWrite64(buf+24,14);
+    mzGifWrite64(buf+32,tri|32ULL);
+    mzGifWrite64(buf+40,MZ_GS_PRIM);
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH2_VIF1,buf,48,&guard,0,0)==0);
+    assert(mzGifRead64(buf+32)==tri);
+    guard.path=MZ_GS_PATH1_XGKICK;
+    gif_primitive(buf,tri|32ULL);
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH1_STAGING,buf,32,&guard,0,0)==0);
+    assert(mzGifRead64(buf+16)==tri);
+    guard.path=MZ_GS_PATH3_GIF_DMA;
+    assert(mzRuntimeMetrics.edits.fog_changes==3);
+    gif_primitive(buf,tri|32ULL);
+    assert(mzGsRuntimeSubmitMasked(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0,MZ_DRAW_AA1)==MZ_GS_DMA_SKIPPED);
+    assert(mzGifRead64(buf+16)==(tri|32ULL));
+    assert(mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_ORIGINAL));
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0)==MZ_GS_DMA_SKIPPED);
+    assert(mzGifRead64(buf+16)==(tri|32ULL));
+    mzGsRuntimePublish(1);
+    assert(mzGsEffectsAttach(1u<<MZ_EFFECT_FOG,0));
+    assert(mzGsEffectSet(MZ_EFFECT_FOG,MZ_EFFECT_OFF));
+    assert(mzGsEffectGet(MZ_EFFECT_FOG)==MZ_EFFECT_OFF);
+    assert(mzGsRuntimeSubmit(MZ_SUBMIT_PATH3_NORMAL,buf,32,&guard,0,0)==MZ_GS_DMA_SKIPPED);
+    assert(mzGifRead64(buf+16)==(tri|32ULL)); /* no duplicate route */
     puts("MAIZO GS runtime: opt-in PATH1/PATH2/PATH3 policy and fallback PASS");
     return 0;
 }

@@ -39,8 +39,13 @@ static inline int mzSkyTableOK(const volatile uint32_t *table, uint32_t state, u
 static inline int mzSkyFogCodeOK(const volatile uint32_t *code,uint32_t hash)
 {
     uint32_t first=code[0];
-    if(first!=MZ_SKY_FOG_ORIGINAL && first!=MZ_SKY_FOG_OFF)return 0;
-    return mzSkyHash((2166136261u^MZ_SKY_FOG_ORIGINAL)*16777619u,code+1,13)==hash;
+    /* Two verified state-14 layouts: GP-relative (14 words) and
+     * absolute-address flag load (16 words). Normalize only branch
+     * opcode, retaining the exact original delay slot and target. */
+    uint32_t original=first|0x02000000u;
+    if(original!=0x12000006u && original!=0x12000007u)return 0;
+    return mzSkyHash((2166136261u^original)*16777619u,code+1,
+                     (original&1u)?15u:13u)==hash;
 }
 /* BLACK SLUS_213.76 (5C891FF1): exact 9-word window confirmed
  * in ELF, gameplay RAM and menu RAM. The one-word change is the

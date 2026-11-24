@@ -47,7 +47,7 @@ typedef struct {
     uint8_t aa1;
     uint8_t bilinear; /* texture mode bits 0..1; LOD mode bits 2..3 */
     uint8_t dither;
-    uint8_t scanmask;
+    uint8_t scanmask; /* low 2 scanmask; bit 2 native GS fog off */
 } mz_gs_gif_policy_t;
 
 typedef struct {
@@ -56,6 +56,7 @@ typedef struct {
     uint32_t texture_changes;
     uint32_t dither_changes;
     uint32_t scanmask_changes;
+    uint32_t fog_changes;
     uint32_t unsupported_primitives;
     uint32_t protected_dither;
 } mz_gs_gif_stats_t;
@@ -209,6 +210,23 @@ enum {
     MZ_GS_FRAME_2 = 0x4d
 };
 
+/* Hardware vertex fog is PRIM/PRMODE.FGE (bit 5). Clearing it
+ * does not change alpha blending, texture state, fog coefficients,
+ * vertices, or packet length. Original packets remain immutable in
+ * shadow staging. Postprocess/texture-based fog is not this feature. */
+#define MZ_GS_FOG_OFF_FLAG 4u
+static inline int mzGifScanPolicyValid(unsigned policy)
+{
+    return policy<=7u && (policy&3u)!=1u;
+}
+static inline uint64_t mzGifFog(uint64_t src,const mz_gs_gif_policy_t *p,mz_gs_gif_stats_t *s)
+{
+    if((p->scanmask&MZ_GS_FOG_OFF_FLAG)&&(src&32ULL)){
+        s->fog_changes++;
+        return src&~32ULL;
+    }
+    return src;
+}
 static inline uint64_t mzGifAdValue(uint64_t src,
                                     unsigned int register_id,
                                     const mz_gs_gif_policy_t *policy,
@@ -225,7 +243,7 @@ static inline uint64_t mzGifAdValue(uint64_t src,
             state->active_ctx = state->prim_ctx;
             state->active_ctx_known = 1;
         }
-        return mzGifPrimitive(src, policy->aa1, stats);
+        return mzGifFog(mzGifPrimitive(src, policy->aa1, stats),policy,stats);
     case MZ_GS_PRMODE:
         state->prmode_ctx = (uint8_t)((src >> 9) & 1ULL);
         state->prmode_ctx_known = 1;
@@ -233,7 +251,7 @@ static inline uint64_t mzGifAdValue(uint64_t src,
             state->active_ctx = state->prmode_ctx;
             state->active_ctx_known = 1;
         }
-        return mzGifPrmode(src, policy->aa1, state, stats);
+        return mzGifFog(mzGifPrmode(src, policy->aa1, state, stats),policy,stats);
     case MZ_GS_PRMODECONT:
         state->prmode_cont_known = 1;
         state->prmode_cont_ac = (uint8_t)(src & 1ULL);
@@ -282,9 +300,9 @@ static inline uint64_t mzGifAdValue(uint64_t src,
         }
         return src;
     case MZ_GS_SCANMSK:
-        if (policy->scanmask == MZ_GS_SCAN_ODD_ONLY ||
-            policy->scanmask == MZ_GS_SCAN_EVEN_ONLY) {
-            uint64_t value = (src & ~3ULL) | policy->scanmask;
+        if ((policy->scanmask&3u) == MZ_GS_SCAN_ODD_ONLY ||
+            (policy->scanmask&3u) == MZ_GS_SCAN_EVEN_ONLY) {
+            uint64_t value = (src & ~3ULL) | (policy->scanmask&3u);
             if (src != value)
                 stats->scanmask_changes++;
             return value;
@@ -410,7 +428,7 @@ static inline int mzGifApplyFilters(void *packet,
     if (policy->aa1 > MZ_GS_AA1_ADAPTIVE ||
         policy->bilinear > 11u ||
         policy->dither > MZ_GS_FORCE_OFF ||
-        (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY))
+        !mzGifScanPolicyValid(policy->scanmask))
         return -2;
 
     if(policy->aa1==MZ_GS_AA1_ADAPTIVE)adaptive_at=mzGifAdaptiveScope(buf,packet_size);
@@ -461,6 +479,7 @@ static inline int mzGifApplyFilters(void *packet,
                     uint64_t new_prim = mzGifPrimitive(orig_prim,
                                                         policy->aa1, &tally);
                     if(at==adaptive_at){new_prim|=128ULL;tally.primitive_changes++;}
+                    new_prim=mzGifFog(new_prim,policy,&tally);
                     if (new_prim != orig_prim) {
                         tag &= ~(0x7ffULL << 47);
                         tag |= new_prim << 47;

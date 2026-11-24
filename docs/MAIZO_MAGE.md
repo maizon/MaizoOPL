@@ -286,3 +286,33 @@ versions do not advertise this route. The patch has not been run in
 PCSX2 or on console in this change.
 
 Source: https://github.com/Gabominated/PCSX2/blob/main/PCSX2%20Patches/SLUS-21376_5C891FF1.pnach
+
+## Native GS fog: engine-independent fallback
+
+MAEC Fog OFF can now be provided by an explicitly registered draw
+adapter (MZ_DRAW_FOG), regardless of the renderer's engine. The
+adapter must cover and own the relevant command submissions and
+must restore original state at appropriate renderer boundaries.
+The packet transform clears PRIM/PRMODE.FGE bit 5, including
+embedded GIF PRE, PACKED and REGLIST PRIM, without changing alpha,
+depth, fog color, vertex payloads, size or DMA topology. All existing
+bounded PATH3, PATH2 DIRECT and verified PATH1 staging routes reuse
+the transform. Engine-owned Fog takes precedence; masked submissions
+can exclude this feature. Original releases the override on subsequent
+original packets, not an immediate rollback of persistent GS state.
+ABI 5 clients must be rebuilt. No physical DMA trap or universal
+commercial installer is introduced. Texture, baked, or custom
+postprocess fog is outside native FGE control.
+
+The Sky route now also recognizes five additional exact executable
+revisions: Vice City, ObsCure, Bully, The Godfather and Silent Hill:
+Shattered Memories. The five were inspected in the supplied ELF
+archives, not tested in modified gameplay. Two state-14 branch layouts
+are supported with 14- or 16-word normalized hashes, preserving
+the original branch displacement. The four previously matched
+runtime profiles remain intact. Thus nine Sky profiles have a
+candidate reversible Fog patch; only four have matching capture
+RAM evidence. Unsupported revisions remain N/D. No effect is
+enabled automatically. See profiles/mage/sky_evidence.json.
+
+GS register reference: https://ps2dev.github.io/ps2sdk/gs__gp_8h.html

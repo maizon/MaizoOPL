@@ -112,7 +112,7 @@ static int mzProfileExitOK(const char *path)
  * do not also send fog requests to another adapter. */
 static void __attribute__((noinline)) mzEffectsSync(void)
 {
-    mzState.effect_caps=mzGsShared->effect_caps;
+    mzState.effect_caps=mzGsEffectCaps();
     mzState.effect_reduced=mzGsShared->effect_reduced;
     mzState.effect_modes=mzGsShared->effect_modes;
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
@@ -274,7 +274,7 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
                 mzRuntimeMetrics.edits.primitive_changes +
                 mzRuntimeMetrics.edits.texture_changes +
                 mzRuntimeMetrics.edits.dither_changes +
-                mzRuntimeMetrics.edits.scanmask_changes,0);
+                mzRuntimeMetrics.edits.scanmask_changes + mzRuntimeMetrics.edits.fog_changes,0);
         mzLine(105,8,5,mzGsRuntimeCaps()?
             (mzOverlayPath==3?"HOOK ON / MENU GIF":"HOOK ON / MENU VIF"):
             (mzOverlayPath==3?"HOOK N/D / MENU GIF":"HOOK N/D / MENU VIF"));

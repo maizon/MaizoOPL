@@ -85,6 +85,7 @@ static inline void mzGsDmaMergeStats(mz_gs_gif_stats_t *dst,
     dst->texture_changes += src->texture_changes;
     dst->dither_changes += src->dither_changes;
     dst->scanmask_changes += src->scanmask_changes;
+    dst->fog_changes += src->fog_changes;
     dst->unsupported_primitives += src->unsupported_primitives;
     dst->protected_dither += src->protected_dither;
 }

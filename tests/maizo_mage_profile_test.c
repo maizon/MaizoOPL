@@ -7,7 +7,11 @@ int main(void)
     assert(r.state==0x00350268u && r.hash==0x7fd09a3bu);
     assert(r.fog==0x0035056cu && r.fog_hash==0x023909aau);
     mzSkyChoose("SLUS_212.69",&r);
-    assert(r.state && !r.fog && !r.fog_hash);
+    assert(r.state && r.fog==0x00235eccu && r.fog_hash==0x25809052u);
+    mzSkyChoose("SLES_539.67",&r);
+    assert(r.fog==0x002fdd18u && r.fog_hash==0xbd209bdfu);
+    mzSkyChoose("SLUS_218.99",&r);
+    assert(r.fog==0x002ff7c0u && r.fog_hash==0x3f75a261u);
     mzSkyChoose("SLUS_213.76",&r);
     assert(r.reload_blur==0x001c27a0u && r.reload_blur_hash==0x50270b46u);
     mzSkyChoose("UNKNOWN",&r);

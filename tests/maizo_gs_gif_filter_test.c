@@ -256,6 +256,36 @@ int main(void)
         assert(mzGifApplyFilters(scope,sizeof(scope)-16,&p,&s,&st)==-1);
         assert(!memcmp(scope,orig,sizeof(scope)));
     }
+    /* All native FGE encodings, both contexts and unrelated bits.
+     * Scanmask remains independent and fog color/vertex payloads
+     * are not edited. */
+    init(&p,&s,&st);p.scanmask=MZ_GS_FOG_OFF_FLAG;
+    for(unsigned ctx=0;ctx<2;ctx++){
+        uint64_t prim=3ULL|32ULL|64ULL|128ULL|((uint64_t)ctx<<9);
+        one(buf,MZ_GS_PRIM,prim,&p,&s,&st);
+        assert(mzGifRead64(buf+16)==(prim&~32ULL)&&st.fog_changes==1);
+        one(buf,MZ_GS_PRMODE,prim&~7ULL,&p,&s,&st);
+        assert(mzGifRead64(buf+16)==(prim&~39ULL)&&st.fog_changes==1);
+        memset(buf,0,sizeof(buf));
+        mzGifWrite64(buf,tag(0,1,1,(unsigned)prim,0,1));
+        assert(!mzGifApplyFilters(buf,16,&p,&s,&st));
+        assert(((mzGifRead64(buf)>>47)&2047ULL)==(prim&~32ULL));
+        assert(st.fog_changes==1);
+        memset(buf,0,sizeof(buf));
+        mzGifWrite64(buf,tag(1,1,0,0,1,1));
+        mzGifWrite64(buf+16,prim);
+        assert(!mzGifApplyFilters(buf,32,&p,&s,&st));
+        assert(mzGifRead64(buf+16)==(prim&~32ULL));
+    }
+    one(buf,0x3d,0x123456,&p,&s,&st); /* FOGCOL unchanged */
+    assert(mzGifRead64(buf+16)==0x123456&&!st.fog_changes);
+    one(buf,MZ_GS_SCANMSK,2,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==2);
+    p.scanmask=MZ_GS_FOG_OFF_FLAG|MZ_GS_SCAN_EVEN_ONLY;
+    one(buf,MZ_GS_SCANMSK,0,&p,&s,&st);
+    assert(mzGifRead64(buf+16)==3);
+    p.scanmask=5;
+    assert(mzGifApplyFilters(buf,32,&p,&s,&st)==-2);
     puts("MAIZO GIF filter packet tests: PASS");
     return 0;
 }

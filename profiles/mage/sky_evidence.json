@@ -60,6 +60,15 @@
         "show_raster": "0x303a40",
         "raster_mip_levels": "0x303ed8",
         "verified_runtime": false
+      },
+      "fog_static_evidence": {
+        "address": "0x002fdd18",
+        "normalized_fnv": "0xbd209bdf",
+        "words": 16,
+        "original_branch": "0x12000007",
+        "off_branch": "0x10000007",
+        "source": "matched ELF state-14 dispatch and reviewed enable/disable body",
+        "runtime_verified": false
       }
     },
     {
@@ -83,6 +92,15 @@
         "show_raster": "0x3c6a98",
         "raster_mip_levels": "0x3c6c80",
         "verified_runtime": false
+      },
+      "fog_static_evidence": {
+        "address": "0x003bddbc",
+        "normalized_fnv": "0x80cf620d",
+        "words": 14,
+        "original_branch": "0x12000006",
+        "off_branch": "0x10000006",
+        "source": "matched ELF state-14 dispatch and reviewed enable/disable body",
+        "runtime_verified": false
       }
     },
     {
@@ -106,6 +124,15 @@
         "show_raster": "0x3c1c60",
         "raster_mip_levels": "0x3c1e48",
         "verified_runtime": false
+      },
+      "fog_static_evidence": {
+        "address": "0x003b74ac",
+        "normalized_fnv": "0xae21de26",
+        "words": 14,
+        "original_branch": "0x12000006",
+        "off_branch": "0x10000006",
+        "source": "matched ELF state-14 dispatch and reviewed enable/disable body",
+        "runtime_verified": false
       }
     },
     {
@@ -202,6 +229,15 @@
         "show_raster": "0x240c00",
         "raster_mip_levels": "0x240e60",
         "verified_runtime": false
+      },
+      "fog_static_evidence": {
+        "address": "0x00235ecc",
+        "normalized_fnv": "0x25809052",
+        "words": 14,
+        "original_branch": "0x12000006",
+        "off_branch": "0x10000006",
+        "source": "matched ELF state-14 dispatch and reviewed enable/disable body",
+        "runtime_verified": false
       }
     },
     {
@@ -270,6 +306,15 @@
         "show_raster": "0x309ea0",
         "raster_mip_levels": "0x30a100",
         "verified_runtime": false
+      },
+      "fog_static_evidence": {
+        "address": "0x002ff7c0",
+        "normalized_fnv": "0x3f75a261",
+        "words": 16,
+        "original_branch": "0x12000007",
+        "off_branch": "0x10000007",
+        "source": "matched ELF state-14 dispatch and reviewed enable/disable body",
+        "runtime_verified": false
       }
     }
   ],
