@@ -263,7 +263,8 @@ static int mzFrame(void)
     mz_igr_frame_t f;
     /* Both recording modes retain the original game's GS writes.
      * No guessing or readback of potentially write-only GS registers. */
-    if(!mzIgrMonitorFrame(&f,r[0],r[7],r[9],r[8],r[10],r[2]))
+    if(!mzIgrMonitorFrame(&f,r[0],r[7],r[9],r[8],r[10],
+                          r[2],mzGameHasGsm))
         return 0;
     mzPsm=(int)f.psm;
     mzBpp=(int)f.pixel_bytes;

@@ -524,48 +524,18 @@ have_some_write:                                    # Opcode is a write, so we m
     beqz    $v1, have_DISPLAY2_write                # in case of  dest == GS_reg_DISPLAY2
     nop
 
-# In menu-only mode the original data and the original MMIO destination
-# are preserved. Do NOT call any GS display adaptation in this path.
+# Menu-only observer: GS CRTC has 11 DWORD registers at 16-byte
+# spacings 0..A0. GSMSourceGSRegs packs those 11 values at 8-byte
+# spacings. Capture via a bounded index instead of a branch cascade.
 maizo_monitor_write:
-    addi    $v1, $v0, -GS_PMODE
-    bnez    $v1, maizo_monitor_smode2
+    sltiu   $t0, $v0, 0x00b0
+    beqz    $t0, maizo_monitor_forward
+    andi    $t0, $v0, 0x000f
+    bnez    $t0, maizo_monitor_forward
     nop
-    sd      $a1, Source_PMODE($s0)
-    b       maizo_monitor_forward
-    nop
-maizo_monitor_smode2:
-    addi    $v1, $v0, -GS_SMODE2
-    bnez    $v1, maizo_monitor_fb1
-    nop
-    sd      $a1, Source_SMODE2($s0)
-    b       maizo_monitor_forward
-    nop
-maizo_monitor_fb1:
-    addi    $v1, $v0, -GS_DISPFB1
-    bnez    $v1, maizo_monitor_fb2
-    nop
-    sd      $a1, Source_DISPFB1($s0)
-    b       maizo_monitor_forward
-    nop
-maizo_monitor_fb2:
-    addi    $v1, $v0, -GS_DISPFB2
-    bnez    $v1, maizo_monitor_display1
-    nop
-    sd      $a1, Source_DISPFB2($s0)
-    b       maizo_monitor_forward
-    nop
-maizo_monitor_display1:
-    addi    $v1, $v0, -GS_DISPLAY1
-    bnez    $v1, maizo_monitor_display2
-    nop
-    sd      $a1, Source_DISPLAY1($s0)
-    b       maizo_monitor_forward
-    nop
-maizo_monitor_display2:
-    addi    $v1, $v0, -GS_DISPLAY2
-    bnez    $v1, maizo_monitor_forward
-    nop
-    sd      $a1, Source_DISPLAY2($s0)
+    srl     $t0, $v0, 1
+    addu    $t0, $t0, $s0
+    sd      $a1, 0($t0)
 maizo_monitor_forward:
     b       exit_GSHandler
     sd      $a1, 0($a3)

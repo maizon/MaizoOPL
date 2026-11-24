@@ -18,9 +18,10 @@ static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
                                     uint64_t pmode,
                                     uint64_t fb1, uint64_t fb2,
                                     uint64_t display1, uint64_t display2,
-                                    uint64_t smode2)
+                                    uint64_t smode2, int legacy_gsm_height)
 {
-    uint64_t fb,display,last_byte;
+    uint64_t fb,display;
+    uint32_t last_byte;
     uint32_t en,bpp,vram_bpp,fbw,bp,psm,dbx,dby,w,h,magh,magv,sx,sy,x,y;
     if(!out)return 0;
     en=(uint32_t)(pmode&3ULL);
@@ -40,7 +41,9 @@ static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
     magv=(uint32_t)((display>>27)&3ULL)+1u;
     w=((uint32_t)((display>>32)&4095ULL)+1u)/magh;
     h=((uint32_t)((display>>44)&2047ULL)+1u)/magv;
-    if((smode2&3ULL)==3ULL)h/=2u;
+    /* Preserve old GSM overlay coordinates. Passive monitor uses the
+     * true DISPLAY.DH (a 224-line FRAME must not become 112 lines). */
+    if(legacy_gsm_height && (smode2&3ULL)==3ULL)h/=2u;
     if(!fbw || dbx>=fbw*64u || dby>2047u || !h)return 0;
     if(w>fbw*64u-dbx)w=fbw*64u-dbx;
     if(w<168u || h<130u || h>1024u)return 0;
@@ -50,9 +53,8 @@ static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
     y=dby+(h-126u*sy)/2u;
     if(x+160u*sx>fbw*64u || y+126u*sy>2048u)
         return 0;
-    last_byte=(uint64_t)bp*8192u+
-              (uint64_t)(y+126u*sy)*fbw*64u*vram_bpp;
-    if(last_byte>4ULL*1024u*1024u)return 0;
+    last_byte=bp*8192u+(y+126u*sy)*fbw*64u*vram_bpp;
+    if(last_byte>4u*1024u*1024u)return 0;
     out->width=w;out->height=h;out->sx=sx;out->sy=sy;
     out->x=x;out->y=y;out->fbw=fbw;out->fbbase=bp*32u;
     out->psm=psm;out->pixel_bytes=bpp;
