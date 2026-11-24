@@ -3,6 +3,7 @@
 #define MAIZO_IGRMENU_H
 #include <tamtypes.h>
 #include "maizo_igr_route.h"
-int maizoIGR_MenuRun(u16 (*buttons)(void));
+/* Return 1 for a coherent, stable pad sample, 0 for retry. */
+int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame));
 int maizoIGR_Preflight(void);
 #endif

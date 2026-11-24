@@ -525,14 +525,28 @@ static void mzBpcRestore(u32 old)
     asm volatile("sync.l\n\tmtbpc %0\n\tsync.p"::"r"(old));
     ee_kmode_exit();
 }
-int maizoIGR_MenuRun(u16 (*buttons)(void))
+/* Keep polling independent of sleeping game threads and masked game
+ * IRQs. COP0 Count is read via the existing kernel syscall; the finite
+ * iteration bound also protects against a title resetting the counter. */
+static void mzPollDelay(void)
+{
+    u32 start=GetCop0(9);
+    unsigned int i;
+    for(i=0;i<100000u;i++){
+        if((u32)(GetCop0(9)-start)>=1500000u)break;
+    }
+}
+int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *frame))
 {
     USE_LOCAL_EECORE_CONFIG;
     /* One VIF1 packet and a line's pixels: no full-screen framebuffer. */
     u32 packet[(112+PW*2*4+64)/4];
     u32 *p=(u32 *)(((u32)packet+63)&~63);
     u32 chcr,madr,qwc,tadr,ctrl,statOld,suspend,oldBpc;
-    u16 prev,now,pressed;
+    u16 prev=0,now,pressed;
+    u32 frame,lastFrame=0;
+    unsigned int stale=0;
+    int haveFrame=0,armed=0;
     int mfifo,result=MAIZO_IGR_RESUME;
     int first;
     if(!config->EnableMaizoIgrMenu)return MAIZO_IGR_UNAVAILABLE;
@@ -597,10 +611,27 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
     first=mzDraw(p,&mzState);
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
-    prev=buttons();
     for(;;){
         int action;
-        now=buttons();
+        mzPollDelay();
+        if(!buttons(&now,&frame) || (haveFrame && frame==lastFrame)){
+            /* A dead pad stream must not strand the game in suspended
+             * state. A stationary but live controller keeps advancing
+             * its DMA frame counter and does not trigger this guard. */
+            if(++stale>=240u){result=MAIZO_IGR_UNAVAILABLE;break;}
+            continue;
+        }
+        haveFrame=1;
+        lastFrame=frame;
+        stale=0;
+        if(!armed){
+            /* Ignore the opening chord until its buttons are released.
+             * Direction/confirm edges then start from a fresh sample. */
+            if(now&0x0f09u)continue;
+            armed=1;
+            prev=now;
+            continue;
+        }
         pressed=now&~prev;
         prev=now;
         if(!pressed)continue;
@@ -641,8 +672,11 @@ int maizoIGR_MenuRun(u16 (*buttons)(void))
     }
     if(result==MAIZO_IGR_RESUME){
         /* Consume release so button combo does not reach/reopen in game. */
-        u32 t=0;
-        while(buttons()&&t++<25000000u){asm volatile("nop");}
+        unsigned int t;
+        for(t=0;t<60u;t++){
+            if(buttons(&now,&frame) && !now)break;
+            mzPollDelay();
+        }
     }
 cleanup:
     mzWait(MZ_VIF1_STAT,VIF_FQC,0,0);

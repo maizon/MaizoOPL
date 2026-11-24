@@ -62,29 +62,41 @@ static u32 MaizoIgrSuspended[8];
 static u32 MaizoIgrIntcMask, MaizoIgrDmacMask;
 static int MaizoIgrWaitRelease;
 
-static u16 maizoIgrButtons(void)
+/* Padman updates this area asynchronously via SIF DMA, not EE code.
+ * UNCACHED alone does not stop LTO from caching ordinary C loads. */
+static int maizoIgrButtons(u16 *buttons, u32 *frame)
 {
-    const u8 *b;
-    u8 state;
+    const volatile u8 *b;
+    u32 before;
+    u8 state, lo, hi;
     if (Pad_Data.pad_buf == NULL)
         return 0;
-    b = (const u8 *)UNCACHED_SEG(Pad_Data.pad_buf);
+    b = (const volatile u8 *)UNCACHED_SEG(Pad_Data.pad_buf);
+    before = *(const volatile u32 *)(b + Pad_Data.pos_frame);
     if (Pad_Data.libpad == IGR_LIBPAD) {
-        const u8 *other = b + (Pad_Data.libversion >= 0x0160 ? 128 : 64);
-        if (*(const u32 *)(b + Pad_Data.pos_frame) <
-            *(const u32 *)(other + Pad_Data.pos_frame))
+        const volatile u8 *other = b + (Pad_Data.libversion >= 0x0160 ? 128 : 64);
+        u32 otherFrame = *(const volatile u32 *)(other + Pad_Data.pos_frame);
+        if ((s32)(otherFrame - before) > 0) {
             b = other;
+            before = otherFrame;
+        }
     }
     state = b[Pad_Data.pos_state];
+    lo = b[Pad_Data.pos_combo2];
+    hi = b[Pad_Data.pos_combo1];
+    if (before != *(const volatile u32 *)(b + Pad_Data.pos_frame))
+        return 0; /* DMA changed banks while sampling; retry. */
     if (!((Pad_Data.libpad == IGR_LIBPAD && state == IGR_PAD_STABLE_V1) ||
           (Pad_Data.libpad == IGR_LIBPAD2 && state == IGR_PAD_STABLE_V2)))
         return 0;
-    return ~(b[Pad_Data.pos_combo2] | b[Pad_Data.pos_combo1] << 8) & 0xffff;
+    *frame = before;
+    *buttons = ~(lo | hi << 8) & 0xffff;
+    return 1;
 }
 static void maizoIgrHold(void)
 {
     int i;
-    MaizoIgrIntcMask = *(vu32 *)0x1000f010 & 0x7ffd; /* exclude SIF SBUS */
+    MaizoIgrIntcMask = *(vu32 *)0x1000f010 & 0x6ffd; /* keep SIF SBUS and kernel alarm timer 3 */
     MaizoIgrDmacMask = (*R_EE_D_STAT >> 16) & 0x431f; /* exclude SIF channels */
     for (i = 0; i < 15; i++) {
         if (MaizoIgrIntcMask & (1u << i)) DisableIntc(i);
