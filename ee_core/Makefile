@@ -54,8 +54,10 @@ ifneq ($(LOAD_DEBUG_MODULES),1)
 ifneq ($(DTL_T10000),1)
 EE_OBJS := $(filter-out gsm_engine.o gsm_api.o,$(EE_OBJS))
 EE_OBJS += maizo_gsm_engine.o maizo_gsm_api.o maizo_igrmenu.o maizo_gs_runtime.o
-EE_CFLAGS += -DMAIZO_IGR_MENU -ffunction-sections -fdata-sections
-EE_EXTRA_GC := -Wl,--gc-sections
+EE_CFLAGS += -DMAIZO_IGR_MENU -ffunction-sections -fdata-sections -flto
+# LTO is limited to the opt-in In-Game EE core, never the proven
+# Correction B release core, PadEmu IOP drivers, or the frontend.
+EE_EXTRA_GC := -Wl,--gc-sections -flto
 endif
 endif
 endif
