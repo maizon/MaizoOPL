@@ -110,8 +110,19 @@ transport=read("ee_core/src/maizo_restore.c")
 service=read("modules/iopcore/maizo_restore/maizo_restore.c")
 assert "dma(line,upload,n)" in transport and "dma(line,buf+off,n)" not in transport
 assert "case MZR_WRITE:" in service and "buf[r->off+j]=upload[j]" in service
-assert "mzOvlHeaderOK(overlay)" in system and "overlay->run>=fileEnd" in system
+assert "mzOvlHeaderOK(&overlay)" in read("src/system.c") and "overlay.run>=fileEnd" in read("src/system.c")
 assert "ModuleStorageEnd=(void *)MZ_OVL_END" in system
 assert "maizo_overlay_stub.o" in read("ee_core/Makefile")
 assert "ASSERT(_stack_size >= 8192" in read("ee_core/linkfile.maizo")
 print("Restoration isolation and protected separate overlay source checks PASS")
+
+# Never open a modal dialog on the already dismantled GUI. Snapshot
+# configuration before configEnd, validate the overlay before packing,
+# and downgrade to conventional PRO before selecting the legacy core.
+assert "guiMsgBox(" not in "\n".join(line for line in system.split("/* Based on OPL Daily Builds",1)[0].splitlines() if not line.lstrip().startswith("*"))
+assert "int proEnabled = mzLaunchProEnabled;" in system
+assert system.index("overlaySegment=mzOverlaySegment();") < system.index("ModuleStorageSize = sendIrxKernelRAM")
+assert "boot_elf=(u8 *)maizo_pro_elf;" in system
+assert "MAIZO_IGR_OVERLAY_EXPERIMENTAL=0 MAIZO_IGR_RESTORE_EXPERIMENTAL=0" in read("Makefile")
+assert "LoadMemModule(0,module,size,sizeof(arg),arg)" in transport
+print("Boot handoff: pre-deinit configuration, no dead GUI, optional restoration downgrade PASS")

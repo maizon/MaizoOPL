@@ -46,7 +46,11 @@ void mzRestoreLink(int enable)
         for(int i=0;i<8;i++)arg[j*9+i]=hex[(addr[j]>>(28-4*i))&15u];
         arg[j*9+8]=0;
     }
-    if(LoadOPLModule(OPL_MODULE_ID_MAIZO_RESTORE,0,sizeof(arg),arg)>0){
+    /* Optional service must not invoke LoadOPLModule's fatal/debug
+     * error policy when a game's IOP has insufficient memory. */
+    void *module=NULL;unsigned int size=0;
+    if(GetOPLModInfo(OPL_MODULE_ID_MAIZO_RESTORE,&module,&size)==0 && size &&
+       LoadMemModule(0,module,size,sizeof(arg),arg)>0){
         u32 p=(u32)ACK->result;
         u32 u=ACK->buf;
         if(p && !(p&15u) && p<0x200000u-sizeof(req) &&

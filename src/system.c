@@ -62,6 +62,8 @@ extern unsigned int size_eecore_fallback_elf;
 #ifdef MAIZO_IGR_OVERLAY
 extern unsigned char maizo_overlay_elf[];
 extern unsigned int size_maizo_overlay_elf;
+extern unsigned char maizo_pro_elf[];
+extern unsigned int size_maizo_pro_elf;
 #endif
 #ifdef MAIZO_IGR_RESTORE
 extern unsigned char maizo_restore_irx[];
@@ -69,6 +71,7 @@ extern unsigned int size_maizo_restore_irx;
 #endif
 static char mzProfileID[12];
 static u32 mzProfileValue;
+static int mzLaunchProEnabled=1;
 /* Two independent slots: an interrupted write cannot truncate the
  * other valid profile, or the user's global/game configuration. */
 static int mzProfilePath(char *out,const char *id,int slot)
@@ -105,6 +108,10 @@ static int mzProfileLatest(const char *id,mz_profile_record_t *r)
 void sysMaizoPrepareProfile(const char *id)
 {
     mz_profile_record_t r;
+    /* Every PS2 launch calls this before configEnd/deinit. */
+    mzLaunchProEnabled=1;
+    config_set_t *cfg=configGetByType(CONFIG_OPL);
+    if(cfg)configGetInt(cfg,"maizo_igr_menu",&mzLaunchProEnabled);
     mzProfileID[0]=0;mzProfileValue=0;
     if(!mzProfileIdOK(id))return;
     memcpy(mzProfileID,id,12);
@@ -175,6 +182,36 @@ typedef struct
     u32 flags;
     u32 align;
 } elf_pheader_t;
+
+#ifdef MAIZO_IGR_OVERLAY
+/* Validate the embedded ELF before allocating or copying any IRX.
+ * memcpy into an aligned header avoids assumptions about bin2c storage. */
+static const elf_pheader_t *mzOverlaySegment(void)
+{
+    const elf_header_t *eh=(const elf_header_t *)maizo_overlay_elf;
+    const elf_pheader_t *ph,*load=NULL;
+    mz_ovl_header overlay;
+    if(size_maizo_overlay_elf<sizeof(*eh) ||
+       memcmp(eh->ident,"\177ELF",4) || eh->ident[4]!=1 || eh->ident[5]!=1 ||
+       eh->phentsize!=sizeof(*ph) || eh->phoff>size_maizo_overlay_elf ||
+       eh->phnum>(size_maizo_overlay_elf-eh->phoff)/sizeof(*ph))return NULL;
+    ph=(const elf_pheader_t *)(maizo_overlay_elf+eh->phoff);
+    for(unsigned i=0;i<eh->phnum;i++)if(ph[i].type==ELF_PT_LOAD){
+        if(load || (u32)ph[i].vaddr!=MZ_OVL_BASE ||
+           ph[i].filesz<sizeof(overlay) || ph[i].filesz>ph[i].memsz ||
+           ph[i].memsz>MZ_OVL_END-MZ_OVL_BASE ||
+           ph[i].offset>size_maizo_overlay_elf ||
+           ph[i].filesz>size_maizo_overlay_elf-ph[i].offset)return NULL;
+        load=&ph[i];
+    }
+    if(!load)return NULL;
+    memcpy(&overlay,maizo_overlay_elf+load->offset,sizeof(overlay));
+    u32 fileEnd=MZ_OVL_BASE+load->filesz;
+    if(!mzOvlHeaderOK(&overlay) || overlay.preflight>=fileEnd ||
+       overlay.run>=fileEnd || overlay.profile>=fileEnd)return NULL;
+    return load;
+}
+#endif
 
 void guiWarning(const char *text, int count);
 void guiEnd();
@@ -571,7 +608,7 @@ static void *GetModStorageLocation(const char *startup, unsigned compatFlags)
 #endif
 }
 
-static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, unsigned int modules, void **storagePtr, int *fallback, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx)
+static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, unsigned int modules, void **storagePtr, int *fallback, int *useOverlay, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx)
 { // Send IOP modules that core must use to Kernel RAM
     irxtab_t *irxtable;
     irxptr_t *irxptr_tab;
@@ -579,6 +616,7 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
     int i, modcount;
     unsigned int curIrxSize, size_ioprp_image, total_size;
     void *ModuleStorage=*storagePtr;
+    (void)useOverlay;
 #ifdef MAIZO_IGR_MENU
     /* Assemble the table in frontend RAM, not in the destination arena.
      * Determine the full aligned footprint before copying anything. */
@@ -708,7 +746,7 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
     modcount += addIopPatch(mode_str, startup, &irxptr_tab[modcount]);
 #ifdef MAIZO_IGR_RESTORE
     /* Optional and last: remove on legacy fallback before copying IRXs. */
-    if(!*fallback){
+    if(!*fallback && *useOverlay){
         irxptr_tab[modcount].info=size_maizo_restore_irx|SET_OPL_MOD_ID(OPL_MODULE_ID_MAIZO_RESTORE);
         irxptr_tab[modcount++].ptr=maizo_restore_irx;
     }
@@ -721,17 +759,11 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
         for(i=0;i<modcount;i++)
             footprint+=(GET_OPL_MOD_SIZE(localTable[i].info)+15u)&~15u;
         footprint=(footprint+63u)&~63u;
-        if(base==MZ_EE_EXP_TOP && !mzEeArenaFits(base,
 #ifdef MAIZO_IGR_OVERLAY
-                MZ_OVL_BASE,
-#else
-                MZ_EE_LOW_LIMIT,
-#endif
-                footprint)){
-            /* The legacy core can use its original low arena. Keep
-             * game-specific high storage addresses unchanged. */
-            base=MZ_EE_LEGACY_TOP;
-            *fallback=1;
+        if(*useOverlay && !mzEeArenaFits(base,MZ_OVL_BASE,footprint)){
+            /* First downgrade only restoration: the regular PRO core
+             * fits the larger arena and keeps all earlier features. */
+            *useOverlay=0;
 #ifdef MAIZO_IGR_RESTORE
             if(modcount && GET_OPL_MOD_ID(localTable[modcount-1].info)==OPL_MODULE_ID_MAIZO_RESTORE){
                 modcount--;
@@ -741,10 +773,16 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
             }
 #endif
         }
+#endif
+        if(base==MZ_EE_EXP_TOP && !mzEeArenaFits(base,MZ_EE_LOW_LIMIT,footprint)){
+            base=MZ_EE_LEGACY_TOP;
+            *fallback=1;
+            *useOverlay=0;
+        }
         limit=base>=0x00100000u?(unsigned int)GetMemorySize():
             (*fallback?0x00100000u:
 #ifdef MAIZO_IGR_OVERLAY
-             MZ_OVL_BASE
+             (*useOverlay?MZ_OVL_BASE:MZ_EE_LOW_LIMIT)
 #else
              MZ_EE_LOW_LIMIT
 #endif
@@ -979,7 +1017,10 @@ void sysPrintEECoreConfig(struct EECoreConfig_t *config)
 void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx, int EnablePS2Logo, unsigned int compatflags)
 {
     unsigned int modules, ModuleStorageSize, coreSize;
-    int fallbackCore=0;
+    int fallbackCore=0,useOverlay=0;
+#ifdef MAIZO_IGR_OVERLAY
+    const elf_pheader_t *overlaySegment=NULL;
+#endif
     void *ModuleStorage, *ModuleStorageEnd;
     u8 local_ip_address[4], local_netmask[4], local_gateway[4];
     u8 *boot_elf = NULL;
@@ -994,8 +1035,7 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
 #ifdef MAIZO_IGR_MENU
     /* OFF must select the original resident core, not just disable its
      * overlay. Mode 6 also explicitly disables IGR for this game. */
-    int proEnabled = 1;
-    configGetInt(configGetByType(CONFIG_OPL), "maizo_igr_menu", &proEnabled);
+    int proEnabled = mzLaunchProEnabled;
     proEnabled = (proEnabled != 0) && !(compatflags & COMPAT_MODE_6);
     fallbackCore = !proEnabled;
 #endif
@@ -1026,9 +1066,12 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     /* Pick the matching module arena before any IRX table is written.
      * Preserve explicit per-title high-memory storage locations. */
     #ifdef MAIZO_IGR_OVERLAY
-    /* A high per-title module location would put the fixed overlay in
-     * the lower wipe range. Use the legacy core instead. */
-    if(ModuleStorage!=(void *)MZ_EE_EXP_TOP)fallbackCore=1;
+    /* The fixed overlay cannot coexist with special high IRX placement.
+     * Keep the conventional PRO core for those games. */
+    if(!fallbackCore && ModuleStorage==(void *)MZ_EE_EXP_TOP){
+        overlaySegment=mzOverlaySegment();
+        useOverlay=overlaySegment!=NULL;
+    }
     #endif
     if (fallbackCore && ModuleStorage == (void *)MZ_EE_EXP_TOP)
         ModuleStorage = (void *)MZ_EE_LEGACY_TOP;
@@ -1046,50 +1089,22 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     modules |= CORE_IRX_VMC;
 
     LOG("SYSTEM LaunchLoaderElf loading modules\n");
-    ModuleStorageSize = sendIrxKernelRAM(filename, mode_str, modules, &ModuleStorage, &fallbackCore, size_cdvdman_irx, cdvdman_irx, size_mcemu_irx, mcemu_irx);
+    ModuleStorageSize = sendIrxKernelRAM(filename, mode_str, modules, &ModuleStorage, &fallbackCore, &useOverlay, size_cdvdman_irx, cdvdman_irx, size_mcemu_irx, mcemu_irx);
     if(!ModuleStorageSize){
         LOG("SYSTEM module arena does not fit\n");
-        guiMsgBox("Memoria de modulos insuficiente. Desative recursos opcionais.",1,NULL);
+        /* The frontend, pad and GUI semaphores are already destroyed.
+         * Never wait on guiMsgBox or return to the dead frontend. */
+        exit(0);
         return;
     }
     ModuleStorageSize=(ModuleStorageSize+0x3f)&~0x3f;
     ModuleStorageEnd = (void *)((u8 *)ModuleStorage + ModuleStorageSize);
 #ifdef MAIZO_IGR_OVERLAY
-    if(!fallbackCore){
-        /* Verify every PT_LOAD before publishing the ABI. No segment
-         * may overlap the module arena, resident core or game RAM. */
-        elf_header_t *oh=(elf_header_t *)maizo_overlay_elf;
-        elf_pheader_t *op;
-        u32 fileEnd=0;
-        int n=0,valid=(u32)ModuleStorageEnd<=MZ_OVL_BASE &&
-            size_maizo_overlay_elf>=sizeof(*oh) &&
-            maizo_overlay_elf[0]==0x7f && maizo_overlay_elf[1]=='E' &&
-            maizo_overlay_elf[2]=='L' && maizo_overlay_elf[3]=='F' &&
-            oh->phoff<=size_maizo_overlay_elf &&
-            oh->phnum<=(size_maizo_overlay_elf-oh->phoff)/sizeof(*op);
-        if(!valid){guiMsgBox("ELF do overlay PRO invalido.",1,NULL);return;}
-        op=(elf_pheader_t *)(maizo_overlay_elf+oh->phoff);
-        for(i=0;i<oh->phnum;i++){
-            if(op[i].type!=ELF_PT_LOAD)continue;
-            u32 dst=(u32)op[i].vaddr;
-            if(dst!=MZ_OVL_BASE || op[i].filesz<sizeof(mz_ovl_header) ||
-               op[i].memsz>MZ_OVL_END-dst || op[i].filesz>op[i].memsz ||
-               op[i].offset>size_maizo_overlay_elf ||
-               op[i].filesz>size_maizo_overlay_elf-op[i].offset){valid=0;break;}
-            fileEnd=dst+op[i].filesz;
-            n++;
-        }
-        if(!valid || n!=1){
-            guiMsgBox("Overlay PRO invalido. Use a build normal.",1,NULL);return;
-        }
+    if(useOverlay){
+        /* ELF and footprint already verified. Copy only this segment;
+         * no dialogs or recoverable error paths after GUI shutdown. */
         memset((void *)MZ_OVL_BASE,0,MZ_OVL_END-MZ_OVL_BASE);
-        for(i=0;i<oh->phnum;i++)if(op[i].type==ELF_PT_LOAD)
-            memcpy(op[i].vaddr,maizo_overlay_elf+op[i].offset,op[i].filesz);
-        const mz_ovl_header *overlay=(const mz_ovl_header *)MZ_OVL_BASE;
-        if(!mzOvlHeaderOK(overlay) || overlay->preflight>=fileEnd ||
-           overlay->run>=fileEnd || overlay->profile>=fileEnd){
-            guiMsgBox("ABI do overlay PRO invalida.",1,NULL);return;
-        }
+        memcpy(overlaySegment->vaddr,maizo_overlay_elf+overlaySegment->offset,overlaySegment->filesz);
         ModuleStorageEnd=(void *)MZ_OVL_END; /* include overlay in kernel wipe boundary */
     }
 #endif
@@ -1097,13 +1112,19 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     // NB: LOADER.ELF is embedded
     boot_elf = (u8 *)&eecore_elf;
     coreSize=size_eecore_elf;
+#ifdef MAIZO_IGR_OVERLAY
+    if(!fallbackCore && !useOverlay){
+        boot_elf=(u8 *)maizo_pro_elf;
+        coreSize=size_maizo_pro_elf;
+        LOG("SYSTEM restoration unavailable: conventional PRO selected\n");
+    }
+#endif
 #ifdef MAIZO_IGR_MENU
     if(fallbackCore){
         boot_elf=(u8 *)eecore_fallback_elf;
         coreSize=size_eecore_fallback_elf;
         if (proEnabled) {
             LOG("SYSTEM guarded legacy core fallback: module arena full\n");
-            guiMsgBox("In-Game PRO indisponivel nesta configuracao. IGR original.",1,NULL);
         } else {
             LOG("SYSTEM legacy core selected: In-Game PRO OFF or mode 6\n");
         }

@@ -223,7 +223,7 @@ ifneq ($(DTL_T10000),1)
   EECORE_OBJS += ee_core_fallback.o
   ifeq ($(MAIZO_IGR_OVERLAY_EXPERIMENTAL),1)
     EE_CFLAGS += -DMAIZO_IGR_OVERLAY
-    EECORE_OBJS += maizo_overlay.o
+    EECORE_OBJS += maizo_overlay.o maizo_pro.o
   endif
   ifeq ($(MAIZO_IGR_RESTORE_EXPERIMENTAL),1)
     EE_CFLAGS += -DMAIZO_IGR_RESTORE
@@ -295,7 +295,7 @@ clean:	download_lwNBD
 	rm -fr $(MAPFILE) $(EE_BIN) $(EE_BIN_PACKED) $(EE_BIN_STRIPPED) $(EE_VPKD).* $(EE_OBJS_DIR) $(EE_ASM_DIR)
 	echo "-EE core"
 	$(MAKE) -C ee_core clean
-	rm -rf ee_core/obj-fallback ee_core/ee_core_fallback.elf ee_core/ee_core_fallback.map
+	rm -rf ee_core/obj-fallback ee_core/ee_core_fallback.elf ee_core/ee_core_fallback.map ee_core/obj-pro ee_core/maizo_pro.elf ee_core/maizo_pro.map
 	echo "-POPStarter handoff helper"
 	$(MAKE) -C elfldr clean
 	echo "-IOP core"
@@ -420,6 +420,13 @@ ee_core/ee_core.elf: ee_core
 
 ee_core/overlay/maizo_overlay.elf: $(wildcard ee_core/overlay/* ee_core/include/*) ee_core/src/maizo_igrmenu.c
 	$(MAKE) -C ee_core/overlay
+
+# Embed the conventional PRO core as a no-restoration fallback.
+ee_core/maizo_pro.elf: $(wildcard ee_core/src/* ee_core/include/*) ee_core/linkfile.maizo ee_core/Makefile
+	$(MAKE) $(IGS_FLAGS) $(PADEMU_FLAGS) $(EECORE_EXTRA_FLAGS) -C ee_core MAIZO_IGR_EXPERIMENTAL=1 MAIZO_IGR_OVERLAY_EXPERIMENTAL=0 MAIZO_IGR_RESTORE_EXPERIMENTAL=0 EE_OBJS_DIR=obj-pro/ EE_BIN=maizo_pro.elf MAPFILE=maizo_pro.map
+
+$(EE_ASM_DIR)maizo_pro.c: ee_core/maizo_pro.elf | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ maizo_pro_elf
 
 $(EE_ASM_DIR)maizo_overlay.c: ee_core/overlay/maizo_overlay.elf | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ maizo_overlay_elf
