@@ -1,0 +1,38 @@
+/* Sky state 9, statically matched against seven commercial game IDs.
+ * Experimental live data-table remap; not a universal renderer hook.
+ * No direct GS writes. No extra per-frame work. Non-mip cases untouched.
+ * The caller may write only after the IGR capture paused game threads.
+ */
+#ifndef MAIZO_MAGE_SKY_H
+#define MAIZO_MAGE_SKY_H
+#include <stdint.h>
+static inline uint32_t mzSkyHash(uint32_t hash, const volatile uint32_t *p, unsigned n)
+{
+    while (n--) hash = (hash ^ *p++) * 16777619u;
+    return hash;
+}
+static inline unsigned mzSkyCase(unsigned index, unsigned mode)
+{
+    /* Zero-based original enum cases 0,1 = non-mip nearest/linear.
+     * For mipmapped cases, preserve mip family or select trilinear.
+     * Never convert a texture with no requested mip filtering. */
+    if (index < 2 || index >= 6 || !mode || mode > 3) return index;
+    if (mode == 3) return 5;
+    if (mode == 1) return index | 1u;
+    return index & ~1u;
+}
+static inline uint32_t mzSkyTarget(uint32_t state, unsigned i, unsigned mode)
+{
+    return state + 0x28u + 16u * mzSkyCase(i, mode);
+}
+static inline int mzSkyTableOK(const volatile uint32_t *table, uint32_t state, unsigned mode)
+{
+    for (unsigned i=0; i<6; i++)
+        if (table[i] != mzSkyTarget(state,i,mode)) return 0;
+    return 1;
+}
+void maizoSkySelect(const char *path,const char *id,unsigned limit);
+int maizoSkyAvailable(void);
+unsigned maizoSkyMode(void);
+int maizoSkySetMode(unsigned mode);
+#endif

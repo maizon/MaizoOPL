@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "status": "static_binary_evidence_only",
+  "hardware_verified": false,
+  "profiles": [
+    {
+      "id": "SLES_525.84",
+      "game": "Burnout 3 - Takedown",
+      "set": "0x001f4658",
+      "state": "0x001f4b58",
+      "dispatch": "0x004b8980",
+      "table": "0x004b8a00",
+      "device": "0x0049b1c8",
+      "fingerprint": "0x17cbed3f",
+      "sha256": [
+        "2b5a9abfb66b38c52b3bf83c79f8b897aac0b9f1689a8df72db50053ab233b77"
+      ],
+      "version": "3.6"
+    },
+    {
+      "id": "SLUS_205.52",
+      "game": "Vice City PT-BR",
+      "set": "0x003bd5c8",
+      "state": "0x003bdac8",
+      "dispatch": "0x004ae360",
+      "table": "0x004ae3b0",
+      "device": "0x0044dea0",
+      "fingerprint": "0xc651bb36",
+      "sha256": [
+        "f02399c7d9ef66453124a58655c5d8eec33c7739a1b2b60a3cbe986e2a0496d9"
+      ],
+      "version": "3.3"
+    },
+    {
+      "id": "SLUS_207.77",
+      "game": "ObsCure",
+      "set": "0x003b6ca8",
+      "state": "0x003b71a8",
+      "dispatch": "0x004cd8a0",
+      "table": "0x004cd8f0",
+      "device": "0x004ba930",
+      "fingerprint": "0x45413539",
+      "sha256": [
+        "1cbf8af4a164ef0a9d27ab228ec8e6f01c33b5e7d39addfe815035af8242065c"
+      ],
+      "version": "3.5"
+    },
+    {
+      "id": "SLUS_209.46",
+      "game": "San Andreas / Project Kaizo 2.2",
+      "set": "0x0034fd68",
+      "state": "0x00350268",
+      "dispatch": "0x0064e2d0",
+      "table": "0x0064e350",
+      "device": "0x00600d88",
+      "fingerprint": "0x7fd09a3b",
+      "sha256": [
+        "67a3c195714a8b3a449aa4893dfdc38c89489a8ed4fbde760efb38871181f97a",
+        "66cc6b0c91c53a92213534e1b7aeb30a8a55b42cade09bb8f1850edf9e8f25a2"
+      ],
+      "version": "3.6"
+    },
+    {
+      "id": "SLUS_212.15",
+      "game": "The Warriors",
+      "set": "0x0048e250",
+      "state": "0x0048e750",
+      "dispatch": "0x0058f060",
+      "table": "0x0058f0e0",
+      "device": "0x0052f628",
+      "fingerprint": "0x2107049f",
+      "sha256": [
+        "1a4e1c3891c930146e39ce340ccb02918cfe917032aafcdbbbe6541f75402369"
+      ],
+      "version": "3.7 (external research; SHA1 matches)"
+    },
+    {
+      "id": "SLUS_212.69",
+      "game": "Bully",
+      "set": "0x002356c8",
+      "state": "0x00235bc8",
+      "dispatch": "0x005c36d0",
+      "table": "0x005c3750",
+      "device": "0x00578b70",
+      "fingerprint": "0x55e938b1",
+      "sha256": [
+        "ffc5bf26c4dff5c57881282c7b67d376fb071228c68a9da0ac7c8d4f78f6859e"
+      ],
+      "version": "unknown exact version"
+    },
+    {
+      "id": "SLUS_213.76",
+      "game": "BLACK",
+      "set": "0x002b5088",
+      "state": "0x002b5590",
+      "dispatch": "0x00402f20",
+      "table": "0x00402fa0",
+      "device": "0x003c3d90",
+      "fingerprint": "0xb5784ba3",
+      "sha256": [
+        "141b05209570458af9c8e27ab1911f258da6353909d813cd572df026254ffe4c"
+      ],
+      "version": "unknown exact version"
+    }
+  ],
+  "unmatched": [
+    "SLES_501.85",
+    "SLES_539.67",
+    "SLUS_215.43",
+    "SLUS_216.13"
+  ]
+}

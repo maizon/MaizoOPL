@@ -18,6 +18,7 @@
 #include "coreconfig.h"
 #ifdef MAIZO_IGR_MENU
 #include "maizo_gs_runtime.h"
+#include "maizo_mage_sky.h"
 #endif
 
 #include <syscallnr.h>
@@ -116,6 +117,9 @@ void sysLoadElf(char *filename, int argc, char **argv)
         mzGsRuntimePublish(config->EnableMaizoIgrMenu);
 #endif
         apply_patches(filename);
+#ifdef MAIZO_IGR_MENU
+        maizoSkySelect(filename,config->GameID,(unsigned int)config->ModStorageStart);
+#endif
 
         FlushCache(0);
         FlushCache(2);

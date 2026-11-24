@@ -83,3 +83,34 @@ to JOGO restores original *future* packets, not retroactively the GS state.
 The offline resolver remains an optional developer tool to prepare audited
 hooks, not a requirement for the player's in-game workflow. No commercial
 profile has been verified yet. No claim of 80% coverage is made.
+
+## Commercial Sky state-9 experiment: supplied ELF evidence
+
+Eight supplied ELF files (seven IDs) share the same six-case filter switch.
+The Warriors SHA1 matches the independently documented state-setter at
+0x48e250: https://ryubara.github.io/coney/research/ps2-render/
+In all eight images the nested state-9 switch clears TEX1 bits 5..8,
+selects constants 0, 0x60, 0x80, 0x120, 0xc0, 0x160 and emits A+D
+register 0x14 (TEX1_1). The two San Andreas revisions have the same
+local fingerprint. No proprietary ELF is committed. Exact SHA-256s and
+local address fingerprints are in profiles/mage/sky_evidence.json.
+
+In the experimental In-Game menu only, a validated Sky table is a second
+route when no renderer adapter claims textures. It remaps existing mip
+cases 3..6; the original nearest/linear non-mip cases are never touched.
+JOGO restores the original six-case mapping. No change at ELF load,
+no continuous DMA polling or executable code edits. No new VRAM.
+Validation uses main ELF path/game ID, module-arena bounds, a 75-word
+local rolling fingerprint, state-9 dispatch and all six original/current
+table pointers. This is not a cryptographic runtime identity check.
+If any check fails, refuse to write.
+
+This is experimental, not tested on a console. It only affects future
+calls to this state setter, not all textures or custom VU pipelines.
+It assumes a request for mip filtering corresponds to valid mip levels;
+it cannot classify all HUD/world materials, and it does not restore
+previously submitted GS state until the game updates it. A renderer
+adapter must not force texture filtering concurrently with this route.
+The unmatched four supplied executables have no enabled Sky profile.
+AA1, dithering and other filters are not implemented by this table.
+The 80% target remains a hardware acceptance criterion, not achieved.
