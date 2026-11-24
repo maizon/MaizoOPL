@@ -93,6 +93,20 @@ int main(void)
     assert(((mzGifRead64(buf+16)>>6)&7ULL)==1ULL);
     one(buf,MZ_GS_TEX1_2,6ULL<<6,&p,&s,&st);
     assert(mzGifRead64(buf+16)==(6ULL<<6));
+    /* LOD independently preserves original sampling and non-K bits. */
+    init(&p,&s,&st);p.bilinear=4;
+    {
+        uint64_t t=(3ULL<<2)|(1ULL<<5)|(2ULL<<6)|(0xff0ULL<<32);
+        one(buf,MZ_GS_TEX1_1,t,&p,&s,&st);
+        assert(mzGifRead64(buf+16)==((t&~(4095ULL<<32))|(0xfe8ULL<<32)));
+        p.bilinear=8;
+        one(buf,MZ_GS_TEX1_2,t,&p,&s,&st);
+        assert(mzGifRead64(buf+16)==((t&~(4095ULL<<32))|(0xff8ULL<<32)));
+        one(buf,MZ_GS_TEX1_2,t|1ULL,&p,&s,&st);
+        assert(mzGifRead64(buf+16)==(t|1ULL));
+        one(buf,MZ_GS_TEX1_1,t&~(7ULL<<2),&p,&s,&st);
+        assert(mzGifRead64(buf+16)==(t&~(7ULL<<2)));
+    }
     init(&p,&s,&st);p.dither=MZ_GS_FORCE_ON;
     one(buf,MZ_GS_DTHE,0,&p,&s,&st);
     assert(mzGifRead64(buf+16)==0&&st.protected_dither==1);

@@ -120,7 +120,7 @@ void sysLoadElf(char *filename, int argc, char **argv)
 #endif
         apply_patches(filename);
 #if defined(MAIZO_IGR_MENU) && defined(MAIZO_MAGE_SKY_EXPERIMENTAL)
-        maizoSkySelect(filename,config->GameID,(unsigned int)config->ModStorageStart);
+        maizoSkySelect(filename);
 #endif
 
         FlushCache(0);

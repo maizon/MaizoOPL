@@ -16,7 +16,8 @@ enum {
     MZ_DRAW_BILINEAR = 2,
     MZ_DRAW_DITHER = 4,
     MZ_DRAW_SCANLINES = 8,
-    MZ_DRAW_ALL = 15
+    MZ_DRAW_LOD = 16,
+    MZ_DRAW_ALL = 31
 };
 
 enum {
@@ -34,7 +35,7 @@ enum {
  */
 #define MZ_GS_SHARED_MAGIC0 0x4d5a4753u
 #define MZ_GS_SHARED_MAGIC1 0x92a5b8acu
-#define MZ_GS_SHARED_ABI 2u
+#define MZ_GS_SHARED_ABI 3u
 typedef struct {
     uint32_t magic0, magic1, abi, bytes;
     volatile unsigned int enabled, capabilities, modes;
@@ -73,7 +74,8 @@ static inline unsigned int mzGsRuntimeShift(unsigned int feature)
     return feature == MZ_DRAW_AA1 ? 0u :
            feature == MZ_DRAW_BILINEAR ? 2u :
            feature == MZ_DRAW_DITHER ? 4u :
-           feature == MZ_DRAW_SCANLINES ? 6u : 8u;
+           feature == MZ_DRAW_SCANLINES ? 6u :
+           feature == MZ_DRAW_LOD ? 8u : 10u;
 }
 
 static inline void mzGsRuntimeReset(void)
@@ -105,7 +107,7 @@ static inline int mzGsRuntimeAttach(unsigned int capabilities)
 static inline unsigned int mzGsRuntimeMode(unsigned int feature)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
-    if (shift > 6 || !(mzRuntimeCapabilities & feature))
+    if (shift > 8 || !(mzRuntimeCapabilities & feature))
         return MZ_GS_KEEP;
     return (mzRuntimeModes >> shift) & 3u;
 }
@@ -114,7 +116,7 @@ static inline int mzGsRuntimeSetMode(unsigned int feature, unsigned int mode)
 {
     unsigned int shift = mzGsRuntimeShift(feature);
     unsigned int mask;
-    if (shift > 6 || mode > ((feature==MZ_DRAW_SCANLINES || feature==MZ_DRAW_BILINEAR)?3u:MZ_GS_FORCE_OFF) ||
+    if (shift > 8 || mode > ((feature==MZ_DRAW_SCANLINES || feature==MZ_DRAW_BILINEAR)?3u:MZ_GS_FORCE_OFF) ||
         !(mzRuntimeCapabilities & feature)) return 0;
     mask = 3u << shift;
     mzRuntimeModes = (mzRuntimeModes & ~mask) | (mode << shift);
@@ -126,7 +128,7 @@ static inline void mzGsRuntimeGetPolicy(mz_gs_gif_policy_t *policy)
 {
     if (!policy) return;
     policy->aa1 = (uint8_t)mzGsRuntimeMode(MZ_DRAW_AA1);
-    policy->bilinear = (uint8_t)mzGsRuntimeMode(MZ_DRAW_BILINEAR);
+    policy->bilinear = (uint8_t)(mzGsRuntimeMode(MZ_DRAW_BILINEAR) | (mzGsRuntimeMode(MZ_DRAW_LOD)<<2));
     policy->dither = (uint8_t)mzGsRuntimeMode(MZ_DRAW_DITHER);
     policy->scanmask = MZ_GS_SCAN_UNCHANGED;
 }
@@ -139,7 +141,8 @@ static inline void mzGsRuntimeGetPolicyMasked(mz_gs_gif_policy_t *policy,
     mzGsRuntimeGetPolicy(policy);
     if (!policy) return;
     if (!(mask & MZ_DRAW_AA1)) policy->aa1 = MZ_GS_KEEP;
-    if (!(mask & MZ_DRAW_BILINEAR)) policy->bilinear = MZ_GS_KEEP;
+    if (!(mask & MZ_DRAW_BILINEAR)) policy->bilinear &= ~3u;
+    if (!(mask & MZ_DRAW_LOD)) policy->bilinear &= 3u;
     if (!(mask & MZ_DRAW_DITHER)) policy->dither = MZ_GS_KEEP;
 }
 

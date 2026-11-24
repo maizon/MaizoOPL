@@ -17,6 +17,10 @@ int main(void)
     assert(mzFilterCaps(0x07,3,one,mzFilterOffsetOneLine(one),
                         disp,mzFilterShortDisplay(disp))==MZ_FILTER_SHARP);
     assert(mzFilterCaps(0x07,3,one,fb(100,10,0,6),disp,disp)==0);
+    assert(mzFilterCaps(0x8067,1,one,mzFilterOffsetOneLine(one),disp,mzFilterShortDisplay(disp))==MZ_FILTER_SHARP);
+    assert(mzFilterCaps(0x8065,1,one,0,disp,0)==0);
+    assert(mzFilterCaps(0x8067,1,one,one,disp,disp)==0);
+    assert(mzFilterCaps(0x80e7,1,one,mzFilterOffsetOneLine(one),disp,mzFilterShortDisplay(disp))==0);
     assert(mzFilterOffsetOneLine(one)==fb(96,10,0,7));
     assert(mzNativeSmoothLimit(one,disp)==360);
     assert(mzNativeSmoothLimit(one,disp|(1ULL<<27))==-1);

@@ -28,9 +28,9 @@ int main(void)
            ==MZ_GS_DMA_SKIPPED);
     assert(mzGifRead64(buf+16)==tri);
     assert(!mzGsRuntimeAttach(0));
-    assert(!mzGsRuntimeAttach(16));
+    assert(!mzGsRuntimeAttach(32));
     assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
-    assert(!mzGsRuntimeSetMode(16,MZ_GS_FORCE_ON));
+    assert(!mzGsRuntimeSetMode(32,MZ_GS_FORCE_ON));
     assert(mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,3));
     assert(mzGsRuntimeMode(MZ_DRAW_SCANLINES)==3);
     assert(!mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,4));
@@ -123,6 +123,23 @@ int main(void)
     mzGsRuntimeReset();
     assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
     assert(mzRuntimeModes==0);
+    {
+        mz_gs_gif_policy_t p;
+        assert(mzGsRuntimeSetMode(MZ_DRAW_LOD,1));
+        assert(!mzGsRuntimeSetMode(MZ_DRAW_LOD,3));
+        assert(mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,3));
+        mzGsRuntimeGetPolicyMasked(&p,MZ_DRAW_LOD);
+        assert(p.bilinear==4);
+        mzGsRuntimeGetPolicyMasked(&p,MZ_DRAW_BILINEAR);
+        assert(p.bilinear==3);
+        mzGsRuntimeGetPolicy(&p);
+        assert(p.bilinear==7);
+        assert(mzGsRuntimeAttach(MZ_DRAW_LOD));
+        assert(mzGsRuntimeMode(MZ_DRAW_LOD)==1);
+        mzGsRuntimeReset();
+        assert(mzGsRuntimeAttach(MZ_DRAW_ALL));
+        assert(mzGsRuntimeMode(MZ_DRAW_LOD)==0);
+    }
     puts("MAIZO GS runtime: opt-in PATH1/PATH2/PATH3 policy and fallback PASS");
     return 0;
 }

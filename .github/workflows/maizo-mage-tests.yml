@@ -28,5 +28,11 @@ jobs:
           /tmp/mage-sky
           python3 -m py_compile scripts/maizo_mage_sky_evidence.py
           python3 tests/maizo_mage_sky_discover_test.py
+      - name: Compact profile and FIELD scanout gates
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/maizo_mage_profile_test.c -o /tmp/mage-profile
+          /tmp/mage-profile
+          cc -std=c99 -Wall -Wextra -Werror -Iee_core/include tests/maizo_igr_filter_test.c -o /tmp/mage-filter
+          /tmp/mage-filter
       - name: Existing exact-revision installer
         run: python3 tests/maizo_gs_install_elf_test.py

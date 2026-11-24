@@ -75,6 +75,15 @@ int main(void) {
         maizoIgrStep(&s,MZ_KEY_OK);
         assert(((s.draw_modes>>6)&3u)==(unsigned)(i%4));
     }
+    maizoIgrStep(&s,MZ_KEY_DOWN);
+    assert(s.selected==2);
+    maizoIgrStep(&s,MZ_KEY_OK);
+    assert(!(s.draw_changed&16u));
+    s.draw_caps|=16u;
+    for(unsigned i=1;i<=3;i++){
+        maizoIgrStep(&s,MZ_KEY_OK);
+        assert(((s.draw_modes>>8)&3u)==i%3u);
+    }
     maizoIgrStep(&s,MZ_KEY_BACK);
     assert(s.page==MZ_PAGE_FILTERS && s.selected==6);
     maizoIgrStep(&s,MZ_KEY_DOWN);

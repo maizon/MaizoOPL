@@ -242,7 +242,10 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
         if(s->draw_caps&MZ_DRAW_SCANLINES)
             mzValue(1,"SCANLINES",((s->draw_modes>>6)&3u)*25,1);
         else mzLine(35,11,5,"SCANLINES: N/D");
-        mzValue(2,"AMOSTRAS",mzGsProbe.samples,0);
+        mzLine(45,11,s->draw_caps&MZ_DRAW_LOD?4:5,
+            !(s->draw_caps&MZ_DRAW_LOD)?"LOD: N/D":
+            ((s->draw_modes>>8)&3u)==1?"LOD: QUALIDADE":
+            ((s->draw_modes>>8)&3u)==2?"LOD: DESEMPENHO":"LOD: JOGO");
         mzValue(3,"PATH1",mzGsProbe.path1_active,0);
         mzValue(4,"PATH2",mzGsProbe.path2_active,0);
         mzValue(5,"PATH3",mzGsProbe.path3_active,0);
@@ -756,15 +759,12 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzSkyMenu=maizoSkyAvailable() &&
         (!(mzGsRuntimeCaps()&MZ_DRAW_BILINEAR) || maizoSkyMode());
     mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);
-    mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
-        ((mzSkyMenu?maizoSkyMode():mzGsRuntimeMode(MZ_DRAW_BILINEAR))<<2) |
+    mzState.draw_modes=mzRuntimeModes;
+    if(mzSkyMenu)mzState.draw_modes=(mzState.draw_modes&~12u)|(maizoSkyMode()<<2);
 #else
     mzState.draw_caps=mzGsRuntimeCaps();
-    mzState.draw_modes=mzGsRuntimeMode(MZ_DRAW_AA1) |
-        (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2) |
+    mzState.draw_modes=mzRuntimeModes;
 #endif
-        (mzGsRuntimeMode(MZ_DRAW_DITHER)<<4) |
-        (mzGsRuntimeMode(MZ_DRAW_SCANLINES)<<6);
     mzState.draw_changed=0;
     mzState.cheat_caps=!!config->gCheatList && MaizoCheatHookActive && numcodes>0;
     mzState.cheat_paused=!!MaizoCheatPaused;
@@ -909,24 +909,19 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         }
         if(mzState.draw_changed){
             unsigned int features=mzState.draw_changed;
-            if(features&MZ_DRAW_AA1)
-                mzGsRuntimeSetMode(MZ_DRAW_AA1,mzState.draw_modes&3u);
-            if(features&MZ_DRAW_BILINEAR){
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
-                if(mzSkyMenu){
-                    if(!maizoSkySetMode((mzState.draw_modes>>2)&3u)){
-                        mzSkyMenu=0;
-                        mzState.draw_modes=(mzState.draw_modes&~12u) |
-                            (mzGsRuntimeMode(MZ_DRAW_BILINEAR)<<2);
-                    }
-                }else
-#endif
-                    mzGsRuntimeSetMode(MZ_DRAW_BILINEAR,(mzState.draw_modes>>2)&3u);
+            if((features&MZ_DRAW_BILINEAR)&&mzSkyMenu){
+                if(!maizoSkySetMode((mzState.draw_modes>>2)&3u))mzSkyMenu=0;
+                features&=~MZ_DRAW_BILINEAR;
             }
-            if(features&MZ_DRAW_DITHER)
-                mzGsRuntimeSetMode(MZ_DRAW_DITHER,(mzState.draw_modes>>4)&3u);
-            if(features&MZ_DRAW_SCANLINES)
-                mzGsRuntimeSetMode(MZ_DRAW_SCANLINES,(mzState.draw_modes>>6)&3u);
+#endif
+            for(unsigned i=0;i<5;i++)
+                if(features&(1u<<i))
+                    mzGsRuntimeSetMode(1u<<i,(mzState.draw_modes>>(2*i))&3u);
+            mzState.draw_modes=mzRuntimeModes;
+#ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
+            if(mzSkyMenu)mzState.draw_modes=(mzState.draw_modes&~12u)|(maizoSkyMode()<<2);
+#endif
             mzState.draw_changed=0;
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
             mzState.draw_caps=mzGsRuntimeCaps() | (mzSkyMenu?MZ_DRAW_BILINEAR:0);

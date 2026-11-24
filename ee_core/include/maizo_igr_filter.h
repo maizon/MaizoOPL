@@ -41,9 +41,13 @@ static int mzFilterCaps(mz_u64 pmode,mz_u64 smode2,
 {
     int en=(int)(pmode&3ULL);
     int caps=0;
-    if(!mzFilterModeValid(smode2) || ((pmode>>2)&7ULL)!=1ULL)
+    int frame=mzFilterModeValid(smode2);
+    /* FIELD sharp only for an existing fixed-alpha same-image blend;
+     * do not synthesize a new FIELD smooth readout. */
+    if(!(smode2&1ULL) || ((pmode>>2)&7ULL)!=1ULL ||
+       (!frame && (pmode&0xa0ULL)!=0x20ULL))
         return 0;
-    if(mzFilterOneCircuit(pmode)){
+    if(frame && mzFilterOneCircuit(pmode)){
         mz_u64 fb=en==1?fb1:fb2;
         mz_u64 display=en==1?display1:display2;
         int y=(int)((fb>>43)&2047ULL);
@@ -58,7 +62,8 @@ static int mzFilterCaps(mz_u64 pmode,mz_u64 smode2,
         mz_u64 dhmask=(mz_u64)2047<<44;
         int h1=(int)((display1>>44)&2047ULL);
         int h2=(int)((display2>>44)&2047ULL);
-        if((display1&~dhmask)==(display2&~dhmask) &&
+        if((frame || (((fb1^fb2)>>43)&2047ULL)) &&
+           (display1&~dhmask)==(display2&~dhmask) &&
            (h1==h2 || h1+1==h2 || h2+1==h1))
             caps|=MZ_FILTER_SHARP;
     }

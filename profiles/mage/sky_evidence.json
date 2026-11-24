@@ -15,7 +15,16 @@
       "sha256": [
         "2b5a9abfb66b38c52b3bf83c79f8b897aac0b9f1689a8df72db50053ab233b77"
       ],
-      "version": "3.6"
+      "version": "3.6",
+      "static_leads": {
+        "gp": "0x4e8bf0",
+        "tex1_shadow": "0x4e1de0",
+        "camera_begin": "0x1f56f8",
+        "camera_end": "0x1ff9f0",
+        "show_raster": "0x1ffaa8",
+        "raster_mip_levels": "0x1ffd08",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLES_539.67",
@@ -29,7 +38,16 @@
       "sha256": [
         "ccd9a27ed7a3264d28de4ae32131b8e7e86a19b80f520130c5cd121c3554a2c2"
       ],
-      "version": "unknown exact version"
+      "version": "unknown exact version",
+      "static_leads": {
+        "gp": "0x609c70",
+        "tex1_shadow": "0x601e48",
+        "camera_begin": "0x2fe5b8",
+        "camera_end": "0x3039b0",
+        "show_raster": "0x303a40",
+        "raster_mip_levels": "0x303ed8",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_205.52",
@@ -43,7 +61,16 @@
       "sha256": [
         "f02399c7d9ef66453124a58655c5d8eec33c7739a1b2b60a3cbe986e2a0496d9"
       ],
-      "version": "3.3"
+      "version": "3.3",
+      "static_leads": {
+        "gp": "0x4bb470",
+        "tex1_shadow": "0x4b92d8",
+        "camera_begin": "0x3be448",
+        "camera_end": "0x3c69e8",
+        "show_raster": "0x3c6a98",
+        "raster_mip_levels": "0x3c6c80",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_207.77",
@@ -57,7 +84,16 @@
       "sha256": [
         "1cbf8af4a164ef0a9d27ab228ec8e6f01c33b5e7d39addfe815035af8242065c"
       ],
-      "version": "3.5"
+      "version": "3.5",
+      "static_leads": {
+        "gp": "0x4e2c70",
+        "tex1_shadow": "0x4db2e0",
+        "camera_begin": "0x3b7af8",
+        "camera_end": "0x3c1ba8",
+        "show_raster": "0x3c1c60",
+        "raster_mip_levels": "0x3c1e48",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_209.46",
@@ -72,7 +108,16 @@
         "67a3c195714a8b3a449aa4893dfdc38c89489a8ed4fbde760efb38871181f97a",
         "66cc6b0c91c53a92213534e1b7aeb30a8a55b42cade09bb8f1850edf9e8f25a2"
       ],
-      "version": "3.6"
+      "version": "3.6",
+      "static_leads": {
+        "gp": "0x66b0f0",
+        "tex1_shadow": "0x667950",
+        "camera_begin": "0x350e08",
+        "camera_end": "0x35b0e0",
+        "show_raster": "0x35b198",
+        "raster_mip_levels": "0x35b3f8",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_212.15",
@@ -86,7 +131,16 @@
       "sha256": [
         "1a4e1c3891c930146e39ce340ccb02918cfe917032aafcdbbbe6541f75402369"
       ],
-      "version": "3.7 (external research; SHA1 matches)"
+      "version": "3.7 (external research; SHA1 matches)",
+      "static_leads": {
+        "gp": "0x59e6f0",
+        "tex1_shadow": "0x596e08",
+        "camera_begin": "0x48f2f0",
+        "camera_end": "0x4987d8",
+        "show_raster": "0x498890",
+        "raster_mip_levels": "0x498af0",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_212.69",
@@ -100,7 +154,16 @@
       "sha256": [
         "ffc5bf26c4dff5c57881282c7b67d376fb071228c68a9da0ac7c8d4f78f6859e"
       ],
-      "version": "unknown exact version"
+      "version": "unknown exact version",
+      "static_leads": {
+        "gp": "0x5e77f0",
+        "tex1_shadow": "0x5e15d0",
+        "camera_begin": "0x236768",
+        "camera_end": "0x240b48",
+        "show_raster": "0x240c00",
+        "raster_mip_levels": "0x240e60",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_213.76",
@@ -114,7 +177,16 @@
       "sha256": [
         "141b05209570458af9c8e27ab1911f258da6353909d813cd572df026254ffe4c"
       ],
-      "version": "unknown exact version"
+      "version": "unknown exact version",
+      "static_leads": {
+        "gp": "0x4157f0",
+        "tex1_shadow": "0x40dff8",
+        "camera_begin": "0x2b6130",
+        "camera_end": "0x2c01e0",
+        "show_raster": "0x2c0298",
+        "raster_mip_levels": "0x2c04f8",
+        "verified_runtime": false
+      }
     },
     {
       "id": "SLUS_218.99",
@@ -128,7 +200,16 @@
       "sha256": [
         "5875c87d5fd5aaccaba3a6fe37b2c1366cdc8657c777422223b6ff7629c9040e"
       ],
-      "version": "unknown exact version"
+      "version": "unknown exact version",
+      "static_leads": {
+        "gp": null,
+        "tex1_shadow": null,
+        "camera_begin": "0x3000d0",
+        "camera_end": "0x300b98",
+        "show_raster": "0x309ea0",
+        "raster_mip_levels": "0x30a100",
+        "verified_runtime": false
+      }
     }
   ],
   "unmatched": [

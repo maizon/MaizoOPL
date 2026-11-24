@@ -4,6 +4,7 @@
 #include <osd_config.h>
 #ifdef MAIZO_IGR_MENU
 #include "maizo_cheat_live.h"
+#include "maizo_mage_profile.h"
 #endif
 #define CORE_EXIT_PATH_MAX_LEN      (256)
 #define CORE_GAME_MODE_DESC_MAX_LEN (16)
@@ -78,6 +79,7 @@ struct EECoreConfig_t
     char MaizoProfileID[12];
     u32 MaizoProfile;
     mz_live_cheats_t MaizoLiveCheats;
+    mz_sky_record_t MaizoSky;
 #endif
 };
 

@@ -44,7 +44,7 @@ enum {
 
 typedef struct {
     uint8_t aa1;
-    uint8_t bilinear;
+    uint8_t bilinear; /* texture mode bits 0..1; LOD mode bits 2..3 */
     uint8_t dither;
     uint8_t scanmask;
 } mz_gs_gif_policy_t;
@@ -120,9 +120,10 @@ static inline uint64_t mzGifTex1(uint64_t src,
                                  unsigned int mode,
                                  mz_gs_gif_stats_t *stats)
 {
-    unsigned int min, new_min;
-    uint64_t result;
-    if (mode == MZ_GS_KEEP)
+    unsigned int min, new_min, lod=mode>>2;
+    uint64_t result=src;
+    mode &= 3u;
+    if ((!mode && !lod) || lod>2u)
         return src;
 
     min = (unsigned int)((src >> 6) & 7ULL);
@@ -150,10 +151,22 @@ static inline uint64_t mzGifTex1(uint64_t src,
             new_min = 3;
     }
 
-    result = (src & ~(1ULL << 5 | 7ULL << 6)) |
-             ((uint64_t)new_min << 6);
-    if (mode == MZ_GS_FORCE_ON || mode == MZ_GS_TRILINEAR)
-        result |= 1ULL << 5;  /* MMAG linear */
+    if(mode){
+        result = (src & ~(1ULL << 5 | 7ULL << 6)) |
+                 ((uint64_t)new_min << 6);
+        if (mode == MZ_GS_FORCE_ON || mode == MZ_GS_TRILINEAR)
+            result |= 1ULL << 5;
+    }
+    /* TEX1.K is signed 12-bit fixed point (4 fraction bits).
+     * Bias only existing mip chains using calculated LOD. */
+    if(lod && min>=2u && ((src>>2)&7u) && !(src&1u)){
+        int k=(int)((src>>32)&4095u);
+        if(k&2048)k-=4096;
+        k+=lod==1u?-8:8;
+        if(k < -2048)k=-2048;
+        if(k > 2047)k=2047;
+        result=(result&~(4095ULL<<32))|((uint64_t)((unsigned)k&4095u)<<32);
+    }
     if (result != src)
         stats->texture_changes++;
     return result;
@@ -309,7 +322,7 @@ static inline int mzGifApplyFilters(void *packet,
         (packet_size & 15u) || packet_size > (1u << 20))
         return -1;
     if (policy->aa1 > MZ_GS_FORCE_OFF ||
-        policy->bilinear > MZ_GS_TRILINEAR ||
+        policy->bilinear > 11u ||
         policy->dither > MZ_GS_FORCE_OFF ||
         (policy->scanmask == 1u || policy->scanmask > MZ_GS_SCAN_EVEN_ONLY))
         return -2;

@@ -151,3 +151,37 @@ successful link before it is suitable for any hardware test.
 The separate source uses the EE core's _strncmp/_strcmp helpers.
 No player pre-launch selection is introduced; the eventual route
 remains an in-game feature.
+
+## Compact live route and evidence expansion
+
+The frontend selects one six-word record from the nine validated Sky IDs;
+the resident core no longer embeds the ID/address database. Loaded memory
+is checked against the actual game arena: a low module arena entirely below
+1 MiB does not limit normal game code to that address. A high arena is
+excluded conservatively, and an arena crossing 1 MiB disables Sky.
+No change to the 8 KiB stack guard or protected linker boundary.
+The ordinary In-Game build retains the non-Sky route; CI sky-compact
+explicitly compiles the commercial route and uploads an ELF only if
+the original guard passes. No boot-time graphics changes.
+
+Static ELF analysis resolves the RwDevice standard-function table
+(28 pairs) for all nine IDs. Camera begin/end and show-raster addresses
+are leads for a cooperative frame-boundary hook, not installed hooks.
+ELF MIPS reginfo GP + signed TEX1 shadow-store displacement identifies
+eight IDs with a candidate TEX1 shadow; The Warriors address agrees
+with the supplied Coney report. Silent Hill lacks that reginfo value.
+These are stored under static_leads in the evidence JSON. Never write
+shadows blindly: setters may overwrite them and a cached value does
+not prove a new GS packet was issued.
+
+ABI 3 adds independent mip LOD in the existing In-Game GS status page.
+A verified packet adapter adjusts signed TEX1.K by +/-0.5 levels only
+for an existing mip filter, nonzero MXL, LCM=0. No missing mip levels
+are invented; the caller must classify eligible passes. Texture and LOD
+masks can be delegated separately to engine or GIF. Unhooked games are
+not affected; ABI 2 clients must rebuild. Menu updates use one feature
+loop and current packed modes. The guarded FIELD sharp path accepts an
+existing fixed-blend same-image pair with different DBY and matching
+display geometry; FRAME smooth is unchanged. Native scanout may cancel
+the override on subsequent incompatible writes.
+No universal AA1, DTHE, frame hook or arbitrary restoration claim.

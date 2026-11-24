@@ -31,7 +31,7 @@ static inline int mzSkyTableOK(const volatile uint32_t *table, uint32_t state, u
         if (table[i] != mzSkyTarget(state,i,mode)) return 0;
     return 1;
 }
-void maizoSkySelect(const char *path,const char *id,unsigned limit);
+void maizoSkySelect(const char *path);
 int maizoSkyAvailable(void);
 unsigned maizoSkyMode(void);
 int maizoSkySetMode(unsigned mode);

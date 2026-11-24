@@ -21,6 +21,9 @@ jobs:
             flags: "-Oz -fno-inline-functions-called-once"
           - variant: os-no-once
             flags: "-Os -fno-inline-functions-called-once"
+          - variant: sky-compact
+            flags: "-Oz"
+            sky: 1
     runs-on: ubuntu-latest
     container: ghcr.io/ps2homebrew/ps2homebrew:main
     steps:
@@ -35,7 +38,7 @@ jobs:
         run: |
           set -o pipefail
           make clean
-          make --trace release MAIZO_IGR_EXPERIMENTAL=1 2>&1 | tee build-igr-experimental.log
+          make --trace release MAIZO_IGR_EXPERIMENTAL=1 MAIZO_MAGE_SKY_EXPERIMENTAL=${{ matrix.sky || 0 }} 2>&1 | tee build-igr-experimental.log
       - name: Resident memory diagnostics (even on guard failure)
         if: always()
         run: |
