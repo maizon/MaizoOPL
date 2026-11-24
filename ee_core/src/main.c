@@ -14,10 +14,6 @@
 #include "gsm_api.h"
 #include "cheat_api.h"
 #include "coreconfig.h"
-#ifdef MAIZO_IGR_MENU
-#include "maizo_gs_runtime.h"
-#include "maizo_gs_probe.h"
-#endif
 
 int isInit = 0;
 
@@ -87,13 +83,6 @@ static int eecoreInit(int argc, char **argv)
     DPRINTF("ModStorageEnd = 0x%08X\n", config->ModStorageEnd);
 
     DPRINTF("GameID = %s\n", config->GameID);
-
-#ifdef MAIZO_IGR_MENU
-    /* Every game launch starts with zero draw capabilities. Only a later,
-     * verified renderer-specific adapter may advertise supported paths. */
-    mzGsRuntimeReset();
-    mzGsProbeReset(&mzGsProbe);
-#endif
 
     // g_compat_mask is used on ASM directly.
     g_compat_mask = config->_CompatMask;
