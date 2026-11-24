@@ -93,3 +93,13 @@ system = read("src/system.c").split("void sysLaunchLoaderElf(",1)[1]
 assert system.index("fallbackCore = !proEnabled;") < system.index("ModuleStorageSize = sendIrxKernelRAM")
 assert system.index("ModuleStorage = (void *)MZ_EE_LEGACY_TOP;") < system.index("ModuleStorageSize = sendIrxKernelRAM")
 print("IRQ-safe pad snapshot and kernel MMIO, deferred profiles and OFF isolation PASS")
+
+# Transactional changes: no early writes to the live cheat mask.
+assert "mzPendingLiveMask=mzLiveToggle(" in run
+assert run.index("if(!mzOverlayDrain())result=MAIZO_IGR_UNAVAILABLE;") < run.index("MaizoLiveMask=mzPendingLiveMask;")
+assert "result==MAIZO_IGR_RESUME && mzState.cheat_caps" in run
+assert "mzCapturePath(heldDmac)" in run and "mzIgrMfifoPath(" in menu
+assert "mzIgrGsFifoEmpty((u32)*MZ_GS_CSR)" in drain
+assert "for (i = 255; i > 0; i--)" in pad
+assert "#define IGR_STACK_SIZE (5 * 1024)" in pad
+print("Transaction: staged cheats, reversible thread hold, GS drain and empty MFIFO gate PASS")

@@ -489,3 +489,24 @@ https://psi-rockin.github.io/ps2tek/
 Framebuffer backup, exact internal GS transfer-state restoration and
 MFIFO-safe overlay are not solved by these changes. Do not claim a
 hardware compatibility fix until the reported titles pass on console.
+
+## Safe transaction, stage 1 (no freeze analyzer)
+
+Use the existing dual CPU FIFO routes without borrowing or stopping DMA.
+Accept inactive MFIFO modes only with a stopped SPR producer and no
+unhandled producer or enabled empty IRQ. An active VIF1 MFIFO drain can
+use PATH3 only when QWC is zero, the producer is stopped, the tag and
+producer addresses coincide, and the empty event is latched and masked.
+Active GIF drains remain unsupported. See PS2tek DMAC MFIFO and RiptOPL
+igrmWaitFor; no game D_STAT bits are cleared. Check the GS CSR FIFO field
+before acquisition and after GIF drain without writing CSR. This is NOT
+an exact GS FINISH fence or an internal GS state restore. Stage live cheat
+selection in the menu and publish only after a successful resume; reverse
+thread acquisition order and preserve prior IRQ enable state. Increase
+PRO's private worker stack by 1 KiB without lowering the linker guard.
+
+No analyzer, new always-on IOP service, unsafe VRAM readback or forced
+SPU2 operations are added. Full pixel backup/restore, audio restoration,
+exact GS internal state and the separately loaded overlay remain open;
+these require a bounded IOP mailbox and hardware validation before default
+enablement. No 99% claim is supported by host tests alone.

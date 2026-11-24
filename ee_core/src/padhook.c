@@ -150,7 +150,7 @@ static int maizoIgrMenuButtons(u16 *buttons,u32 *frame)
 }
 static void maizoIgrHold(void)
 {
-    int i;
+    int i,intr=DI();
     /* Keep kernel timers, SIF, CDVD, IPU and other service IRQs alive.
      * GS/VBLANK/VIF1/GIF handlers may submit graphics while paused. */
     MaizoIgrIntcMask = *(vu32 *)0x1000f010 & 0x003du;
@@ -159,6 +159,7 @@ static void maizoIgrHold(void)
         if (MaizoIgrIntcMask & (1u << i)) DisableIntc(i);
         if (MaizoIgrDmacMask & (1u << i)) DisableDmac(i);
     }
+    if(intr)EI();
 }
 static void maizoIgrUnhold(void)
 {
@@ -194,7 +195,8 @@ static int maizoIgrPauseThreads(void)
 static void maizoIgrResumeThreads(void)
 {
     int i;
-    for (i = 1; i < 256; i++)
+    /* Undo only the successful suspensions, in reverse acquisition order. */
+    for (i = 255; i > 0; i--)
         if (MaizoIgrSuspended[i >> 5] & (1u << (i & 31))) {
             MaizoIgrSuspended[i >> 5] &= ~(1u << (i & 31));
             ResumeThread(i);
@@ -205,7 +207,13 @@ static void maizoIgrResumeThreads(void)
 static int IGR_Intc_ID = -1;
 
 /* IGR thread stack & stack size */
+#ifdef MAIZO_IGR_MENU
+/* Keep extra headroom for the overlay packet and nested kernel calls.
+ * The linker's independent 8 KiB main-stack assertion stays unchanged. */
+#define IGR_STACK_SIZE (5 * 1024)
+#else
 #define IGR_STACK_SIZE (4 * 1024)
+#endif
 static u8 IGR_Stack[IGR_STACK_SIZE] __attribute__((aligned(16)));
 
 /* Extern symbol */

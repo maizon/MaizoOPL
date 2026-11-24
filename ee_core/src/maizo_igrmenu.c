@@ -42,6 +42,7 @@
 #define MZ_D1_QWC     ((vu32 *)0x10009020)
 #define MZ_D1_TADR    ((vu32 *)0x10009030)
 #define MZ_D2_CHCR    ((vu32 *)0x1000a000)
+#define MZ_D8_CHCR    ((vu32 *)0x1000d000)
 #define MZ_D8_MADR    ((vu32 *)0x1000d010)
 #define MZ_D_RBSR     ((vu32 *)0x1000e040)
 #define MZ_D_CTRL     ((vu32 *)0x1000e000)
@@ -50,6 +51,7 @@
 #define MZ_D_ENABLEW  ((vu32 *)0x1000f590)
 #define MZ_GIF_STAT   ((vu32 *)0x10003020)
 #define MZ_VIF1_STAT  ((vu32 *)0x10003c00)
+#define MZ_GS_CSR     ((vu64 *)0x12001000)
 #define CHCR_STR 0x100
 #define VIF_STALLED 0x00800f00
 #define VIF_FQC 0x1f000000
@@ -84,6 +86,7 @@ static u8 mzLineCount, mzSelectedY, mzBpp, mzSx, mzSy, mzPsm;
 static int mzX, mzY, mzBw;
 static u32 mzBp;
 static int mzOverlayPath;
+static u32 mzPendingLiveMask;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
 #ifdef MAIZO_MAGE_SKY_EXPERIMENTAL
@@ -341,9 +344,9 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
     }else if(s->page==MZ_PAGE_CHEATS){
         for(i=0;i<(int)s->live_count;i++){
             char label[MZ_LIVE_NAME+4];
-            label[0]=(!MaizoLiveCount||!s->cheat_caps)?'?':(MaizoLiveMask&(1u<<i))?'+':'-';label[1]=' ';
+            label[0]=(!MaizoLiveCount||!s->cheat_caps)?'?':(mzPendingLiveMask&(1u<<i))?'+':'-';label[1]=' ';
             mzCopy(label+2,config->MaizoLiveCheats.name[i]);
-            mzLine(25+i*10,11,(MaizoLiveMask&(1u<<i))?4:5,label);
+            mzLine(25+i*10,11,(mzPendingLiveMask&(1u<<i))?4:5,label);
         }
         mzLine(25+i*10,11,4,"VOLTAR");
     }else{
@@ -418,6 +421,16 @@ static int mzFrame(void)
     mzY=(int)f.y;
     return 1;
 }
+static int __attribute__((noinline)) mzCapturePath(u32 heldDmac)
+{
+    u32 dctrl=*MZ_D_CTRL, ch1=*MZ_D1_CHCR, ch2=*MZ_D2_CHCR;
+    u32 stat=mzIgrOriginalDstat(*MZ_D_STAT,heldDmac);
+    u32 vif=*MZ_VIF1_STAT,gif=*MZ_GIF_STAT;
+    if(!mzIgrGsFifoEmpty((u32)*MZ_GS_CSR))return 0;
+    if(!(dctrl&12u))return mzIgrSafePath(ch1,ch2,vif,gif,stat);
+    return mzIgrMfifoPath(dctrl,ch1,ch2,*MZ_D8_CHCR,*MZ_D1_QWC,
+                         *MZ_D1_TADR,*MZ_D8_MADR,*MZ_D_RBSR,vif,gif,stat);
+}
 /* Non-destructive preflight while game threads keep running. It is
  * intentionally separate from GSM: it only checks the GS readout
  * and that VIF1/PATH2 can accept a fresh DIRECT command. */
@@ -425,10 +438,7 @@ int maizoIGR_Preflight(u32 heldDmac)
 {
     USE_LOCAL_EECORE_CONFIG;
     mzGameHasGsm=!!config->EnableGSMOp;
-    return !(*MZ_D_CTRL&0xcu) &&
-           (heldDmac==MZ_IGR_CAPTURE_PROBE ||
-            mzIgrSafePath(*MZ_D1_CHCR,*MZ_D2_CHCR,*MZ_VIF1_STAT,
-                           *MZ_GIF_STAT,mzIgrOriginalDstat(*MZ_D_STAT,heldDmac))) && mzFrame();
+    return (heldDmac==MZ_IGR_CAPTURE_PROBE || mzCapturePath(heldDmac)) && mzFrame();
 }
 static int mzWait(vu32 *reg,u32 mask)
 {
@@ -470,7 +480,12 @@ static int mzOverlayDrain(void)
 {
     /* GIF may look idle before a queued DIRECT has been decoded. */
     if(mzOverlayPath==2 && !mzWait(MZ_VIF1_STAT,0x1f803f0fu))return 0;
-    return mzWait(MZ_GIF_STAT,GIF_BUSY);
+    if(!mzWait(MZ_GIF_STAT,GIF_BUSY))return 0;
+    /* GIF idle alone does not prove the GS FIFO has drained.
+     * Read CSR only: FINISH/SIGNAL/other game events are untouched. */
+    for(unsigned i=0;i<2000000u;i++)
+        if(mzIgrGsFifoEmpty((u32)*MZ_GS_CSR))return 1;
+    return 0;
 }
 static int mzSendLine(u32 *p,int line)
 {
@@ -841,6 +856,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.filter_changed=0;
     mzState.cheat_caps=!!config->gCheatList && MaizoCheatHookActive && numcodes>0;
     mzState.cheat_paused=!!MaizoCheatPaused;
+    mzPendingLiveMask=MaizoLiveMask;
     mzState.cheat_changed=0;
     mzState.live_count=mzState.cheat_caps&&MaizoLiveCount?MaizoLiveCount:
         (config->MaizoLiveCheats.count<=MZ_LIVE_GROUPS?config->MaizoLiveCheats.count:0);
@@ -854,14 +870,11 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         mzState.native_field_caps=MaizoGsMonitorOnly && !MaizoGs480iMode &&
             (GSMSourceGSRegs[2]&1u) && GSMSourceSetGsCrt[0]==1 &&
             (GSMSourceSetGsCrt[1]==2 || GSMSourceSetGsCrt[1]==3);
-        if(!mzState.native_field_caps)MaizoNativeFieldInvert=0;
-        mzState.field_fix=!!MaizoNativeFieldInvert;
+        mzState.field_fix=mzState.native_field_caps && !!MaizoNativeFieldInvert;
     }
     mzState.save_caps=mzProfileIdOK(config->MaizoProfileID)&&mzProfileExitOK(config->ExitPath);
     mzState.filter_mode=(int)MaizoGsFilterMode; /* Another SetGsCrt cancelled the filter. */
-    if(*MZ_D_CTRL&0xcu)return MAIZO_IGR_UNAVAILABLE;
-    mzOverlayPath=mzIgrSafePath(*MZ_D1_CHCR,*MZ_D2_CHCR,*MZ_VIF1_STAT,
-                                *MZ_GIF_STAT,mzIgrOriginalDstat(*MZ_D_STAT,heldDmac));
+    mzOverlayPath=mzCapturePath(heldDmac);
     if(!mzOverlayPath)return MAIZO_IGR_UNAVAILABLE;
     oldBpc=mzBpcOff();
     /* If a game changed its readout layout without SetGsCrt, restore
@@ -874,6 +887,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
     mzState.page=MZ_PAGE_MAIN;mzState.selected=0;mzState.confirm=0;
     first=mzDraw(p,&mzState);
     if(!first){result=MAIZO_IGR_UNAVAILABLE;goto cleanup;}
+    if(!mzGameHasGsm && !mzState.native_field_caps)MaizoNativeFieldInvert=0;
     /* Restore saved settings only AFTER the first complete draw. A
      * failed opening must not activate a saved native override. */
     if(mzProfilePending){
@@ -960,19 +974,14 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
         }
         if(mzState.live_choice){
             if(MaizoLiveCount&&mzState.cheat_caps&&MaizoCheatHookActive){
-                MaizoLiveMask=mzLiveToggle(&config->MaizoLiveCheats,MaizoLiveMask,mzState.live_choice-1);
-                if(MaizoLiveMask&(1u<<(mzState.live_choice-1))){
-                    MaizoCheatPaused=0;
+                mzPendingLiveMask=mzLiveToggle(&config->MaizoLiveCheats,mzPendingLiveMask,mzState.live_choice-1);
+                if(mzPendingLiveMask&(1u<<(mzState.live_choice-1)))
                     mzState.cheat_paused=0;
-                }
             }
             mzState.live_choice=0;
         }
-        if(mzState.cheat_changed){
-            if(mzState.cheat_caps && MaizoCheatHookActive)
-                MaizoCheatPaused=!!mzState.cheat_paused;
-            mzState.cheat_changed=0;
-        }
+        /* UI changes are staged until a successful normal resume. */
+        if(mzState.cheat_changed)mzState.cheat_changed=0;
         if(mzState.field_changed){
             if(mzState.native_field_caps)MaizoNativeFieldInvert=!!mzState.field_fix;
             mzState.field_changed=0;
@@ -1036,6 +1045,10 @@ cleanup:
     /* No DMA channel or D_STAT bits were modified. PATH2 changes
      * VIF CODE; every submitted packet is complete. */
     if(!mzOverlayDrain())result=MAIZO_IGR_UNAVAILABLE;
+    if(result==MAIZO_IGR_RESUME && mzState.cheat_caps && MaizoCheatHookActive){
+        MaizoLiveMask=mzPendingLiveMask;
+        MaizoCheatPaused=!!mzState.cheat_paused;
+    }
     asm volatile("sync.l");
     mzBpcRestore(oldBpc);
     return result;

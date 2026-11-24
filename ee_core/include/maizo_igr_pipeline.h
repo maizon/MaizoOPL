@@ -48,6 +48,34 @@ static inline int mzIgrSafePath(uint32_t ch1,uint32_t ch2,uint32_t vif,
         return mzIgrReadyPath(ch1,ch2,vif,gif,stat)==3?3:0;
     return mzIgrPipelineIdle(ch1,ch2,vif,gif)?2:0;
 }
+/* RiptOPL's empty-ring test, restricted to non-borrowing CPU FIFO.
+ * MFIFO mode alone is not a busy condition. Never stop a drain or
+ * change D_CTRL. An active VIF1 drain may be bypassed ONLY by PATH3,
+ * with the producer stopped, QWC zero and a latched, masked empty
+ * event proving no tag is ready. An active GIF drain is not borrowed.
+ * PS2tek: MFD 2=VIF1, 3=GIF; D_STAT 14=empty, 30=its IRQ mask. */
+static inline int mzIgrMfifoPath(uint32_t dctrl,uint32_t ch1,uint32_t ch2,
+                                uint32_t ch8,uint32_t qwc,uint32_t tadr,
+                                uint32_t madr,uint32_t rbsr,uint32_t vif,
+                                uint32_t gif,uint32_t stat)
+{
+    unsigned mode=(dctrl>>2)&3u;
+    if(!mode)return mzIgrSafePath(ch1,ch2,vif,gif,stat);
+    if(mode==1u || (ch8&0x100u) || (stat&0x40000000u) ||
+       ((stat&0x100u)&&(stat&0x01000000u)))return 0;
+    if(!((ch1|ch2)&0x100u))
+        return mzIgrSafePath(ch1,ch2,vif,gif,stat&~0x4000u);
+    if(mode!=2u || (ch2&0x100u) || qwc || !rbsr ||
+       !(stat&0x4000u) || ((tadr^madr)&rbsr) ||
+       ((tadr^madr)&~rbsr))return 0;
+    return mzIgrSafePath(ch1&~0x100u,ch2,vif,gif,stat&~0x4000u)==3?3:0;
+}
+/* Read-only CSR FIFO status. This is not an internal GS state snapshot
+ * or a FINISH event; never clear the game's CSR flags. */
+static inline int mzIgrGsFifoEmpty(uint32_t csr)
+{
+    return (csr&0xc000u)==0x4000u;
+}
 /* A whole independently terminated GIF packet must fit in the hardware
  * FIFO before writing its first tag. FQC occupies bits 24..28, 16 QW.
  * No timeout in the middle of an IMAGE payload. */

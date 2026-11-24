@@ -27,7 +27,7 @@ int main(void)
     assert(mzIgrSelectPath(0x60006,0)==3);
     assert(!mzIgrSelectPath(0x60006,1));
     assert(!mzIgrSelectPath(0x8000,0));
-    assert(mzIgrReadyPath(0,0,0x800,0,0)==3);
+    assert(!mzIgrReadyPath(0,0,0x800,0,0)); /* INT: conservative until serviced */
     assert(!mzIgrReadyPath(0,0,0x800,1,0));
     assert(!mzIgrReadyPath(0,0,4,0,0));
     assert(!mzIgrReadyPath(0,0,0,8,0));
@@ -68,6 +68,25 @@ int main(void)
         assert(6+32*bpp/16<=16);
         assert(1+6+32*bpp/16<=16);
     }
+    /* No hardware register writes in the selector. Inactive MFIFO
+     * is safe only with no outstanding producer/empty IRQ. */
+    assert(mzIgrMfifoPath(0,0,0,0,0,0,0,0,0,0,0)==3);
+    assert(!mzIgrMfifoPath(4,0,0,0,0,0,0,0,0,0,0));
+    assert(mzIgrMfifoPath(8,0,0,0,0,0,0,0,0,0,0)==3);
+    assert(mzIgrMfifoPath(12,0,0,0,0,0,0,0,0,1,0)==2);
+    assert(!mzIgrMfifoPath(8,0,0,0x100,0,0,0,0,0,0,0));
+    assert(!mzIgrMfifoPath(8,0,0,0,0,0,0,0,0,0,0x40004000));
+    assert(!mzIgrMfifoPath(8,0,0,0,0,0,0,0,0,0,0x01000100));
+    assert(mzIgrMfifoPath(8,0x100,0,0,0,0x1000,0x1000,0x3f0,0,0,0x4000)==3);
+    assert(!mzIgrMfifoPath(8,0x100,0,0,1,0x1000,0x1000,0x3f0,0,0,0x4000));
+    assert(!mzIgrMfifoPath(8,0x100,0,0,0,0x1000,0x1010,0x3f0,0,0,0x4000));
+    assert(!mzIgrMfifoPath(8,0x100,0,0,0,0x1000,0x1000,0x3f0,0,0,0));
+    assert(!mzIgrMfifoPath(8,0x100,0,0,0,0x1000,0x1000,0x3f0,0,1,0x4000));
+    assert(!mzIgrMfifoPath(12,0,0x100,0,0,0x1000,0x1000,0x3f0,0,0,0x4000));
+    assert(!mzIgrGsFifoEmpty(0));
+    assert(mzIgrGsFifoEmpty(0x4000|0x1f));
+    assert(!mzIgrGsFifoEmpty(0x8000));
+    assert(!mzIgrGsFifoEmpty(0xc000));
     puts("MAIZO In-Game VIF1/GIF pipeline and bounded FIFO packets PASS");
     return 0;
 }
