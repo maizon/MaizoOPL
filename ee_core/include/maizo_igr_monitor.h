@@ -81,4 +81,19 @@ static inline int mzIgrMonitorFrame(mz_igr_frame_t *out,
     out->psm=psm;out->pixel_bytes=bpp;
     return 1;
 }
+/* Mixed PMODE may blend two independently backed GS read circuits.
+ * Accept only a currently enabled and individually VRAM-validated
+ * display framebuffer. No guessed display layout or video forcing. */
+static inline int mzIgrResolveFrame(mz_igr_frame_t *out,
+                                    uint64_t pm,
+                                    uint64_t fb1,uint64_t fb2,
+                                    uint64_t d1,uint64_t d2,
+                                    uint64_t sm,int legacy_gsm_height)
+{
+    if(mzIgrMonitorFrame(out,pm,fb1,fb2,d1,d2,sm,legacy_gsm_height))
+        return 1;
+    if((pm&3ULL)!=3ULL)return 0;
+    return mzIgrMonitorFrame(out,(pm&~3ULL)|1ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height) ||
+           mzIgrMonitorFrame(out,(pm&~3ULL)|2ULL,fb1,fb2,d1,d2,sm,legacy_gsm_height);
+}
 #endif

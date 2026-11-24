@@ -26,6 +26,11 @@ int main(void)
     /* Do not draw to two unrelated framebuffers or different readouts. */
     assert(!mzIgrMonitorFrame(&f,3u,fb,fb|((uint64_t)3u<<43),
                               disp(640,224,4),disp(640,224,4),3,0));
+    assert(mzIgrResolveFrame(&f,3u,fb,fb|((uint64_t)3u<<43),
+                             disp(640,224,4),disp(640,224,4),3,0));
+    assert(f.x==160 && f.y==49);
+    assert(!mzIgrResolveFrame(&f,3u,0,0,
+                              disp(640,224,4),disp(640,224,4),3,0));
     assert(!mzIgrMonitorFrame(&f,3u,fb,fb|((uint64_t)1u<<15),
                               disp(640,224,4),disp(640,224,4),3,0));
     assert(!mzIgrMonitorFrame(&f,3u,fb,fb,
