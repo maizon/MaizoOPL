@@ -1,0 +1,53 @@
+name: MAIZO In-Game LIVE experimental (no title suspension)
+
+on:
+  push:
+    branches: [feat/recovery-b-ingame-pro-safe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protected-ingame:
+    name: LIVE no-suspension EE core
+    runs-on: ubuntu-latest
+    container: ghcr.io/ps2homebrew/ps2homebrew:main
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Python build requirements
+        run: python3 -m pip install --break-system-packages -r requirements.txt
+      - name: Test live FIFO guard
+        run: cc -std=c99 -Wall -Wextra -Werror tests/maizo_igr_live_guard_test.c -o /tmp/mz-live-guard && /tmp/mz-live-guard
+      - name: Build live In-Game PRO without compromising the EE stack
+        env:
+          MAIZO_EE_SIZE_FLAGS: "-Oz"
+        run: |
+          set -o pipefail
+          make clean
+          make --trace release MAIZO_IGR_EXPERIMENTAL=1 MAIZO_IGR_LIVE_EXPERIMENTAL=1 MAIZO_MAGE_SKY_EXPERIMENTAL=1 2>&1 | tee build-igr-experimental.log
+      - name: Resident memory diagnostics (even on guard failure)
+        if: always()
+        run: |
+          if test -f ee_core/ee_core.map; then
+            grep -E '^\.(text|rodata|data|bss|sbss|sdata)|_end_bss' ee_core/ee_core.map || true
+          fi
+      - name: Upload diagnostic build log only on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAIZO-IGR-LIVE-BUILD-ERROR
+          path: |
+            build-igr-experimental.log
+            ee_core/ee_core.map
+            ee_core/ee_core_fallback.map
+          if-no-files-found: warn
+      - name: Upload optional In-Game ELF, only if memory guard passes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAIZO-IGR-LIVE-EXPERIMENTAL
+          path: OPNPS2LD-*.ELF
+          if-no-files-found: error

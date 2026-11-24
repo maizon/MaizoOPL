@@ -220,6 +220,9 @@ ifneq ($(IGS),1)
 ifneq ($(DEBUG),1)
 ifneq ($(DTL_T10000),1)
   EE_CFLAGS += -DMAIZO_IGR_MENU
+  ifeq ($(MAIZO_IGR_LIVE_EXPERIMENTAL),1)
+    EE_CFLAGS += -DMAIZO_IGR_LIVE
+  endif
   EECORE_OBJS += ee_core_fallback.o
   ifeq ($(MAIZO_IGR_OVERLAY_EXPERIMENTAL),1)
     EE_CFLAGS += -DMAIZO_IGR_OVERLAY

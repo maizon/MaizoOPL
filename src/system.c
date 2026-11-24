@@ -1123,6 +1123,9 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     if(fallbackCore){
         boot_elf=(u8 *)eecore_fallback_elf;
         coreSize=size_eecore_fallback_elf;
+#ifdef MAIZO_IGR_LIVE
+        if(proEnabled)compatflags|=COMPAT_MODE_6; /* unavailable live chord must not reset */
+#endif
         if (proEnabled) {
             LOG("SYSTEM guarded legacy core fallback: module arena full\n");
         } else {

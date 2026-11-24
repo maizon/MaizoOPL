@@ -588,3 +588,18 @@ or IGR is explicitly off use the legacy core. If even legacy packing
 fails, exit rather than returning to a destroyed frontend. Optional IOP
 loading bypasses fatal module-loader diagnostics. Actual hardware boot
 must be retested; no claim that this is the only possible regression.
+
+### LIVE laboratory (opt-in)
+Based on 56b81be. No suspension of title threads, long graphics IRQ hold,
+SPU2 pause, restoration IRX, reverse VIF or DMA resets on the menu chord.
+Complete PATH3 packets only, with a brief atomic check and enqueue,
+bounded slices and alarm sleep. Busy, stale pad or alarm failure closes
+without reset. Native scanout only, no MFIFO. Cooperative filter/effect
+and existing cheat requests remain; native geometry, direct game code
+patches, scanout filters and save/exit are not applied live. Controls
+remain shared with the game. Direct drawing into displayed framebuffer
+is not an independent VRAM plane; pixels may persist, flicker, or be
+redrawn. Idle hardware does not prove internal GS transfer state is safe
+to replace. Not a universal or 100% compatible solution. Requires PS2
+hardware tests, including Ben 10 during loading. Regular PRO and
+Restoration workflows unchanged.

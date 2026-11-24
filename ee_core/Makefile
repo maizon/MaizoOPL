@@ -73,6 +73,9 @@ endif
 # Benchmark size settings only on this experimental core. The linker
 # guard is mandatory for every variant; never reduce the stack threshold.
 MAIZO_EE_SIZE_FLAGS ?= -Oz
+ifeq ($(MAIZO_IGR_LIVE_EXPERIMENTAL),1)
+EE_CFLAGS += -DMAIZO_IGR_LIVE
+endif
 EE_CFLAGS += -DMAIZO_IGR_MENU -ffunction-sections -fdata-sections -flto $(MAIZO_EE_SIZE_FLAGS)
 # LTO is limited to the opt-in In-Game EE core, never the proven
 # Correction B release core, PadEmu IOP drivers, or the frontend.

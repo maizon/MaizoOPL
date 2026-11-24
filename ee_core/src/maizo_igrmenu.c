@@ -247,7 +247,11 @@ static void __attribute__((noinline)) mzPage(const maizo_igr_state_t *s)
     USE_LOCAL_EECORE_CONFIG;
     mzLineCount=0;
     mzSelectedY=25+s->selected*10;
+#ifdef MAIZO_IGR_LIVE
+    mzLine(4,8,3,"MAIZO LIVE PRO");
+#else
     mzLine(4,8,3,"MAIZO IN-GAME PRO");
+#endif
     mzLine(15,8,1,"------------------");
     if(s->page==MZ_PAGE_MAIN){
         for(i=0;i<count;i++)mzLine(25+i*10,11,4,mainNames[i]);
@@ -1139,3 +1143,137 @@ cleanup:
     mzBpcRestore(oldBpc);
     return result;
 }
+
+#ifdef MAIZO_IGR_LIVE
+#include "maizo_igr_live_guard.h"
+/* Experimental painter, not an independent display plane.
+ * No known universal ownership of the game's transfer registers/VRAM. */
+static u64 mzLiveScanout[6];
+static const u8 mzLiveRegs[6]={0,2,7,8,9,10};
+static int mzLiveSnapshot(void)
+{
+    int intr=DI(),ok;
+    const volatile u64 *r=GSMSourceGSRegs;
+    for(unsigned i=0;i<6;i++)mzLiveScanout[i]=r[mzLiveRegs[i]];
+    ok=mzFrame();
+    if(intr)EI();
+    return ok;
+}
+static inline u32 mzLiveTicks(void)
+{
+    u32 t;asm volatile("mfc0 %0,$9":"=r"(t));return t;
+}
+static int mzLiveChunk(const u8 *pixels,unsigned x,unsigned y)
+{
+    u32 packet[16*4] __attribute__((aligned(16)));
+    u64 *q=(u64 *)packet;
+    unsigned qw=32u*mzBpp/16u,n=6u+qw;
+    u32 *p=packet, fifo=0x10006000u;
+    const volatile u64 *r=GSMSourceGSRegs;
+    q[0]=4ULL|(1ULL<<60);q[1]=0x0e;
+    q[2]=(u64)mzBp<<32|(u64)mzBw<<48|(u64)mzPsm<<56;q[3]=0x50;
+    q[4]=(u64)(mzX+x)<<32|(u64)(mzY+y)<<48;q[5]=0x51;
+    q[6]=32u|(1ULL<<32);q[7]=0x52;
+    q[8]=0;q[9]=0x53;
+    q[10]=(u64)qw|(1ULL<<15)|(2ULL<<58);q[11]=0;
+    memcpy(packet+24,pixels+x*mzBpp,qw*16u);
+    /* Short atomic check plus complete <=14 QW enqueue. Never wait
+     * with interrupts disabled; no DMA register writes. */
+    int intr=DI(),ok=0;
+    for(unsigned i=0;i<6;i++)if(r[mzLiveRegs[i]]!=mzLiveScanout[i])goto out;
+    if(!mzLivePathOK(*MZ_D_CTRL,*MZ_D_ENABLER,*MZ_D1_CHCR,*MZ_D2_CHCR,
+                    *MZ_VIF1_STAT,*MZ_GIF_STAT,*MZ_D_STAT,(u32)*MZ_GS_CSR,n))goto out;
+    for(;n;n--,p+=4)
+        asm volatile("lq $8,0(%0)\n\tsq $8,0(%1)\n\tsync.l"::"r"(p),"r"(fifo):"$8","memory");
+    ok=1;
+out:
+    if(intr)EI();
+    return ok;
+}
+static void mzLiveCaps(void)
+{
+    USE_LOCAL_EECORE_CONFIG;
+    mzState.draw_caps=mzGsRuntimeCaps()&~mzGsShared->native_owned;
+    mzState.draw_modes=mzGsShared->draw_intents;
+    mzState.effect_caps=mzGsEffectCaps()&~(mzGsShared->native_owned>>8);
+    mzState.effect_modes=mzGsShared->effect_intents;
+    mzState.effect_reduced=mzGsShared->effect_reduced;
+    mzState.cheat_caps=!!config->gCheatList&&MaizoCheatHookActive&&numcodes>0;
+    mzState.cheat_paused=!!MaizoCheatPaused;
+    mzState.live_count=mzState.cheat_caps&&MaizoLiveCount?MaizoLiveCount:
+        (config->MaizoLiveCheats.count<=MZ_LIVE_GROUPS?config->MaizoLiveCheats.count:0);
+    mzPendingLiveMask=MaizoLiveMask;
+    mzState.video_caps=mzState.native_field_caps=mzState.frame480i_caps=0;
+    mzState.filter_caps=mzState.save_caps=0;
+}
+int maizoIGR_LiveRun(int (*buttons)(u16 *,u32 *),int (*yield)(void))
+{
+    USE_LOCAL_EECORE_CONFIG;
+    u8 pixels[PW*2*4] __attribute__((aligned(16)));
+    unsigned row=0,x=0,stalls=0,stale=0,prev=0,held=0,visible=0,armed=0;
+    unsigned oldSx=0,oldSy=0,oldBpp=0;
+    u32 lastFrame=0;
+    int result=MAIZO_IGR_UNAVAILABLE;
+    if(!config->EnableMaizoIgrMenu||config->EnableGSMOp)return result;
+    mzGameHasGsm=0;mzOverlayPath=3;
+    maizoIgrStateInit(&mzState,0);
+    mzLiveCaps();mzPage(&mzState);
+    for(;;){
+        u16 now=0;u32 frame=0;
+        int padOK=buttons(&now,&frame);
+        int fresh=padOK&&frame!=lastFrame;
+        if(!fresh){if(++stale>=120u)break;}
+        else {stale=0;lastFrame=frame;}
+        if(fresh && !armed && !(now&MZ_KEY_START)){armed=1;prev=now;}
+        else if(fresh && armed){
+            unsigned pressed=mzPadMenuStep(now,&prev,&held);
+            if((now&MZ_PAD_CHORD)==MZ_PAD_CHORD ||
+               (pressed&MZ_KEY_START) || ((pressed&MZ_KEY_BACK)&&mzState.page==MZ_PAGE_MAIN)){
+                result=MAIZO_IGR_RESUME;break;
+            }
+            if(visible&&pressed){
+                int action=maizoIgrStep(&mzState,pressed|(now&0x0800u));
+                int intr=DI();
+                if(mzState.draw_changed)
+                    for(unsigned i=0;i<5;i++)if(mzState.draw_changed&(1u<<i))
+                        mzGsDrawRequest(i,mzIntentGet(mzState.draw_modes,i));
+                if(mzState.effect_choice){
+                    unsigned id=mzState.effect_choice-1;
+                    mzGsEffectRequest(id,mzIntentGet(mzState.effect_modes,id));
+                }
+                if(mzState.cheat_caps&&MaizoCheatHookActive){
+                    if(mzState.live_choice&&MaizoLiveCount)
+                        MaizoLiveMask=mzLiveToggle(&config->MaizoLiveCheats,MaizoLiveMask,mzState.live_choice-1);
+                    if(mzState.cheat_changed)MaizoCheatPaused=!!mzState.cheat_paused;
+                }
+                if(intr)EI();
+                mzState.draw_changed=mzState.effect_choice=mzState.live_choice=0;
+                mzState.cheat_changed=mzState.filter_changed=mzState.changed=0;
+                mzState.field_changed=mzState.frame480i_changed=0;
+                mzLiveCaps();mzPage(&mzState);
+                if(action==MZ_ACTION_RESUME){result=MAIZO_IGR_RESUME;break;}
+                /* No destructive exit/poweroff in the LIVE experiment. */
+                row=x=visible=0;
+            }
+        }
+        unsigned progress=0;
+        if(mzLiveSnapshot()){
+            if(oldSx!=mzSx||oldSy!=mzSy||oldBpp!=mzBpp){
+                row=x=visible=0;oldSx=mzSx;oldSy=mzSy;oldBpp=mzBpp;
+            }
+            u32 start=mzLiveTicks();
+            while(progress<96u && mzLiveTicks()-start<147456u){
+                mzRenderLine(pixels,row);
+                if(!mzLiveChunk(pixels,x,row))break;
+                progress++;x+=32u;
+                if(x>=PW*mzSx){x=0;if(++row>=PH*mzSy){row=0;visible=1;break;}}
+            }
+        }
+        if(progress)stalls=0;
+        else if(++stalls>=120u)break;
+        if(!yield())break;
+    }
+    /* No backup, SPU2 hold, channel reset, GS drain or resume transaction. */
+    return result;
+}
+#endif

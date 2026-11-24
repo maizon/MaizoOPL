@@ -316,6 +316,15 @@ static void IGR_Poll_Alarm(s32 alarm_id, u16 time, void *common)
 }
 
 #ifdef MAIZO_IGR_MENU
+#ifdef MAIZO_IGR_LIVE
+static int maizoIgrLiveYield(void)
+{
+    int id=SetAlarm(256,IGR_Poll_Alarm,&IGR_Thread_ID);
+    if(id<0)return 0;
+    SleepThread();
+    return 1;
+}
+#else
 static void maizoIgrYield(void)
 {
     /* Bounded polling during suspension: kernel alarm callbacks can
@@ -335,6 +344,7 @@ static int maizoIgrPadReady(void)
      * Do not require an extra frame transition at this exact instant. */
     return maizoIgrButtons(&keys,&frame);
 }
+#endif /* !LIVE */
 #endif
 
 // In Game Reset Thread
@@ -565,6 +575,13 @@ maizo_igr_poll_again:
          * Only an explicit EXIT selected inside a visible menu can
          * trigger the destructive legacy reset path.
          */
+        #ifdef MAIZO_IGR_LIVE
+        /* Bounded sleeping slices: never suspend game producers or mask graphics IRQs. */
+        ChangeThreadPriority(TH_SELF,32);
+        if(config->EnableMaizoIgrMenu &&
+           (config->EnableGSMOp || EnableMaizoGsMonitor()))
+            choice=maizoIGR_LiveRun(maizoIgrMenuButtons,maizoIgrLiveYield);
+        #else
         ChangeThreadPriority(TH_SELF, 0);
         if (config->EnableMaizoIgrMenu &&
             (config->EnableGSMOp || EnableMaizoGsMonitor())) {
@@ -618,13 +635,16 @@ maizo_igr_poll_again:
             }
         }
 mz_capture_done:
+        #endif /* !LIVE */
         /* No always-on GS trap just because PRO is enabled. Release
          * temporary capture before ordinary game threads resume. */
         if(!config->EnableGSMOp)MaizoGsMonitorEnd(0);
         choice = maizoIgrSafeChoice(config->EnableMaizoIgrMenu, choice);
         if (choice == MAIZO_IGR_RESUME) {
+            #ifndef MAIZO_IGR_LIVE
             if (config->EnableMaizoIgrMenu)
                 maizoIgrResumeThreads();
+            #endif
             Pad_Data.combo_type = 0;
             MaizoIgrWaitRelease = 1;
             ChangeThreadPriority(TH_SELF, pollPriority);
