@@ -1222,6 +1222,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             if(!ok||!mzOverlayDrain()){result=MAIZO_IGR_UNAVAILABLE;break;}
         }else if(!mzDraw(p,&mzState)){result=MAIZO_IGR_UNAVAILABLE;break;}
     }
+#ifndef MAIZO_IGR_RESTORE
     if(result==MAIZO_IGR_RESUME){
         /* Consume release so button combo does not reach/reopen in game. */
         unsigned int t;
@@ -1230,6 +1231,7 @@ __attribute__((noinline)) int maizoIGR_MenuRun(int (*buttons)(u16 *keys, u32 *fr
             yield();
         }
     }
+#endif /* Restoration waits for raw release once, after rollback. */
 cleanup:
 #ifdef MAIZO_IGR_RESTORE
     if(dirty && (result==MAIZO_IGR_RESUME || result==MAIZO_IGR_UNAVAILABLE)){

@@ -6,6 +6,11 @@
 #define MZR_CD_BUSY 0x4d5a4301u
 #define MZR_CD_UNKNOWN 0x4d5a4302u
 static inline int mzrDiscQuiet(uint32_t result){return result==MZR_CD_IDLE;}
+/* Wrap-safe CP0 elapsed time, with intervals much shorter than wrap. */
+static inline int mzrWithin(uint32_t now,uint32_t start,uint32_t limit)
+{
+    return (uint32_t)(now-start)<=limit;
+}
 static inline int mzrHelloOK(uint32_t p,uint32_t u,uint32_t reqBytes,uint32_t lineBytes)
 {
     if(!reqBytes || !lineBytes || reqBytes>0x200000u || lineBytes>0x200000u ||

@@ -117,7 +117,8 @@ static int execute(const mzr_req *r)
     case MZR_BEGIN:
         if(sealed || dmaBusy || discIdle()!=CDSC_MAIZO_IO_STATE)return -1;
         release();
-        if(!r->len || r->len>MZR_MAX || (r->len&15u))return -1;
+        if(!r->len || r->len>MZR_MAX || (r->len&15u) ||
+           !mzrMayAllocate(QueryTotalFreeMemSize(),QueryMaxFreeMemSize(),MZR_SLAB))return -1;
         bufSize=r->len;return 0;
     case MZR_WRITE: {
         if(!bufSize || sealed || !mzrRange(r->off,r->len,bufSize) ||
@@ -126,8 +127,8 @@ static int execute(const mzr_req *r)
         if(!lineBytes)lineBytes=r->len;
         if(lineBytes!=r->len || bufSize%lineBytes)return -1;
         unsigned encoded=mzrEncode(upload,r->len,packed,sizeof(packed));
-        if(encoded && (!mzrDecode(packed,encoded,download,r->len) ||
-                       mzrHash(download,r->len)!=r->pad[0]))return -1;
+        /* One readback of the actual committed slab below validates
+         * both encoding and storage; no redundant temporary decode. */
         unsigned n=encoded?encoded:r->len;
         row[rows].offset=stored;row[rows].hash=r->pad[0];
         row[rows].size=n;row[rows].compressed=!!encoded;

@@ -15,6 +15,10 @@ int main(void)
     assert(!mzrHelloOK(0,0x2000,32,1280));
     assert(!mzrHelloOK(0x1ffff0,0x2000,32,1280));
     assert(!mzrHelloOK(0x1000,0x200000,32,1280));
+    assert(mzrWithin(100,90,10));
+    assert(!mzrWithin(101,90,10));
+    assert(mzrWithin(5,UINT32_MAX-4u,10));
+    assert(!mzrWithin(6,UINT32_MAX-4u,10));
     assert(mzrDiscQuiet(MZR_CD_IDLE));
     assert(!mzrDiscQuiet(MZR_CD_BUSY)&&!mzrDiscQuiet(MZR_CD_UNKNOWN));
     assert(!mzrDiscQuiet(1)&&!mzrDiscQuiet(0)&&!mzrDiscQuiet(UINT32_MAX));

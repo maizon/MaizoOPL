@@ -188,3 +188,16 @@ assert "mzrMayAllocate(QueryTotalFreeMemSize(),QueryMaxFreeMemSize(),MZR_SLAB)" 
 assert "!mzGsResident.checkpoint.registered && !mzRestoreReady())goto mz_capture_done;" in pad
 assert "if(ResumeThread(i)<0 && ReferThreadStatus(i,&info)>=0" in pad
 print("Restore: ordered DMA, metadata integrity, IOP reserve and early unavailable gate PASS")
+
+# A preflight request never waits for the IOP at elevated EE priority.
+probe=transport.split("int mzRestoreDiscPoll(void)",1)[1].split("int mzRestoreDiscIdle(void)",1)[0]
+assert "probeDma=SifSetDma(&d,1)" in probe and "return -1;" in probe
+assert "while(" not in probe and "post(" not in probe
+assert "if(!request || probePending)return -1;" in transport
+assert "int io=mzRestoreDiscPoll();" in pad
+assert "if(probePending)return 0;" in transport and "MZR_PROBE_WAIT" in transport
+assert "#endif /* Restoration waits for raw release once, after rollback. */" in menu
+assert "if(menu==1)" in pad and "if(!mailboxOK && mzPadAge[8]<255)" in pad
+assert "lineHash[off/n]=req.pad[0]" in transport
+assert "mzrDecode(packed,encoded,download,r->len)" not in service
+print("Restore: nonblocking I/O preflight, bounded paused recheck, one release gate, no duplicate decode PASS")

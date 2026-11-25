@@ -14,9 +14,12 @@ static u8 line[MZR_LINE] __attribute__((aligned(64)));
 static u32 request,upload,bytes,seq,last;
 static u32 written,lineBytes,lineHash[MZR_ROWS];
 static int active,sealed,awaitHello;
+static int probePending,probeDma;
+static u32 probeAt;
 volatile u32 mzRestoreTransition;
 static inline u32 ticks(void){u32 c;asm volatile("mfc0 %0,$9":"=r"(c));return c;}
 #define MZR_TIMEOUT 29491200u
+#define MZR_PROBE_WAIT (MZR_TIMEOUT/5u) /* ~40 ms maximum post-suspend */
 static int dma(SifDmaTransfer_t *d,int count)
 {
     int id;u32 t=ticks();
@@ -27,17 +30,33 @@ static int dma(SifDmaTransfer_t *d,int count)
     while(SifDmaStat(id)>=0)if(ticks()-t>2u*MZR_TIMEOUT){request=0;return 0;}
     return 1;
 }
-static int post(u32 op,u32 off,u32 n)
+static void prepare(u32 op,u32 off,u32 n)
 {
-    u32 t;
-    SifDmaTransfer_t d[2];
-    int count=0;
-    if(!request)return -1;
     req.op=op;req.off=off;req.len=n;req.ee=(u32)line&0x1fffffffu;
     req.pad[0]=op==MZR_WRITE?mzrHash(line,n):0;
     if(++seq==0)++seq;
     req.pad[1]=mzrRequestTag(op,off,n,req.ee,req.pad[0],seq);
     req.pad[2]=0;req.seq=seq;
+}
+static int readAck(s32 *value)
+{
+    if(ACK->seq==seq){
+        s32 result=ACK->result;u32 tag=ACK->pad;
+        asm volatile("sync.l" ::: "memory");
+        if(ACK->seq==seq && tag==mzrAckTag(seq,(u32)result)){
+            *value=result;last=ticks();return 1;
+        }
+    }
+    return 0;
+}
+static int post(u32 op,u32 off,u32 n)
+{
+    u32 t;
+    s32 result;
+    SifDmaTransfer_t d[2];
+    int count=0;
+    if(!request || probePending)return -1;
+    prepare(op,off,n);
     /* Ordered permanent upload and request, one SIF submission. */
     if(op==MZR_WRITE){
         d[count].src=line;d[count].dest=(void *)upload;
@@ -47,22 +66,16 @@ static int post(u32 op,u32 off,u32 n)
     d[count].size=sizeof(req);d[count++].attr=0;
     if(!dma(d,count))return -1;
     t=ticks();
-    for(;;){
-        if(ACK->seq==seq){
-            s32 result=ACK->result;u32 tag=ACK->pad;
-            asm volatile("sync.l" ::: "memory");
-            if(ACK->seq==seq && tag==mzrAckTag(seq,(u32)result)){
-                last=ticks();return result;
-            }
-        }
+    while(!readAck(&result))
         if(ticks()-t>3u*MZR_TIMEOUT){request=0;return -1;}
-    }
+    return result;
 }
 void mzRestoreLink(int enable)
 {
     char arg[18];static const char hex[]="0123456789ABCDEF";
     u32 addr[2]={(u32)ackLine&0x1fffffffu,(u32)line&0x1fffffffu};
     request=upload=bytes=seq=last=written=lineBytes=0;active=sealed=awaitHello=0;
+    probePending=probeDma=0;probeAt=0;
     /* Flush any cached BSS initialization before the IOP writes here. */
     FlushCache(0);
     ACK->seq=0;ACK->result=0;ACK->buf=0;ACK->pad=0;
@@ -93,9 +106,48 @@ int mzRestoreReady(void)
     }
     return request && upload;
 }
+/* A preflight probe does not busy-wait at priority 0 while the game
+ * is still runnable. The existing capture loop sleeps between polls.
+ * Keep req immutable until BOTH DMA and the tagged ACK complete. */
+int mzRestoreDiscPoll(void)
+{
+    s32 result;
+    if(!mzRestoreReady())return 0;
+    if(!probePending){
+        SifDmaTransfer_t d;
+        prepare(MZR_PROBE,0,0);
+        d.src=&req;d.dest=(void *)request;d.size=sizeof(req);d.attr=0;
+        FlushCache(0);
+        probeDma=SifSetDma(&d,1);
+        if(!probeDma)return 0; /* no submission, safe to retry later */
+        probeAt=ticks();probePending=1;return -1;
+    }
+    if(probeDma && SifDmaStat(probeDma)<0)probeDma=0;
+    if(!probeDma && readAck(&result)){
+        probePending=0;
+        /* An old reply (e.g. after an abandoned capture) is not evidence
+         * of current disk idleness. Discard it, then issue a new probe. */
+        return mzrWithin(ticks(),probeAt,MZR_TIMEOUT) && mzrDiscQuiet((u32)result);
+    }
+    if(!mzrWithin(ticks(),probeAt,3u*MZR_TIMEOUT)){
+        request=0;return 0; /* do not reuse possibly in-flight storage */
+    }
+    return -1;
+}
 int mzRestoreDiscIdle(void)
 {
-    return mzRestoreReady() && mzrDiscQuiet((u32)post(MZR_PROBE,0,0));
+    u32 start=ticks();
+    int result;
+    /* Only called after a completed preflight sample. Require a fresh
+     * probe after suspension, not a cached pre-suspension answer. */
+    if(probePending)return 0;
+    do{
+        result=mzRestoreDiscPoll();
+        if(result>=0)return result;
+    }while(mzrWithin(ticks(),start,MZR_PROBE_WAIT));
+    /* Caller immediately resumes the title. Pending DMA is retained
+     * and can be collected in the next nonblocking preflight. */
+    return 0;
 }
 int mzRestoreBegin(u32 n)
 {
@@ -112,7 +164,7 @@ int mzRestoreWrite(u32 off,const void *src,u32 n)
     if(n!=lineBytes || off/n>=MZR_ROWS)return 0;
     memcpy(line,src,n);
     if(post(MZR_WRITE,off,n)!=(int)n)return 0;
-    lineHash[off/n]=mzrHash(line,n);written+=n;
+    lineHash[off/n]=req.pad[0];written+=n;
     return 1;
 }
 int mzRestoreRead(u32 off,void *dst,u32 n)

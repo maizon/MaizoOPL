@@ -769,3 +769,23 @@ checked retry on transient EE ResumeThread failure, never on a different
 thread identity. No additional worker, no default boot/core changes,
 no LIVE or FreezeAnalyzer. Busy/low-memory games can refuse the menu;
 universal GS/MFIFO restoration and physical hardware testing remain open.
+
+### Loading-friendly capture and input cleanup
+The pre-suspension CDVD/SMB probe now submits at most one SIF request
+and polls it across the existing capture scheduler gaps, without a
+busy-wait for the IOP at priority zero. Request memory is immutable
+until DMA and tagged ACK complete. Old acknowledgements are discarded;
+a post-suspension fresh probe is limited to approximately 40 ms, after
+which the game is immediately resumed and pending DMA retained until
+safe completion. This avoids long speculative pause periods, not all
+possible game-specific loading dependencies. Protocol hello version is
+3. Require enough free IOP memory for the first slab before reverse
+GS transfer, retain the per-slab reserve checks, remove duplicate
+temporary RLE decode and duplicate EE row hash. Check actual committed
+slabs and original row hashes as before. In Restoration, consume pad
+release only once after rollback (not before AND after), use actual
+raw button state for release, and age invalid input reports so a dead
+controller cannot retain a stale report indefinitely. No new permanent
+worker or graphics hooks, no LIVE or FreezeAnalyzer. The normal core
+and menu options are unchanged; busy or incompatible games may defer
+opening. Physical SMB/USB and repeated close/resume tests remain needed.

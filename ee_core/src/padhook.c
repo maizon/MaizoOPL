@@ -103,7 +103,7 @@ static int mzPadSample(const u8 *addr,u16 *buttons,u32 *frame,int menu)
         u8 state=b[Pad_Data.pos_state];
         u8 lo=b[Pad_Data.pos_combo2],hi=b[Pad_Data.pos_combo1];
         unsigned keys=(u16)~(lo|hi<<8);
-        if(menu){
+        if(menu==1){
             unsigned mode=b[Pad_Data.pos_combo2-1];
             if(mode==0x73u||mode==0x79u)
                 keys=mzPadMenuAnalog(keys,b[Pad_Data.pos_combo2+4],b[Pad_Data.pos_combo2+5]);
@@ -135,7 +135,8 @@ static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,in
     /* Prefer independent live PadEmu input, then all opened game slots.
      * A stale/disconnected slot cannot monopolize navigation. */
     for(k=0;k<4;k++)p[k]=mb[k];
-    if(p[0]==mb[0]&&mzPadPacketOK(p)&&mzPadFresh(8,p[0])){
+    int mailboxOK=p[0]==mb[0]&&mzPadPacketOK(p);
+    if(mailboxOK&&mzPadFresh(8,p[0])){
         for(k=0;k<4;k++)if(p[3]&(1u<<k)){
             unsigned v=(p[1+k/2]>>((k&1u)*16u))&65535u;
             keys=menu==2?(keys|v):menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
@@ -144,11 +145,14 @@ static __attribute__((noinline)) int mzIgrReadButtons(u16 *buttons,u32 *frame,in
     }
     for(k=0;k<8;k++){
         u16 v;u32 f;
-        if(mzPadSample(mzPadSlots[k],&v,&f,menu)&&mzPadFresh(k,f)){
-            keys=menu==2?(keys|v):menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
-            valid=1;
-        }
+        if(mzPadSample(mzPadSlots[k],&v,&f,menu)){
+            if(mzPadFresh(k,f)){
+                keys=menu==2?(keys|v):menu?mzPadMenuMerge(keys,v):mzPadPick(keys,v);
+                valid=1;
+            }
+        }else if(mzPadAge[k]<255)mzPadAge[k]++;
     }
+    if(!mailboxOK && mzPadAge[8]<255)mzPadAge[8]++;
     *buttons=(u16)keys;*frame=mzPadEpoch;
     if(intr)EI();
     return valid;
@@ -673,7 +677,8 @@ maizo_igr_poll_again:
                  * Commercial titles additionally need an actual idle
                  * CDVD/NCMD sample. No new blocking CDVD RPC is issued. */
                 if(ready && !mzGsResident.checkpoint.registered){
-                    if(!mzRestoreDiscIdle())ready=quiet=0;
+                    int io=mzRestoreDiscPoll();
+                    if(io<=0){ready=0;if(!io)quiet=0;}
                     else if(!maizoIGR_Preflight(0))ready=quiet=0;
                 }
                 #endif
