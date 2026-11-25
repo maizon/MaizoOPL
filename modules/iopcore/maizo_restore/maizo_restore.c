@@ -84,7 +84,10 @@ static int storeBytes(const u8 *src,u32 n)
         unsigned index=at/MZR_SLAB,off=at%MZR_SLAB,take=MZR_SLAB-off;
         if(index>=MZR_SLABS)return 0;
         if(take>n)take=n;
-        if(!slab[index])slab[index]=AllocSysMemory(ALLOC_FIRST,MZR_SLAB,0);
+        if(!slab[index]){
+            if(!mzrMayAllocate(QueryTotalFreeMemSize(),QueryMaxFreeMemSize(),MZR_SLAB))return 0;
+            slab[index]=AllocSysMemory(ALLOC_FIRST,MZR_SLAB,0);
+        }
         if(!slab[index])return 0;
         for(unsigned j=0;j<take;j++)slab[index][off+j]=src[j];
         src+=take;at+=take;n-=take;
@@ -188,9 +191,10 @@ static void worker(void *arg)
         }else if(seq && seq!=seen){
             pendingAck=0;ackRetries=0;
             mzr_req r=req;
-            if(seq==r.seq && seq==req.seq){
+            if(seq==r.seq && seq==req.seq &&
+               r.pad[1]==mzrRequestTag(r.op,r.off,r.len,r.ee,r.pad[0],r.seq)){
                 seen=seq;idle=0;
-                ack.result=execute(&r);ack.seq=seen;
+                ack.result=execute(&r);ack.pad=mzrAckTag(seen,(u32)ack.result);ack.seq=seen;
                 if(!send(&ack,eeAck,sizeof(ack))){pendingAck=1;wake();}
             }
         }else if((bufSize || hush) && ++idle>=20000u){

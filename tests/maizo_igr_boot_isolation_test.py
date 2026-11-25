@@ -108,7 +108,9 @@ print("Transaction: staged cheats, reversible thread hold, GS drain and empty MF
 # the default resident layout or DMA into a leased, freed IOP allocation.
 transport=read("ee_core/src/maizo_restore.c")
 service=read("modules/iopcore/maizo_restore/maizo_restore.c")
-assert "dma(line,upload,n)" in transport and "dma(line,buf+off,n)" not in transport
+assert "d[count].src=line;d[count].dest=(void *)upload;" in transport
+assert "d[count].src=&req;d[count].dest=(void *)request;" in transport
+assert "if(!dma(d,count))return -1;" in transport
 assert "case MZR_WRITE:" in service and "storeBytes(encoded?packed:upload,n)" in service
 assert "mzOvlHeaderOK(&overlay)" in read("src/system.c") and "overlay.run>=fileEnd" in read("src/system.c")
 assert "ModuleStorageEnd=(void *)MZ_OVL_END" in system
@@ -178,3 +180,11 @@ assert "if(!loadBytes(row[rows].offset,download,n))" in service
 assert "if(mzReverseFault)return 0;" in menu
 assert "if(!mzWait(MZ_VIF1_STAT,0x1f000000u))ok=0;" in menu
 print("Restore: deferred hello, SMB semaphore, verified slabs and reverse FIFO boundary PASS")
+
+assert transport.index("d[count].src=line;") < transport.index("d[count].src=&req;")
+assert "tag==mzrAckTag(seq,(u32)result)" in transport
+assert "r.pad[1]==mzrRequestTag(" in service
+assert "mzrMayAllocate(QueryTotalFreeMemSize(),QueryMaxFreeMemSize(),MZR_SLAB)" in service
+assert "!mzGsResident.checkpoint.registered && !mzRestoreReady())goto mz_capture_done;" in pad
+assert "if(ResumeThread(i)<0 && ReferThreadStatus(i,&info)>=0" in pad
+print("Restore: ordered DMA, metadata integrity, IOP reserve and early unavailable gate PASS")

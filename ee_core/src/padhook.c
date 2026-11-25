@@ -238,7 +238,15 @@ static void maizoIgrResumeThreads(void)
             mzr_thread_identity x=mzThreadIdentity(&info);
             if(!mzrSameThread(&x,&mzHeldIdentity[i]))continue;
 #endif
+#ifdef MAIZO_IGR_RESTORE
+            if(ResumeThread(i)<0 && ReferThreadStatus(i,&info)>=0 &&
+               mzrCanResume(info.status)){
+                x=mzThreadIdentity(&info);
+                if(mzrSameThread(&x,&mzHeldIdentity[i]))ResumeThread(i);
+            }
+#else
             ResumeThread(i);
+#endif
         }
 }
 
@@ -624,6 +632,7 @@ maizo_igr_poll_again:
         ChangeThreadPriority(TH_SELF, 0);
 #ifdef MAIZO_IGR_RESTORE
         if(mzRestoreTransition)goto mz_capture_done;
+        if(!mzGsResident.checkpoint.registered && !mzRestoreReady())goto mz_capture_done;
         if(mzGsResident.checkpoint.registered){
             if(mzGsResident.checkpoint.fault)goto mz_capture_done;
             mzGsResident.checkpoint.ready=0;

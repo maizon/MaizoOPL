@@ -754,3 +754,18 @@ preserve the normal menu features, legacy fallback, PadEmu, and existing
 cooperative full VRAM route. Busy titles may defer or refuse an open.
 No universal 90% hardware success claim: SMB/USB physical comparisons,
 repeated opens and boot tests remain required. No LIVE or FreezeAnalyzer.
+
+### Minimal-overhead stability pass
+The 32 KiB overlay is deliberately untouched (previous measured image
+32272 bytes). Each panel write queues the permanent upload and request
+in one ordered SIF DMA list, with one cache flush and completion wait.
+Request metadata and ACK result/sequence are tagged. The original
+per-row payload hashes and actual slab verification remain. Before
+allocating each slab, check largest free block and total free IOP RAM
+with a conservative 64 KiB reserve for other services. This is not a
+hard partition; concurrent game allocations can race. A missing or
+poisoned worker cancels before GS monitor and capture attempts. One
+checked retry on transient EE ResumeThread failure, never on a different
+thread identity. No additional worker, no default boot/core changes,
+no LIVE or FreezeAnalyzer. Busy/low-memory games can refuse the menu;
+universal GS/MFIFO restoration and physical hardware testing remain open.

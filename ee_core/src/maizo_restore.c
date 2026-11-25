@@ -17,12 +17,11 @@ static int active,sealed,awaitHello;
 volatile u32 mzRestoreTransition;
 static inline u32 ticks(void){u32 c;asm volatile("mfc0 %0,$9":"=r"(c));return c;}
 #define MZR_TIMEOUT 29491200u
-static int dma(void *src,u32 dst,u32 len)
+static int dma(SifDmaTransfer_t *d,int count)
 {
-    SifDmaTransfer_t d;int id;u32 t=ticks();
-    d.src=src;d.dest=(void *)dst;d.size=len;d.attr=0;
+    int id;u32 t=ticks();
     FlushCache(0);
-    do{id=SifSetDma(&d,1);if(ticks()-t>MZR_TIMEOUT){request=0;return 0;}}while(!id);
+    do{id=SifSetDma(d,count);if(ticks()-t>MZR_TIMEOUT){request=0;return 0;}}while(!id);
     /* A queued transfer can complete late. Keep the backing storage
      * untouched, allow a second bounded window, and never submit it twice. */
     while(SifDmaStat(id)>=0)if(ticks()-t>2u*MZR_TIMEOUT){request=0;return 0;}
@@ -31,17 +30,33 @@ static int dma(void *src,u32 dst,u32 len)
 static int post(u32 op,u32 off,u32 n)
 {
     u32 t;
+    SifDmaTransfer_t d[2];
+    int count=0;
     if(!request)return -1;
     req.op=op;req.off=off;req.len=n;req.ee=(u32)line&0x1fffffffu;
     req.pad[0]=op==MZR_WRITE?mzrHash(line,n):0;
-    req.pad[1]=req.pad[2]=0;
     if(++seq==0)++seq;
-    req.seq=seq;
-    if(!dma(&req,request,sizeof(req)))return -1;
+    req.pad[1]=mzrRequestTag(op,off,n,req.ee,req.pad[0],seq);
+    req.pad[2]=0;req.seq=seq;
+    /* Ordered permanent upload and request, one SIF submission. */
+    if(op==MZR_WRITE){
+        d[count].src=line;d[count].dest=(void *)upload;
+        d[count].size=n;d[count++].attr=0;
+    }
+    d[count].src=&req;d[count].dest=(void *)request;
+    d[count].size=sizeof(req);d[count++].attr=0;
+    if(!dma(d,count))return -1;
     t=ticks();
-    while(ACK->seq!=seq)if(ticks()-t>3u*MZR_TIMEOUT){request=0;return -1;}
-    last=ticks();
-    return ACK->result;
+    for(;;){
+        if(ACK->seq==seq){
+            s32 result=ACK->result;u32 tag=ACK->pad;
+            asm volatile("sync.l" ::: "memory");
+            if(ACK->seq==seq && tag==mzrAckTag(seq,(u32)result)){
+                last=ticks();return result;
+            }
+        }
+        if(ticks()-t>3u*MZR_TIMEOUT){request=0;return -1;}
+    }
 }
 void mzRestoreLink(int enable)
 {
@@ -96,7 +111,7 @@ int mzRestoreWrite(u32 off,const void *src,u32 n)
     if(!lineBytes)lineBytes=n;
     if(n!=lineBytes || off/n>=MZR_ROWS)return 0;
     memcpy(line,src,n);
-    if(!dma(line,upload,n) || post(MZR_WRITE,off,n)!=(int)n)return 0;
+    if(post(MZR_WRITE,off,n)!=(int)n)return 0;
     lineHash[off/n]=mzrHash(line,n);written+=n;
     return 1;
 }
