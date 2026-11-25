@@ -165,3 +165,16 @@ assert "send(download,eeLine,r->len)" in service
 assert "mzrHash(download,r->len)!=row[index].hash" in service
 assert "neutral<2u" in pad and "mzIgrReadButtons(&keys,&frame,2)" in pad
 print("Compressed snapshot staging and bounded raw input release PASS")
+
+# Boot is independent of optional worker hello; exact SMB semaphore
+# observation, actual slab integrity and failed reverse capture gate.
+link=transport.split("void mzRestoreLink(",1)[1].split("int mzRestoreReady(",1)[0]
+assert "post(MZR_PING" not in link and "awaitHello=1" in link
+start=service.split("int _start(",1)[1]
+assert "send(&ack" not in start and "ack.pad=MZR_HELLO" in start
+assert "ReferSemaStatus(smb_io_sema,&info)" in read("modules/iopcore/cdvdman/cdvdman.c")
+assert "discIdle()!=CDSC_MAIZO_IO_STATE" in service
+assert "if(!loadBytes(row[rows].offset,download,n))" in service
+assert "if(mzReverseFault)return 0;" in menu
+assert "if(!mzWait(MZ_VIF1_STAT,0x1f000000u))ok=0;" in menu
+print("Restore: deferred hello, SMB semaphore, verified slabs and reverse FIFO boundary PASS")

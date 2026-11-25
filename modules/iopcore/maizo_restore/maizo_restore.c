@@ -103,11 +103,16 @@ static int loadBytes(u32 at,u8 *dst,u32 n)
     }
     return 1;
 }
+static int discIdle(void)
+{
+    int param=0;
+    return sceCdSC(CDSC_MAIZO_IO_STATE,&param);
+}
 static int execute(const mzr_req *r)
 {
     switch(r->op){
     case MZR_BEGIN:
-        if(sealed || dmaBusy)return -1;
+        if(sealed || dmaBusy || discIdle()!=CDSC_MAIZO_IO_STATE)return -1;
         release();
         if(!r->len || r->len>MZR_MAX || (r->len&15u))return -1;
         bufSize=r->len;return 0;
@@ -124,6 +129,12 @@ static int execute(const mzr_req *r)
         row[rows].offset=stored;row[rows].hash=r->pad[0];
         row[rows].size=n;row[rows].compressed=!!encoded;
         if(!storeBytes(encoded?packed:upload,n))return -1;
+        /* Verify the actual committed slabs, not just the encoder's
+         * scratch output. Do not seal a corrupt or incomplete backup. */
+        if(encoded){
+            if(!loadBytes(row[rows].offset,packed,n) || !mzrDecode(packed,n,download,r->len))return -1;
+        }else if(!loadBytes(row[rows].offset,download,n))return -1;
+        if(mzrHash(download,r->len)!=row[rows].hash)return -1;
         rows++;written+=r->len;return r->len;
     }
     case MZR_READ: {
@@ -141,15 +152,13 @@ static int execute(const mzr_req *r)
     }
     case MZR_END: wake();release();return 0;
     case MZR_HUSH:
-        if(!bufSize || sealed || !mzrSealable(written,bufSize))return -1;
+        if(!bufSize || sealed || !mzrSealable(written,bufSize) ||
+           discIdle()!=CDSC_MAIZO_IO_STATE)return -1;
         sealed=1;silence();return 0;
     case MZR_WAKE: wake();release();return 0;
-    case MZR_KEEP: return bufSize?0:-1;
+    case MZR_KEEP: return bufSize && discIdle()==CDSC_MAIZO_IO_STATE?0:-1;
     case MZR_PING: return 0x4d5a5253;
-    case MZR_PROBE: {
-        int param=0;
-        return sceCdSC(CDSC_MAIZO_IO_STATE,&param);
-    }
+    case MZR_PROBE: return discIdle();
     case MZR_UNHUSH: wake();return sealed?0:-1;
     default:return -1;
     }
@@ -160,6 +169,13 @@ static void worker(void *arg)
     int pendingAck=0;
     unsigned ackRetries=0;
     (void)arg;
+    /* Announce from the worker, never from module _start / LOADFILE.
+     * Retry only if the original DMA is no longer pending. */
+    for(unsigned attempt=0;attempt<3u&&!req.seq;attempt++){
+        if(dmaBusy){if(sceSifDmaStat(dmaBusy)>=0){DelayThread(20000);continue;}dmaBusy=0;break;}
+        if(send(&ack,eeAck,sizeof(ack)))break;
+        DelayThread(20000);
+    }
     for(;;){
         u32 seq=req.seq;
         if(dmaBusy){
@@ -204,12 +220,11 @@ int _start(int argc,char **argv)
     if(argc!=3 || !(eeAck=hex(argv[1])) || !(eeLine=hex(argv[2])) ||
        (eeAck&63u) || (eeLine&63u) || eeAck>=0x2000000u ||
        eeLine>0x2000000u-MZR_LINE)return MODULE_NO_RESIDENT_END;
-    t.attr=TH_C;t.option=0;t.thread=worker;t.stacksize=0x800;t.priority=0x30;
+    t.attr=TH_C;t.option=0;t.thread=worker;t.stacksize=0x800;t.priority=0x50;
     id=CreateThread(&t);
     if(id<0)return MODULE_NO_RESIDENT_END;
     ack.result=(s32)&req;
-    ack.buf=(u32)upload;
-    if(!send(&ack,eeAck,sizeof(ack)))return MODULE_RESIDENT_END;
+    ack.buf=(u32)upload;ack.pad=MZR_HELLO;ack.seq=0;
     StartThread(id,0);
     return MODULE_RESIDENT_END;
 }

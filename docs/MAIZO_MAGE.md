@@ -734,3 +734,23 @@ raw pad samples with a finite bound; no modification of title pad buffers.
 This reduces input carryover, not total isolation. No LIVE or FreezeAnalyzer.
 Active MFIFO, universal thread classification, full GS/VIF/VU/SPU state,
 universal 4 MiB storage and hardware recovery remain unresolved.
+
+### SMB and boot stability hardening
+The optional restoration IRX no longer sends its handshake from
+_start or requires a synchronous PING during game boot. LOADFILE still
+loads the optional module normally; the worker advertises permanent
+addresses and a tagged protocol version asynchronously, validated for
+alignment/range/non-overlap by the first menu request. Its priority is
+lowered from 0x30 to 0x50. The existing CDVD status probe now also
+checks the actual SMB socket semaphore (including VMC traffic); it
+never takes a storage lock or resets TCP. Backup begin/seal and periodic
+heartbeat reject observed busy storage. The snapshot verifies bytes
+read back from the actual allocated slabs before accepting each row.
+After a failed reverse transfer, future preflight refuses capture;
+reverse FIFO must drain before changing direction. The thread set is
+revalidated after suspension. The final drain precedes backup release;
+no redundant later drain can invalidate that decision. These changes
+preserve the normal menu features, legacy fallback, PadEmu, and existing
+cooperative full VRAM route. Busy titles may defer or refuse an open.
+No universal 90% hardware success claim: SMB/USB physical comparisons,
+repeated opens and boot tests remain required. No LIVE or FreezeAnalyzer.

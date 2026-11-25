@@ -590,6 +590,17 @@ int sceCdSC(int code, int *param)
             result=CDSC_MAIZO_IO_STATE+2;
             if(cdrom_io_sema>0 && ReferSemaStatus(cdrom_io_sema,&info)>=0)
                 result=CDSC_MAIZO_IO_STATE+(sync_flag || info.current<=0 || info.numWaitThreads>0);
+#ifdef SMB_DRIVER
+            /* VMC and other SMB clients also use the socket semaphore,
+             * outside a CDVD read. Observe only, never acquire it. */
+            extern int smb_io_sema;
+            if(result==CDSC_MAIZO_IO_STATE){
+                if(smb_io_sema<=0 || ReferSemaStatus(smb_io_sema,&info)<0)
+                    result=CDSC_MAIZO_IO_STATE+2;
+                else if(info.current<=0 || info.numWaitThreads>0 || sync_flag)
+                    result=CDSC_MAIZO_IO_STATE+1;
+            }
+#endif
             break;
         }
         case CDSC_GET_VERSION:

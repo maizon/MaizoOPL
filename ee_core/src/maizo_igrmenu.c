@@ -94,6 +94,9 @@ static u8 mzLineCount, mzSelectedY, mzBpp, mzSx, mzSy, mzPsm;
 static int mzX, mzY, mzBw;
 static u32 mzBp;
 static int mzOverlayPath;
+#ifdef MAIZO_IGR_RESTORE
+static int mzReverseFault;
+#endif
 static u32 mzPendingLiveMask;
 static maizo_igr_state_t mzState;
 static int mzStateReady;
@@ -481,6 +484,9 @@ int maizoIGR_Preflight(u32 heldDmac)
 {
     USE_LOCAL_EECORE_CONFIG;
     mzGameHasGsm=!!config->EnableGSMOp;
+#ifdef MAIZO_IGR_RESTORE
+    if(mzReverseFault)return 0;
+#endif
     return (heldDmac==MZ_IGR_CAPTURE_PROBE || mzCapturePath(heldDmac)) && mzFrame();
 }
 static int mzWait(vu32 *reg,u32 mask)
@@ -576,7 +582,6 @@ static int __attribute__((noinline)) mzDraw(u32 *packet,const maizo_igr_state_t 
  * claim a complete GS snapshot. */
 // Once a reverse transaction fails, do not open again in this overlay.
 #define MZR_BUSDIR ((vu64 *)0x12001040)
-static int mzReverseFault;
 static int __attribute__((noinline)) mzReadRect(u32 *p,int y,unsigned width,unsigned height)
 {
     u64 q[12] __attribute__((aligned(16)));
@@ -606,6 +611,9 @@ static int __attribute__((noinline)) mzReadRect(u32 *p,int y,unsigned width,unsi
         if(k==2000000u){ok=0;break;}
         asm volatile("lq $8,0(%0)\n\tsq $8,0(%1)\n\tsync.l"::"r"(0x10005000u),"r"(p):"$8","memory");
     }
+    /* Do not leave unread reverse QWs and then pretend the VIF
+     * parser is reusable. A mismatch disables further menu captures. */
+    if(!mzWait(MZ_VIF1_STAT,0x1f000000u))ok=0;
     *MZR_BUSDIR=0;*MZ_VIF1_STAT=0;
     asm volatile("sync.l");
 done:
@@ -1238,10 +1246,11 @@ cleanup:
     if(full){
         if(retain){mzGsShared->checkpoint.fault=1;result=MAIZO_IGR_UNAVAILABLE;}
     }else mzRestoreEnd(retain);
-#endif
+#else
     /* No DMA channel or D_STAT bits were modified. PATH2 changes
      * VIF CODE; every submitted packet is complete. */
     if(!mzOverlayDrain())result=MAIZO_IGR_UNAVAILABLE;
+#endif
     if(result==MAIZO_IGR_RESUME && mzState.cheat_caps && MaizoCheatHookActive){
         MaizoLiveMask=mzPendingLiveMask;
         MaizoCheatPaused=!!mzState.cheat_paused;

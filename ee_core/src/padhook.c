@@ -211,6 +211,18 @@ static int maizoIgrPauseThreads(void)
 #endif
         }
     }
+    #ifdef MAIZO_IGR_RESTORE
+    if(ok){
+        /* A captured thread must still be the same suspended object.
+         * Refuse an unstable thread set rather than drawing on it. */
+        for(i=1;i<256;i++)if(MaizoIgrSuspended[i>>5]&(1u<<(i&31))){
+            ee_thread_status_t info;
+            if(ReferThreadStatus(i,&info)<0 || !mzrCanResume(info.status)){ok=0;break;}
+            mzr_thread_identity x=mzThreadIdentity(&info);
+            if(!mzrSameThread(&x,&mzHeldIdentity[i])){ok=0;break;}
+        }
+    }
+    #endif
     return ok;
 }
 static void maizoIgrResumeThreads(void)

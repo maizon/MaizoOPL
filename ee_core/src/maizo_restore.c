@@ -13,7 +13,7 @@ static u8 line[MZR_LINE] __attribute__((aligned(64)));
 #define ACK ((volatile mzr_ack *)UNCACHED_SEG(ackLine))
 static u32 request,upload,bytes,seq,last;
 static u32 written,lineBytes,lineHash[MZR_ROWS];
-static int active,sealed;
+static int active,sealed,awaitHello;
 volatile u32 mzRestoreTransition;
 static inline u32 ticks(void){u32 c;asm volatile("mfc0 %0,$9":"=r"(c));return c;}
 #define MZR_TIMEOUT 29491200u
@@ -47,8 +47,10 @@ void mzRestoreLink(int enable)
 {
     char arg[18];static const char hex[]="0123456789ABCDEF";
     u32 addr[2]={(u32)ackLine&0x1fffffffu,(u32)line&0x1fffffffu};
-    request=upload=bytes=seq=last=written=lineBytes=0;active=sealed=0;
-    ACK->seq=0;ACK->result=0;
+    request=upload=bytes=seq=last=written=lineBytes=0;active=sealed=awaitHello=0;
+    /* Flush any cached BSS initialization before the IOP writes here. */
+    FlushCache(0);
+    ACK->seq=0;ACK->result=0;ACK->buf=0;ACK->pad=0;
     if(!enable)return;
     for(int j=0;j<2;j++){
         for(int i=0;i<8;i++)arg[j*9+i]=hex[(addr[j]>>(28-4*i))&15u];
@@ -58,19 +60,23 @@ void mzRestoreLink(int enable)
      * error policy when a game's IOP has insufficient memory. */
     void *module=NULL;unsigned int size=0;
     if(GetOPLModInfo(OPL_MODULE_ID_MAIZO_RESTORE,&module,&size)==0 && size &&
-       LoadMemModule(0,module,size,sizeof(arg),arg)>0){
-        u32 p=(u32)ACK->result;
-        u32 u=ACK->buf;
-        if(p && !(p&15u) && p<0x200000u-sizeof(req) &&
-           u && !(u&15u) && u<=0x200000u-MZR_LINE){
-            request=p;upload=u;
-            if(post(MZR_PING,0,0)!=0x4d5a5253)request=upload=0;
-        }
-    }
+       LoadMemModule(0,module,size,sizeof(arg),arg)>0)
+        awaitHello=1;
+    /* No additional SIF handshake wait in the boot path. The optional
+     * IRX worker advertises its permanent addresses asynchronously. */
 }
 int mzRestoreReady(void)
 {
-    return request && upload && !active && !mzRestoreTransition;
+    if(mzRestoreTransition || active)return 0;
+    if(awaitHello && ACK->pad==MZR_HELLO && !ACK->seq){
+        u32 p=(u32)ACK->result,u=ACK->buf;
+        asm volatile("sync.l" ::: "memory");
+        if(ACK->pad==MZR_HELLO && !ACK->seq){
+            awaitHello=0;
+            if(mzrHelloOK(p,u,sizeof(req),MZR_LINE)){request=p;upload=u;}
+        }
+    }
+    return request && upload;
 }
 int mzRestoreDiscIdle(void)
 {
